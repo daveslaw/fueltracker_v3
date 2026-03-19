@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh issue create --title \"PRD: FuelTracker v3\" --body-file PRD.md)",
+      "Bash(gh repo view daveslaw/fueltracker_v3 --json name,url)",
+      "Bash(cmd.exe /c \"gh repo view daveslaw/fueltracker_v3 --json name,url\")",
+      "Bash(powershell.exe -Command \"gh repo view daveslaw/fueltracker_v3 --json name,url\")",
+      "Bash(powershell.exe -Command \"Get-Command gh -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source; if \\(-not $? { Get-ChildItem ''C:\\\\Program Files\\\\GitHub CLI'' -ErrorAction SilentlyContinue; Get-ChildItem \"\"$env:LOCALAPPDATA\\\\Programs\"\" -Filter ''*gh*'' -ErrorAction SilentlyContinue }\")",
+      "Bash(powershell.exe -Command \"& ''C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe'' auth status\")",
+      "Bash(powershell.exe -Command \"& ''C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe'' issue delete 3 --repo daveslaw/fueltracker_v3 --yes\")",
+      "Bash(powershell.exe -Command \"& ''C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe'' issue create --repo daveslaw/fueltracker_v3 --title ''Slice 9: Fuel deliveries'' --body-file ''c:\\\\Users\\\\David Lawrence\\\\Projects\\\\fueltracker_v3\\\\.issues\\\\slice-09.md''\")",
+      "Bash(powershell.exe -Command \"& ''C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe'' issue create --repo daveslaw/fueltracker_v3 --title ''Slice 10: Pricing module \\(versioned ZAR/L per grade\\)'' --body-file ''c:\\\\Users\\\\David Lawrence\\\\Projects\\\\fueltracker_v3\\\\.issues\\\\slice-10.md''\")",
+      "Bash(powershell.exe -Command \"& ''C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe'' issue create --repo daveslaw/fueltracker_v3 --title ''Slice 11: Supervisor review — approve, flag, override'' --body-file ''c:\\\\Users\\\\David Lawrence\\\\Projects\\\\fueltracker_v3\\\\.issues\\\\slice-11.md''\")",
+      "Read(//c/Users/David Lawrence/Projects/**)",
+      "Bash(CI=true npx create-next-app@latest fueltracker_v3_scaffold --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --no-git)",
+      "Bash(robocopy \"C:\\\\Users\\\\David Lawrence\\\\Projects\\\\fueltracker_v3_scaffold\" \"C:\\\\Users\\\\David Lawrence\\\\Projects\\\\fueltracker_v3\" /E /XD \".git\" /NFL /NDL /NJH /NJS)",
+      "Bash(npm install @supabase/ssr @supabase/supabase-js)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\David Lawrence\\.claude\\projects\\c--Users-David-Lawrence-Projects-fueltracker-v3"
+    ]
+  }
+}
