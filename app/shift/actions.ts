@@ -58,6 +58,7 @@ export async function savePumpReading(
   const supabase = await createClient()
   const meter_reading = parseFloat(formData.get('meter_reading') as string)
   const photo_url = (formData.get('photo_url') as string) || null
+  const ocr_status = (formData.get('ocr_status') as string) || 'manual_override'
 
   if (isNaN(meter_reading) || meter_reading < 0)
     return { error: 'Enter a valid meter reading' }
@@ -68,7 +69,7 @@ export async function savePumpReading(
     type: 'open',
     meter_reading,
     photo_url,
-    ocr_status: 'manual_override',
+    ocr_status,
   }, { onConflict: 'shift_id,pump_id,type' })
   if (error) return { error: error.message }
 
