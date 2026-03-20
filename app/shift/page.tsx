@@ -1,5 +1,26 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
+import type { ShiftStatus } from '@/lib/shift-open'
+
+function shiftHref(id: string, status: ShiftStatus): string {
+  switch (status) {
+    case 'draft':       return `/shift/${id}/pumps`
+    case 'open':        return `/shift/${id}/close/pumps`
+    case 'pending_pos': return `/shift/${id}/close/pos`
+    default:            return `/shift/${id}/close/summary`
+  }
+}
+
+function statusLabel(status: ShiftStatus): string {
+  switch (status) {
+    case 'draft':       return 'Open in progress'
+    case 'open':        return 'Close in progress'
+    case 'pending_pos': return 'Awaiting POS'
+    case 'submitted':   return 'Submitted'
+    case 'approved':    return 'Approved'
+    case 'flagged':     return 'Flagged'
+  }
+}
 
 export default async function ShiftHomePage() {
   const supabase = await createClient()
@@ -37,10 +58,12 @@ export default async function ShiftHomePage() {
           <ul className="space-y-2">
             {todayShifts.map((s) => (
               <li key={s.id}>
-                <Link href={`/shift/${s.id}/pumps`}
-                  className="flex items-center justify-between rounded-lg border p-4 hover:bg-gray-50">
+                <Link
+                  href={shiftHref(s.id, s.status as ShiftStatus)}
+                  className="flex items-center justify-between rounded-lg border p-4 hover:bg-gray-50"
+                >
                   <span className="capitalize font-medium">{s.period}</span>
-                  <span className="text-xs text-gray-500 uppercase tracking-wide">{s.status}</span>
+                  <span className="text-xs text-gray-500">{statusLabel(s.status as ShiftStatus)}</span>
                 </Link>
               </li>
             ))}
