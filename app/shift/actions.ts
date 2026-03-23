@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { canStartShift, getShiftProgress, resolveShiftStatus } from '@/lib/shift-open'
 import { getCloseProgress, resolveCloseStatus } from '@/lib/shift-close'
+import { runReconciliation } from '@/lib/reconciliation-runner'
 import type { ShiftRow, ShiftPeriod } from '@/lib/shift-open'
 
 type ActionResult = { error: string } | { success: true }
@@ -272,11 +273,15 @@ export async function submitShift(shiftId: string): Promise<ActionResult> {
 
   if (!progress.isComplete) return { error: 'All close readings and POS submission are required before submitting.' }
 
+  const submittedAt = new Date().toISOString()
   const { error } = await supabase
-    .from('shifts').update({ status: 'submitted' }).eq('id', shiftId)
+    .from('shifts').update({ status: 'submitted', submitted_at: submittedAt }).eq('id', shiftId)
   if (error) return { error: error.message }
 
-  redirect('/shift')
+  // Run reconciliation server-side immediately after submission
+  await runReconciliation(shiftId)
+
+  redirect(`/shift/${shiftId}/submitted`)
 }
 
 // ── internal: keep draft/open status in sync after each save ─────────────────
