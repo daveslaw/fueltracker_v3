@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { saveDipReading } from '../../actions'
+import { useOfflineQueue } from '@/components/OfflineQueueProvider'
 
 type Props = { shiftId: string; tankId: string; defaultLitres: string }
 
@@ -9,12 +10,25 @@ export function DipForm({ shiftId, tankId, defaultLitres }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [saved, setSaved] = useState(!!defaultLitres)
+  const { addToQueue } = useOfflineQueue()
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
     setPending(true)
-    const result = await saveDipReading(shiftId, tankId, new FormData(e.currentTarget))
+    const formData = new FormData(e.currentTarget)
+
+    if (!navigator.onLine) {
+      await addToQueue(
+        { type: 'dip_reading', shiftId, tankId, readingType: 'open', litres: parseFloat(formData.get('litres') as string) },
+        `dip_reading:${shiftId}:${tankId}:open`,
+      )
+      setPending(false)
+      setSaved(true)
+      return
+    }
+
+    const result = await saveDipReading(shiftId, tankId, formData)
     setPending(false)
     if ('error' in result) { setError(result.error); return }
     setSaved(true)
