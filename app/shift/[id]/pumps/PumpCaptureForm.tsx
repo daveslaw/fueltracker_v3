@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { savePumpReading } from '../../actions'
 import type { OcrStatus } from '@/lib/ocr/ocr-service'
+import { useOfflineQueue } from '@/components/OfflineQueueProvider'
 
 type Props = { shiftId: string; pumpId: string; defaultMeter: string; defaultStatus?: OcrStatus }
 
@@ -19,6 +20,8 @@ export function PumpCaptureForm({ shiftId, pumpId, defaultMeter, defaultStatus }
   const [pending, setPending] = useState(false)
   const [saved, setSaved] = useState(!!defaultMeter)
   const fileRef = useRef<HTMLInputElement>(null)
+  const photoBlobRef = useRef<Blob | null>(null)
+  const { addToQueue } = useOfflineQueue()
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -28,6 +31,13 @@ export function PumpCaptureForm({ shiftId, pumpId, defaultMeter, defaultStatus }
 
     try {
       const compressed = await compressImage(file)
+      photoBlobRef.current = compressed
+
+      if (!navigator.onLine) {
+        setOcr({ phase: 'done', value: null, confidence: 0, status: 'unreadable' })
+        return
+      }
+
       const body = new FormData()
       body.append('file', compressed, `pump-open-${pumpId}.jpg`)
       body.append('shiftId', shiftId)
@@ -60,6 +70,16 @@ export function PumpCaptureForm({ shiftId, pumpId, defaultMeter, defaultStatus }
     if (ocr.phase === 'done' && !overridden) ocrStatus = ocr.status
     if (ocr.phase === 'unreadable') ocrStatus = 'unreadable'
     formData.set('ocr_status', ocrStatus)
+
+    if (!navigator.onLine) {
+      await addToQueue(
+        { type: 'pump_reading', shiftId, pumpId, readingType: 'open', meterReading: parseFloat(formData.get('meter_reading') as string), ocrStatus, photoBlob: photoBlobRef.current ?? undefined, photoName: `pump-open-${pumpId}.jpg` },
+        `pump_reading:${shiftId}:${pumpId}:open`,
+      )
+      setPending(false)
+      setSaved(true)
+      return
+    }
 
     const result = await savePumpReading(shiftId, pumpId, formData)
     setPending(false)

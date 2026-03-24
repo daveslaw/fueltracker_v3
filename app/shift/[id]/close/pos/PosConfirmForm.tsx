@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { savePosSubmission } from '../../../actions'
 import type { PosOcrResult, PosLine } from '@/lib/ocr/ocr-service'
+import { useOfflineQueue } from '@/components/OfflineQueueProvider'
 
 type GradeMeta = { id: string; label: string }
 
@@ -37,6 +38,8 @@ export function PosConfirmForm({ shiftId, grades, existingLines, existingPhotoUr
   const [pending, setPending] = useState(false)
   const [saved, setSaved] = useState(existingLines.length > 0)
   const fileRef = useRef<HTMLInputElement>(null)
+  const photoBlobRef = useRef<Blob | null>(null)
+  const { addToQueue } = useOfflineQueue()
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -46,6 +49,13 @@ export function PosConfirmForm({ shiftId, grades, existingLines, existingPhotoUr
 
     try {
       const compressed = await compressImage(file)
+      photoBlobRef.current = compressed
+
+      if (!navigator.onLine) {
+        setOcrPhase({ phase: 'idle' })
+        setError('Offline — enter values manually. Photo will upload when reconnected.')
+        return
+      }
       const body = new FormData()
       body.append('file', compressed, `pos-z-report-${shiftId}.jpg`)
       body.append('shiftId', shiftId)
@@ -104,6 +114,16 @@ export function PosConfirmForm({ shiftId, grades, existingLines, existingPhotoUr
 
     if (parsed.some((l) => isNaN(l.litres_sold) || isNaN(l.revenue_zar))) {
       setError('All litres and revenue values must be numbers.')
+      return
+    }
+
+    if (!navigator.onLine) {
+      await addToQueue(
+        { type: 'pos_submission', shiftId, rawOcr: JSON.stringify(rawOcr ?? {}), lines: parsed, photoBlob: photoBlobRef.current ?? undefined },
+        `pos_submission:${shiftId}`,
+      )
+      setPending(false)
+      setSaved(true)
       return
     }
 
