@@ -9,9 +9,11 @@ export async function signInWithPassword(formData: FormData) {
   const password = formData.get('password') as string
 
   const { error } = await supabase.auth.signInWithPassword({ email, password })
+  console.log('[login] signInWithPassword result:', error ?? 'success')
   if (error) return { error: error.message }
 
   // Middleware handles role-based redirect from /
+  console.log('[login] redirecting to /')
   redirect('/')
 }
 

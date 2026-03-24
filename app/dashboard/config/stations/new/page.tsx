@@ -1,4 +1,4 @@
-import { StationForm } from '../StationForm'
+import { StationForm } from '../../StationForm'
 
 export default function NewStationPage() {
   return (
