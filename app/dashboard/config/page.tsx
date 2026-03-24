@@ -18,12 +18,20 @@ export default async function ConfigPage() {
     <main className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Station Config</h1>
-        <Link
-          href="/dashboard/config/stations/new"
-          className="rounded bg-black px-4 py-2 text-sm font-medium text-white"
-        >
-          Add station
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/dashboard/config/pricing"
+            className="rounded border px-4 py-2 text-sm font-medium"
+          >
+            Fuel pricing
+          </Link>
+          <Link
+            href="/dashboard/config/stations/new"
+            className="rounded bg-black px-4 py-2 text-sm font-medium text-white"
+          >
+            Add station
+          </Link>
+        </div>
       </div>
 
       {tree.length === 0 ? (

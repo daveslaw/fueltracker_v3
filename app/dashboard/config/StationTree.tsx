@@ -50,7 +50,7 @@ export function StationTree({ tree }: { tree: StationNode[] }) {
                       {tank.pumps.map((pump) => (
                         <li
                           key={pump.id}
-                          className="rounded bg-gray-100 px-2 py-0.5 text-xs"
+                          className="rounded bg-gray-100 text-gray-800 px-2 py-0.5 text-xs"
                         >
                           {pump.label}
                         </li>
