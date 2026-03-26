@@ -22,6 +22,9 @@ export function resolveRedirect(
   if (!profile || !profile.is_active) return '/login'
   if (requestedPath === '/') return ROLE_HOME[profile.role]
 
+  // Owner can access all workflows
+  if (profile.role === 'owner') return null
+
   // Enforce each role's protected path prefix
   const home = ROLE_HOME[profile.role]
   const protectedPrefixes = Object.values(ROLE_HOME)

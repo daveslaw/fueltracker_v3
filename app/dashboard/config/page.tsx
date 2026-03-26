@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { createClient } from '@/lib/supabase/server'
 import { buildStationTree } from '@/lib/station-config'
 import { StationTree } from './StationTree'
@@ -21,13 +23,13 @@ export default async function ConfigPage() {
         <div className="flex gap-2">
           <Link
             href="/dashboard/config/pricing"
-            className="rounded border px-4 py-2 text-sm font-medium"
+            className="rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800"
           >
             Fuel pricing
           </Link>
           <Link
             href="/dashboard/config/stations/new"
-            className="rounded bg-black px-4 py-2 text-sm font-medium text-white"
+            className="rounded border border-gray-300 dark:border-gray-600 bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
           >
             Add station
           </Link>

@@ -1,151 +1,295 @@
 /**
  * runReconciliation — orchestrator (I/O layer).
  *
- * Reads all inputs from the database, calls the pure computeReconciliation function,
- * and persists the result. Uses the admin client so RLS is bypassed for writes.
+ * Reads all inputs from the database, assembles them into ReconciliationInputs,
+ * calls the pure computeReconciliation function, and persists the result.
  *
  * Call this after a shift transitions to 'submitted', and again whenever a delivery
  * is added or edited for a shift that is already submitted.
+ *
+ * Architecture:
+ *   loadBundle (private, I/O)  →  assemblePureInputs (pure, exported)
+ *     →  computeReconciliation (pure, lib/reconciliation.ts)
+ *       →  ReconciliationWriter.persist (I/O, injected)
  */
 
-import { createAdminClient } from '@/lib/supabase/admin'
-import { computeReconciliation } from '@/lib/reconciliation'
-import { selectActivePriceAt } from '@/lib/pricing'
+import { createAdminClient }      from '@/lib/supabase/admin'
+import { computeReconciliation }  from '@/lib/reconciliation'
+import { selectActivePriceAt }    from '@/lib/pricing'
+import { getShiftPeriod }         from '@/lib/deliveries'
+import type { PriceRow }          from '@/lib/pricing'
+import type {
+  ReconciliationInputs,
+  ReconciliationOutput,
+} from '@/lib/reconciliation'
+import type { SupabaseClient }    from '@supabase/supabase-js'
 
-export async function runReconciliation(shiftId: string): Promise<{ error?: string }> {
-  const admin = createAdminClient()
+// ── Raw data bundle ────────────────────────────────────────────────────────────
+// Exactly what the loader fetches — no transforms applied yet.
 
-  // ── 1. Load shift ──────────────────────────────────────────────────────────
-  const { data: shift, error: shiftErr } = await admin
-    .from('shifts')
-    .select('id, station_id, period, shift_date, status, submitted_at')
-    .eq('id', shiftId)
-    .single()
-  if (shiftErr || !shift) return { error: shiftErr?.message ?? 'Shift not found' }
+export interface ShiftDataBundle {
+  shift: {
+    id:           string
+    station_id:   string
+    period:       'morning' | 'evening'
+    shift_date:   string        // YYYY-MM-DD
+    submitted_at: string | null // ISO timestamp; null if shift not yet submitted
+  }
+  tanks:        { id: string; fuel_grade_id: string }[]
+  pumps:        { id: string; tank_id: string }[]
+  openDips:     { tank_id: string; litres: number }[]
+  closeDips:    { tank_id: string; litres: number }[]
+  pumpReadings: { pump_id: string; meter_reading: number; type: 'open' | 'close' }[]
+  posLines:     { fuel_grade_id: string; litres_sold: number; revenue_zar: number }[]
+  deliveries:   { tank_id: string; litres_received: number; delivered_at: string }[]
+  priceRows:    PriceRow[]      // all versioned rows for relevant grades; period filtering in assembly
+}
 
-  // ── 2. Station structure ────────────────────────────────────────────────────
-  const [{ data: tanks }, { data: pumps }] = await Promise.all([
-    admin.from('tanks').select('id, fuel_grade_id').eq('station_id', shift.station_id),
-    admin.from('pumps').select('id, tank_id').eq('station_id', shift.station_id),
-  ])
-  if (!tanks?.length || !pumps?.length) return { error: 'Station has no tanks or pumps configured' }
+// ── Assembly warning ───────────────────────────────────────────────────────────
+// Emitted when assembly encounters silent failure modes. Never throws.
+// Logged by runReconciliationWith; surface to supervisors in a future PR.
 
-  // ── 3. Readings for this shift ─────────────────────────────────────────────
-  const [
-    { data: openDips },
-    { data: closeDips },
-    { data: pumpReadings },
-    { data: posSubmission },
-  ] = await Promise.all([
-    admin.from('dip_readings').select('tank_id, litres').eq('shift_id', shiftId).eq('type', 'open'),
-    admin.from('dip_readings').select('tank_id, litres').eq('shift_id', shiftId).eq('type', 'close'),
-    admin.from('pump_readings')
-      .select('pump_id, meter_reading, type')
-      .eq('shift_id', shiftId)
-      .in('type', ['open', 'close']),
-    admin.from('pos_submissions')
-      .select('id')
-      .eq('shift_id', shiftId)
-      .maybeSingle(),
-  ])
+export interface AssemblyWarning {
+  code:   'PUMP_NO_CLOSE_READING' | 'SUBMITTED_AT_NULL' | 'PRICE_NOT_FOUND' | 'TANK_MISSING_DIP'
+  detail: string
+}
 
-  const posLines = posSubmission
-    ? (await admin
-        .from('pos_submission_lines')
-        .select('fuel_grade_id, litres_sold, revenue_zar')
-        .eq('pos_submission_id', posSubmission.id)
-      ).data ?? []
-    : []
+// ── Ports ─────────────────────────────────────────────────────────────────────
 
-  // Pair up open/close pump readings into a single structure
-  const openReadings  = (pumpReadings ?? []).filter(r => r.type === 'open')
-  const closeReadings = (pumpReadings ?? []).filter(r => r.type === 'close')
-  const pairedReadings = openReadings.flatMap(o => {
-    const c = closeReadings.find(r => r.pump_id === o.pump_id)
-    if (!c) return []
+export interface ShiftDataRepository {
+  loadBundle(shiftId: string): Promise<ShiftDataBundle | { error: string }>
+}
+
+export interface ReconciliationWriter {
+  persist(shiftId: string, result: ReconciliationOutput): Promise<{ error?: string }>
+}
+
+// ── Pure assembly (exported for unit tests) ───────────────────────────────────
+
+export function assemblePureInputs(
+  bundle: ShiftDataBundle,
+): { inputs: ReconciliationInputs; warnings: AssemblyWarning[] } {
+  const warnings: AssemblyWarning[] = []
+
+  // Pair open/close pump readings by pump_id.
+  // A pump with an open reading but no close is excluded and warned.
+  const openPR  = bundle.pumpReadings.filter(r => r.type === 'open')
+  const closePR = bundle.pumpReadings.filter(r => r.type === 'close')
+  const pumpReadings = openPR.flatMap(o => {
+    const c = closePR.find(r => r.pump_id === o.pump_id)
+    if (!c) {
+      warnings.push({
+        code:   'PUMP_NO_CLOSE_READING',
+        detail: `pump_id ${o.pump_id} has an open reading but no close reading`,
+      })
+      return []
+    }
     return [{ pump_id: o.pump_id, opening_reading: o.meter_reading, closing_reading: c.meter_reading }]
   })
 
-  // ── 4. Deliveries for this shift period ────────────────────────────────────
-  // Morning = before 12:00 UTC; Evening = 12:00+ UTC.
-  // Filter by station and date; period determined by timestamp hour.
-  const dayStart = `${shift.shift_date}T00:00:00Z`
-  const dayEnd   = `${shift.shift_date}T23:59:59Z`
-  const { data: allDeliveries } = await admin
-    .from('deliveries')
-    .select('tank_id, litres_received, delivered_at')
-    .eq('station_id', shift.station_id)
-    .gte('delivered_at', dayStart)
-    .lte('delivered_at', dayEnd)
+  // Filter deliveries to this shift's period using the canonical shared function.
+  // Replaces the inline `hour < 12` duplication that existed in the previous version.
+  const deliveries = bundle.deliveries
+    .filter(d => getShiftPeriod(d.delivered_at) === bundle.shift.period)
+    .map(d => ({ tank_id: d.tank_id, litres_received: d.litres_received }))
 
-  const deliveries = (allDeliveries ?? []).filter(d => {
-    const hour = new Date(d.delivered_at).getUTCHours()
-    return shift.period === 'morning' ? hour < 12 : hour >= 12
-  })
-
-  // ── 5. Fuel prices at time of shift submission ─────────────────────────────
-  // Use submitted_at so historical re-runs (triggered by delivery edits) still
-  // use the price that was active when the attendant submitted, not today's price.
-  const priceAsOf = shift.submitted_at ?? new Date().toISOString()
-  const gradeIds  = [...new Set(tanks.map(t => t.fuel_grade_id))]
-
-  const { data: allPriceRows } = await admin
-    .from('fuel_prices')
-    .select('fuel_grade_id, price_per_litre, effective_from')
-    .in('fuel_grade_id', gradeIds)
-
-  const priceSnapshots = gradeIds.map(gradeId => {
-    const rows = (allPriceRows ?? []).filter(r => r.fuel_grade_id === gradeId)
-    return {
-      fuel_grade_id:   gradeId,
-      price_per_litre: selectActivePriceAt(rows, priceAsOf) ?? 0,
+  // Price snapshot at submitted_at.
+  // Falls back to current time only if submitted_at is null (edge case: re-run on unsubmitted shift).
+  if (bundle.shift.submitted_at === null) {
+    warnings.push({
+      code:   'SUBMITTED_AT_NULL',
+      detail: 'shift.submitted_at is null; prices resolved against current time — historical accuracy not guaranteed',
+    })
+  }
+  const priceAsOf = bundle.shift.submitted_at ?? new Date().toISOString()
+  const gradeIds  = [...new Set(bundle.tanks.map(t => t.fuel_grade_id))]
+  const prices = gradeIds.map(gradeId => {
+    const rows  = bundle.priceRows.filter(r => r.fuel_grade_id === gradeId)
+    const price = selectActivePriceAt(rows, priceAsOf)
+    if (price === null) {
+      warnings.push({
+        code:   'PRICE_NOT_FOUND',
+        detail: `no active price found for grade ${gradeId} at ${priceAsOf}; defaulting to 0`,
+      })
     }
+    return { fuel_grade_id: gradeId, price_per_litre: price ?? 0 }
   })
 
-  // ── 6. Compute ─────────────────────────────────────────────────────────────
-  const result = computeReconciliation({
-    tanks:        tanks.map(t => ({ id: t.id, fuel_grade_id: t.fuel_grade_id })),
-    pumps:        pumps.map(p => ({ id: p.id, tank_id: p.tank_id })),
-    openDips:     (openDips ?? []).map(d => ({ tank_id: d.tank_id, litres: d.litres })),
-    closeDips:    (closeDips ?? []).map(d => ({ tank_id: d.tank_id, litres: d.litres })),
-    deliveries:   deliveries.map(d => ({ tank_id: d.tank_id, litres_received: d.litres_received })),
-    pumpReadings: pairedReadings,
-    posLines:     posLines.map(l => ({
-      fuel_grade_id: l.fuel_grade_id,
-      litres_sold:   l.litres_sold,
-      revenue_zar:   l.revenue_zar,
-    })),
-    prices:       priceSnapshots,
-  })
+  // Check that every tank has both an open and close dip reading.
+  for (const tank of bundle.tanks) {
+    const hasOpen  = bundle.openDips.some(d => d.tank_id === tank.id)
+    const hasClose = bundle.closeDips.some(d => d.tank_id === tank.id)
+    if (!hasOpen) {
+      warnings.push({
+        code:   'TANK_MISSING_DIP',
+        detail: `tank_id ${tank.id} has no open dip reading; defaulting to 0L`,
+      })
+    }
+    if (!hasClose) {
+      warnings.push({
+        code:   'TANK_MISSING_DIP',
+        detail: `tank_id ${tank.id} has no close dip reading; defaulting to 0L`,
+      })
+    }
+  }
 
-  // ── 7. Persist ─────────────────────────────────────────────────────────────
-  // Upsert the reconciliation header
-  const { data: rec, error: recErr } = await admin
-    .from('reconciliations')
-    .upsert({
-      shift_id:         shiftId,
-      expected_revenue: result.expectedRevenue,
-      pos_revenue:      result.posRevenue,
-      revenue_variance: result.revenueVariance,
-      updated_at:       new Date().toISOString(),
-    }, { onConflict: 'shift_id' })
-    .select('id')
-    .single()
-  if (recErr) return { error: recErr.message }
+  return {
+    inputs: {
+      tanks:        bundle.tanks,
+      pumps:        bundle.pumps,
+      openDips:     bundle.openDips,
+      closeDips:    bundle.closeDips,
+      deliveries,
+      pumpReadings,
+      posLines:     bundle.posLines,
+      prices,
+    },
+    warnings,
+  }
+}
 
-  // Replace tank lines
-  await admin.from('reconciliation_tank_lines').delete().eq('reconciliation_id', rec.id)
-  const { error: tankErr } = await admin.from('reconciliation_tank_lines').insert(
-    result.tankLines.map(l => ({ reconciliation_id: rec.id, ...l }))
+// ── Supabase adapters (production implementations of the ports) ───────────────
+
+export function createSupabaseRepository(db: SupabaseClient): ShiftDataRepository {
+  return {
+    async loadBundle(shiftId) {
+      // ── 1. Shift ──────────────────────────────────────────────────────────
+      const { data: shift, error: shiftErr } = await db
+        .from('shifts')
+        .select('id, station_id, period, shift_date, status, submitted_at')
+        .eq('id', shiftId)
+        .single()
+      if (shiftErr || !shift) return { error: shiftErr?.message ?? 'Shift not found' }
+
+      // ── 2. Station structure ─────────────────────────────────────────────
+      const [{ data: tanks }, { data: pumps }] = await Promise.all([
+        db.from('tanks').select('id, fuel_grade_id').eq('station_id', shift.station_id),
+        db.from('pumps').select('id, tank_id').eq('station_id', shift.station_id),
+      ])
+      if (!tanks?.length || !pumps?.length)
+        return { error: 'Station has no tanks or pumps configured' }
+
+      // ── 3. Readings for this shift ───────────────────────────────────────
+      const [
+        { data: openDips },
+        { data: closeDips },
+        { data: pumpReadings },
+        { data: posSubmission },
+      ] = await Promise.all([
+        db.from('dip_readings').select('tank_id, litres').eq('shift_id', shiftId).eq('type', 'open'),
+        db.from('dip_readings').select('tank_id, litres').eq('shift_id', shiftId).eq('type', 'close'),
+        db.from('pump_readings')
+          .select('pump_id, meter_reading, type')
+          .eq('shift_id', shiftId)
+          .in('type', ['open', 'close']),
+        db.from('pos_submissions').select('id').eq('shift_id', shiftId).maybeSingle(),
+      ])
+
+      const posLines = posSubmission
+        ? (await db
+            .from('pos_submission_lines')
+            .select('fuel_grade_id, litres_sold, revenue_zar')
+            .eq('pos_submission_id', posSubmission.id)
+          ).data ?? []
+        : []
+
+      // ── 4. Deliveries for the shift day (unfiltered by period) ───────────
+      // Period filtering happens in assemblePureInputs via getShiftPeriod().
+      const dayStart = `${shift.shift_date}T00:00:00Z`
+      const dayEnd   = `${shift.shift_date}T23:59:59Z`
+      const { data: deliveries } = await db
+        .from('deliveries')
+        .select('tank_id, litres_received, delivered_at')
+        .eq('station_id', shift.station_id)
+        .gte('delivered_at', dayStart)
+        .lte('delivered_at', dayEnd)
+
+      // ── 5. Fuel prices (all versions for relevant grades) ────────────────
+      const gradeIds = [...new Set(tanks.map(t => t.fuel_grade_id))]
+      const { data: priceRows } = await db
+        .from('fuel_prices')
+        .select('fuel_grade_id, price_per_litre, effective_from')
+        .in('fuel_grade_id', gradeIds)
+
+      return {
+        shift,
+        tanks,
+        pumps,
+        openDips:     (openDips  ?? []),
+        closeDips:    (closeDips ?? []),
+        pumpReadings: (pumpReadings ?? []) as ShiftDataBundle['pumpReadings'],
+        posLines:     (posLines  ?? []),
+        deliveries:   (deliveries ?? []),
+        priceRows:    (priceRows  ?? []),
+      }
+    },
+  }
+}
+
+export function createSupabaseWriter(db: SupabaseClient): ReconciliationWriter {
+  return {
+    async persist(shiftId, result) {
+      // Upsert reconciliation header
+      const { data: rec, error: recErr } = await db
+        .from('reconciliations')
+        .upsert({
+          shift_id:         shiftId,
+          expected_revenue: result.expectedRevenue,
+          pos_revenue:      result.posRevenue,
+          revenue_variance: result.revenueVariance,
+          updated_at:       new Date().toISOString(),
+        }, { onConflict: 'shift_id' })
+        .select('id')
+        .single()
+      if (recErr) return { error: recErr.message }
+
+      // TODO: wrap these three writes in a Postgres RPC for atomicity (#19)
+
+      // Replace tank lines
+      await db.from('reconciliation_tank_lines').delete().eq('reconciliation_id', rec.id)
+      const { error: tankErr } = await db.from('reconciliation_tank_lines').insert(
+        result.tankLines.map(l => ({ reconciliation_id: rec.id, ...l }))
+      )
+      if (tankErr) return { error: tankErr.message }
+
+      // Replace grade lines
+      await db.from('reconciliation_grade_lines').delete().eq('reconciliation_id', rec.id)
+      const { error: gradeErr } = await db.from('reconciliation_grade_lines').insert(
+        result.gradeLines.map(l => ({ reconciliation_id: rec.id, ...l }))
+      )
+      if (gradeErr) return { error: gradeErr.message }
+
+      return {}
+    },
+  }
+}
+
+// ── Composable orchestrator ───────────────────────────────────────────────────
+
+export async function runReconciliationWith(
+  shiftId:    string,
+  repository: ShiftDataRepository,
+  writer:     ReconciliationWriter,
+): Promise<{ error?: string }> {
+  const bundleOrError = await repository.loadBundle(shiftId)
+  if ('error' in bundleOrError) return bundleOrError
+
+  const { inputs, warnings } = assemblePureInputs(bundleOrError)
+  if (warnings.length > 0) {
+    console.warn('[reconciliation-runner] assembly warnings for shift', shiftId, warnings)
+  }
+
+  const result = computeReconciliation(inputs)
+  return writer.persist(shiftId, result)
+}
+
+// ── Public entry point (unchanged signature — all existing callers stay the same) ──
+
+export async function runReconciliation(shiftId: string): Promise<{ error?: string }> {
+  const db = createAdminClient()
+  return runReconciliationWith(
+    shiftId,
+    createSupabaseRepository(db),
+    createSupabaseWriter(db),
   )
-  if (tankErr) return { error: tankErr.message }
-
-  // Replace grade lines
-  await admin.from('reconciliation_grade_lines').delete().eq('reconciliation_id', rec.id)
-  const { error: gradeErr } = await admin.from('reconciliation_grade_lines').insert(
-    result.gradeLines.map(l => ({ reconciliation_id: rec.id, ...l }))
-  )
-  if (gradeErr) return { error: gradeErr.message }
-
-  return {}
 }
