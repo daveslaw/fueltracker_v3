@@ -8,38 +8,33 @@ describe('canStartShift', () => {
   const today = '2026-03-20'
   const station = 'station-1'
 
-  const draft: ShiftRow = { station_id: station, period: 'morning', shift_date: today, status: 'draft' }
-  const open: ShiftRow  = { station_id: station, period: 'morning', shift_date: today, status: 'open' }
-  const submitted: ShiftRow = { station_id: station, period: 'morning', shift_date: today, status: 'submitted' }
+  const pending: ShiftRow = { station_id: station, period: 'morning', shift_date: today, status: 'pending' }
+  const closed: ShiftRow  = { station_id: station, period: 'morning', shift_date: today, status: 'closed' }
 
   it('tracer bullet: no existing shifts → can start', () => {
     expect(canStartShift([], station, 'morning', today)).toBe(true)
   })
 
-  it('draft shift for same station/period/date → cannot start', () => {
-    expect(canStartShift([draft], station, 'morning', today)).toBe(false)
+  it('pending slot for same station/period/date → cannot start', () => {
+    expect(canStartShift([pending], station, 'morning', today)).toBe(false)
   })
 
-  it('open shift for same station/period/date → cannot start', () => {
-    expect(canStartShift([open], station, 'morning', today)).toBe(false)
+  it('closed slot for same station/period/date → cannot start', () => {
+    expect(canStartShift([closed], station, 'morning', today)).toBe(false)
   })
 
-  it('submitted shift for same slot → can start (shift cycle is done)', () => {
-    expect(canStartShift([submitted], station, 'morning', today)).toBe(true)
+  it('pending slot for different period → can start', () => {
+    const eveningPending: ShiftRow = { ...pending, period: 'evening' }
+    expect(canStartShift([eveningPending], station, 'morning', today)).toBe(true)
   })
 
-  it('draft for different period → can start', () => {
-    const eveningDraft: ShiftRow = { ...draft, period: 'evening' }
-    expect(canStartShift([eveningDraft], station, 'morning', today)).toBe(true)
-  })
-
-  it('draft for different station → can start', () => {
-    const otherStation: ShiftRow = { ...draft, station_id: 'station-2' }
+  it('pending slot for different station → can start', () => {
+    const otherStation: ShiftRow = { ...pending, station_id: 'station-2' }
     expect(canStartShift([otherStation], station, 'morning', today)).toBe(true)
   })
 
-  it('draft for different date → can start', () => {
-    const yesterday: ShiftRow = { ...draft, shift_date: '2026-03-19' }
+  it('pending slot for different date → can start', () => {
+    const yesterday: ShiftRow = { ...pending, shift_date: '2026-03-19' }
     expect(canStartShift([yesterday], station, 'morning', today)).toBe(true)
   })
 })

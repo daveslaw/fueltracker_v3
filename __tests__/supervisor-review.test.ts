@@ -1,40 +1,56 @@
 import { describe, it, expect } from 'vitest'
-import { canReview, validateOverride } from '../lib/supervisor-review'
+import { canFlag, canOverride, validateOverride, validateFlagComment } from '../lib/supervisor-review'
 
-describe('canReview', () => {
-  // ── valid approve transitions ──────────────────────────────────────────────
-  it('submitted → approve is allowed', () => {
-    expect(canReview('submitted', 'approve')).toBe(true)
+describe('canFlag', () => {
+  it('closed shift can be flagged', () => {
+    expect(canFlag('closed')).toBe(true)
   })
 
-  it('flagged → approve is allowed', () => {
-    expect(canReview('flagged', 'approve')).toBe(true)
+  it('pending shift cannot be flagged (not yet closed)', () => {
+    expect(canFlag('pending')).toBe(false)
   })
 
-  // ── valid flag transitions ─────────────────────────────────────────────────
-  it('submitted → flag is allowed', () => {
-    expect(canReview('submitted', 'flag')).toBe(true)
+  it('already-flagged closed shift can be unflagged (same guard)', () => {
+    // canFlag guards both flag and unflag — only closed shifts
+    expect(canFlag('closed')).toBe(true)
   })
 
-  it('approved → flag is allowed (post-approval issue)', () => {
-    expect(canReview('approved', 'flag')).toBe(true)
+  it('old submitted status cannot be flagged', () => {
+    expect(canFlag('submitted')).toBe(false)
   })
 
-  // ── invalid transitions ────────────────────────────────────────────────────
-  it('draft → approve is not allowed', () => {
-    expect(canReview('draft', 'approve')).toBe(false)
+  it('old approved status cannot be flagged', () => {
+    expect(canFlag('approved')).toBe(false)
+  })
+})
+
+describe('canOverride', () => {
+  it('tracer bullet: closed shift can be overridden', () => {
+    expect(canOverride('closed')).toBe(true)
   })
 
-  it('open → approve is not allowed', () => {
-    expect(canReview('open', 'approve')).toBe(false)
+  it('pending shift cannot be overridden (not yet closed)', () => {
+    expect(canOverride('pending')).toBe(false)
   })
 
-  it('pending_pos → flag is not allowed', () => {
-    expect(canReview('pending_pos', 'flag')).toBe(false)
+  it('old submitted status cannot be overridden', () => {
+    expect(canOverride('submitted')).toBe(false)
+  })
+})
+
+describe('validateFlagComment', () => {
+  it('tracer bullet: non-empty comment → valid', () => {
+    expect(validateFlagComment('Pump 3 meter looked unusual')).toEqual({ valid: true })
   })
 
-  it('approved → approve is not allowed (already approved)', () => {
-    expect(canReview('approved', 'approve')).toBe(false)
+  it('empty string → invalid', () => {
+    const result = validateFlagComment('')
+    expect(result.valid).toBe(false)
+    if (!result.valid) expect(result.error).toBeTruthy()
+  })
+
+  it('whitespace-only → invalid', () => {
+    expect(validateFlagComment('   ').valid).toBe(false)
   })
 })
 
