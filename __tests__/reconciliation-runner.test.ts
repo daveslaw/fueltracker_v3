@@ -137,6 +137,30 @@ describe('assemblePureInputs — tank dip coverage', () => {
   })
 })
 
+// ── assemblePureInputs — repository warnings pass-through ────────────────────
+
+describe('assemblePureInputs — repository warnings pass-through', () => {
+  it('merges NO_PRIOR_SHIFT_BASELINE from repositoryWarnings into output warnings', () => {
+    const bundle = makeBundle({
+      repositoryWarnings: [{
+        code:   'NO_PRIOR_SHIFT_BASELINE',
+        detail: 'No prior closed shift and no station baseline found for station-1',
+      }],
+    })
+    const { warnings } = assemblePureInputs(bundle)
+    const w = warnings.filter(w => w.code === 'NO_PRIOR_SHIFT_BASELINE')
+    expect(w).toHaveLength(1)
+    expect(w[0].detail).toContain('station-1')
+  })
+
+  it('produces no extra warnings when repositoryWarnings is absent', () => {
+    const bundle = makeBundle()
+    // repositoryWarnings not set — should not cause errors or extra warnings
+    const { warnings } = assemblePureInputs(bundle)
+    expect(warnings.filter(w => w.code === 'NO_PRIOR_SHIFT_BASELINE')).toHaveLength(0)
+  })
+})
+
 // ── runReconciliationWith — orchestration ─────────────────────────────────────
 
 describe('runReconciliationWith', () => {

@@ -1,17 +1,31 @@
-export type ShiftStatus = 'draft' | 'open' | 'pending_pos' | 'submitted' | 'approved' | 'flagged'
-export type ReviewAction = 'approve' | 'flag'
+import type { ShiftStatus } from '@/lib/shift-open'
+export type { ShiftStatus }
+
 export type ValidationResult = { valid: true } | { valid: false; error: string }
 
-// States from which each action is permitted
-const APPROVE_FROM = new Set<ShiftStatus>(['submitted', 'flagged'])
-const FLAG_FROM    = new Set<ShiftStatus>(['submitted', 'approved'])
+/**
+ * Guards the flag/unflag action.
+ * Only closed shifts may be flagged or unflagged.
+ */
+export function canFlag(status: ShiftStatus): boolean {
+  return status === 'closed'
+}
 
 /**
- * Guards the approve/flag state machine.
- * Returns true only when the transition is a permitted move.
+ * Guards the post-close correction (override) action.
+ * Only closed shifts may have readings overridden.
  */
-export function canReview(status: ShiftStatus, action: ReviewAction): boolean {
-  return action === 'approve' ? APPROVE_FROM.has(status) : FLAG_FROM.has(status)
+export function canOverride(status: ShiftStatus): boolean {
+  return status === 'closed'
+}
+
+/**
+ * Validates the comment required when flagging a shift.
+ * Comment must be non-empty (not just whitespace).
+ */
+export function validateFlagComment(comment: string): ValidationResult {
+  if (!comment.trim()) return { valid: false, error: 'A comment is required when flagging a shift' }
+  return { valid: true }
 }
 
 /**

@@ -1,5 +1,5 @@
-export type ShiftStatus = 'draft' | 'open' | 'pending_pos' | 'submitted' | 'approved' | 'flagged'
-export type ShiftPeriod = 'morning' | 'evening'
+import type { ShiftStatus, ShiftPeriod } from '@/lib/shift-open'
+export type { ShiftStatus, ShiftPeriod }
 
 // ── buildStationDayStatus ─────────────────────────────────────────────────
 
@@ -78,6 +78,25 @@ export function buildFinancialLines(
   )
 
   return { lines, totals }
+}
+
+// ── countPendingShiftsPerStation ──────────────────────────────────────────
+
+/**
+ * Given a list of shift rows from any number of stations, returns a map of
+ * station_id → count of shifts with status 'pending'.
+ * Used by the owner dashboard to show outstanding shift slots per station.
+ */
+export function countPendingShiftsPerStation(
+  shifts: Array<{ station_id: string; status: string }>
+): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const s of shifts) {
+    if (s.status === 'pending') {
+      counts[s.station_id] = (counts[s.station_id] ?? 0) + 1
+    }
+  }
+  return counts
 }
 
 // ── isReportPartial ───────────────────────────────────────────────────────

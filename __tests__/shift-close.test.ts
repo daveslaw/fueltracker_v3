@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCloseProgress, resolveCloseStatus } from '@/lib/shift-close'
+import { getCloseProgress, resolveCloseStatus, canSubmit } from '@/lib/shift-close'
 
 // ── getCloseProgress ──────────────────────────────────────────────────────────
 
@@ -62,18 +62,27 @@ describe('getCloseProgress', () => {
 // ── resolveCloseStatus ────────────────────────────────────────────────────────
 
 describe('resolveCloseStatus', () => {
-  it('close readings incomplete → open (no status change)', () => {
+  it('close readings incomplete → pending (no auto-advance)', () => {
     expect(resolveCloseStatus({ isReadyForPos: false, isComplete: false, pos: false }))
-      .toBe('open')
+      .toBe('pending')
   })
 
-  it('all close pump + dip readings done, no POS yet → pending_pos', () => {
+  it('all close pump + dip readings done, no POS yet → pending (still waiting on POS)', () => {
     expect(resolveCloseStatus({ isReadyForPos: true, isComplete: false, pos: false }))
-      .toBe('pending_pos')
+      .toBe('pending')
   })
 
-  it('all close readings + POS done → pending_pos (submit is explicit, not auto)', () => {
+  it('all close readings + POS done → closed', () => {
     expect(resolveCloseStatus({ isReadyForPos: true, isComplete: true, pos: true }))
-      .toBe('pending_pos')
+      .toBe('closed')
   })
+})
+
+// ── canSubmit ─────────────────────────────────────────────────────────────────
+
+describe('canSubmit', () => {
+  it('allows submit from pending',     () => expect(canSubmit('pending')).toBe(true))
+  it('blocks submit from closed',      () => expect(canSubmit('closed')).toBe(false))
+  it('blocks submit from draft',       () => expect(canSubmit('draft')).toBe(false))
+  it('blocks submit from submitted',   () => expect(canSubmit('submitted')).toBe(false))
 })

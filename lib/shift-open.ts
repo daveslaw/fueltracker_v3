@@ -1,5 +1,5 @@
 export type ShiftPeriod = 'morning' | 'evening'
-export type ShiftStatus = 'draft' | 'open' | 'pending_pos' | 'submitted' | 'approved' | 'flagged'
+export type ShiftStatus = 'draft' | 'open' | 'pending_pos' | 'submitted' | 'approved' | 'flagged' | 'pending' | 'closed'
 
 export type ShiftRow = {
   station_id: string
@@ -14,8 +14,8 @@ export type ShiftProgress = {
   isComplete: boolean
 }
 
-// Statuses that block starting a new shift for the same slot
-const BLOCKING_STATUSES: ShiftStatus[] = ['draft', 'open']
+// Statuses that block creating a new slot: any active or completed slot occupies the slot
+const BLOCKING_STATUSES: ShiftStatus[] = ['pending', 'closed']
 
 // ── canStartShift ─────────────────────────────────────────────────────────────
 

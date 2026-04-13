@@ -9,7 +9,7 @@ import {
 import type { QueueItem, OfflineAction } from '@/lib/offline-queue'
 import { idbGetAll, idbPut, idbDelete } from '@/lib/idb-queue'
 import { useToast } from './Toaster'
-import { savePumpReading, saveDipReading, saveClosePumpReading, saveCloseDipReading } from '@/app/shift/actions'
+import { saveClosePumpReading, saveCloseDipReading } from '@/app/shift/actions'
 
 interface OfflineQueueContextValue {
   pendingCount: number
@@ -62,19 +62,11 @@ export function OfflineQueueProvider({ children }: { children: React.ReactNode }
         fd.append('meterReading', String(action.meterReading))
         fd.append('ocrStatus', action.ocrStatus)
         if (photoUrl) fd.append('photoUrl', photoUrl)
-        if (action.readingType === 'open') {
-          await savePumpReading(action.shiftId, action.pumpId, fd)
-        } else {
-          await saveClosePumpReading(action.shiftId, action.pumpId, fd)
-        }
+        await saveClosePumpReading(action.shiftId, action.pumpId, fd)
       } else {
         fd.append('litres', String(action.litres))
         fd.append('type', action.readingType)
-        if (action.readingType === 'open') {
-          await saveDipReading(action.shiftId, action.tankId, fd)
-        } else {
-          await saveCloseDipReading(action.shiftId, action.tankId, fd)
-        }
+        await saveCloseDipReading(action.shiftId, action.tankId, fd)
       }
 
     } else if (action.type === 'pos_submission') {

@@ -41,5 +41,17 @@ export function getCloseProgress(
 export function resolveCloseStatus(
   progress: Pick<CloseProgress, 'isReadyForPos' | 'isComplete' | 'pos'>
 ): ShiftStatus {
-  return progress.isReadyForPos ? 'pending_pos' : 'open'
+  return progress.isComplete ? 'closed' : 'pending'
+}
+
+// ── canSubmit ─────────────────────────────────────────────────────────────────
+
+const SUBMITTABLE_FROM = new Set<ShiftStatus>(['pending'])
+
+/**
+ * Guards the submit transition.
+ * Only shifts in 'pending' may be submitted (transitions to 'closed').
+ */
+export function canSubmit(status: ShiftStatus): boolean {
+  return SUBMITTABLE_FROM.has(status)
 }

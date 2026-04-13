@@ -3,6 +3,7 @@ import {
   buildStationDayStatus,
   buildFinancialLines,
   isReportPartial,
+  countPendingShiftsPerStation,
 } from '../lib/owner-reports'
 
 // --- fixtures ---
@@ -76,6 +77,45 @@ describe('buildFinancialLines', () => {
     expect(result.lines).toHaveLength(0)
     expect(result.totals.expected_revenue_zar).toBe(0)
     expect(result.totals.variance_zar).toBe(0)
+  })
+})
+
+// ── countPendingShiftsPerStation ──────────────────────────────────────────
+
+describe('countPendingShiftsPerStation', () => {
+  it('tracer bullet: one pending shift → count of 1 for its station', () => {
+    const shifts = [{ station_id: 'station-1', status: 'pending' as const }]
+    const counts = countPendingShiftsPerStation(shifts)
+    expect(counts['station-1']).toBe(1)
+  })
+
+  it('no shifts → empty object', () => {
+    expect(countPendingShiftsPerStation([])).toEqual({})
+  })
+
+  it('closed shift is not counted', () => {
+    const shifts = [{ station_id: 'station-1', status: 'closed' as const }]
+    const counts = countPendingShiftsPerStation(shifts)
+    expect(counts['station-1']).toBeUndefined()
+  })
+
+  it('two pending shifts at the same station → count of 2', () => {
+    const shifts = [
+      { station_id: 'station-1', status: 'pending' as const },
+      { station_id: 'station-1', status: 'pending' as const },
+    ]
+    expect(countPendingShiftsPerStation(shifts)['station-1']).toBe(2)
+  })
+
+  it('pending shifts at different stations are counted independently', () => {
+    const shifts = [
+      { station_id: 'station-1', status: 'pending' as const },
+      { station_id: 'station-2', status: 'pending' as const },
+      { station_id: 'station-2', status: 'closed' as const },
+    ]
+    const counts = countPendingShiftsPerStation(shifts)
+    expect(counts['station-1']).toBe(1)
+    expect(counts['station-2']).toBe(1)
   })
 })
 

@@ -43,6 +43,7 @@ export interface ShiftDataBundle {
   posLines:     { fuel_grade_id: string; litres_sold: number; revenue_zar: number }[]
   deliveries:   { tank_id: string; litres_received: number; delivered_at: string }[]
   priceRows:    PriceRow[]      // all versioned rows for relevant grades; period filtering in assembly
+  repositoryWarnings?: AssemblyWarning[]  // warnings emitted during I/O (e.g. missing baseline)
 }
 
 // ── Assembly warning ───────────────────────────────────────────────────────────
@@ -50,7 +51,7 @@ export interface ShiftDataBundle {
 // Logged by runReconciliationWith; surface to supervisors in a future PR.
 
 export interface AssemblyWarning {
-  code:   'PUMP_NO_CLOSE_READING' | 'SUBMITTED_AT_NULL' | 'PRICE_NOT_FOUND' | 'TANK_MISSING_DIP'
+  code:   'PUMP_NO_CLOSE_READING' | 'SUBMITTED_AT_NULL' | 'PRICE_NOT_FOUND' | 'TANK_MISSING_DIP' | 'NO_PRIOR_SHIFT_BASELINE'
   detail: string
 }
 
@@ -69,7 +70,7 @@ export interface ReconciliationWriter {
 export function assemblePureInputs(
   bundle: ShiftDataBundle,
 ): { inputs: ReconciliationInputs; warnings: AssemblyWarning[] } {
-  const warnings: AssemblyWarning[] = []
+  const warnings: AssemblyWarning[] = [...(bundle.repositoryWarnings ?? [])]
 
   // Pair open/close pump readings by pump_id.
   // A pump with an open reading but no close is excluded and warned.
@@ -169,21 +170,77 @@ export function createSupabaseRepository(db: SupabaseClient): ShiftDataRepositor
       if (!tanks?.length || !pumps?.length)
         return { error: 'Station has no tanks or pumps configured' }
 
-      // ── 3. Readings for this shift ───────────────────────────────────────
+      // ── 3. Current shift close readings + POS ────────────────────────────
       const [
-        { data: openDips },
         { data: closeDips },
-        { data: pumpReadings },
+        { data: closePumpReadings },
         { data: posSubmission },
       ] = await Promise.all([
-        db.from('dip_readings').select('tank_id, litres').eq('shift_id', shiftId).eq('type', 'open'),
         db.from('dip_readings').select('tank_id, litres').eq('shift_id', shiftId).eq('type', 'close'),
         db.from('pump_readings')
-          .select('pump_id, meter_reading, type')
+          .select('pump_id, meter_reading')
           .eq('shift_id', shiftId)
-          .in('type', ['open', 'close']),
+          .eq('type', 'close'),
         db.from('pos_submissions').select('id').eq('shift_id', shiftId).maybeSingle(),
       ])
+
+      // ── 4. Opening baseline: previous closed shift → station baselines ────
+      // Rolling model: the previous shift's close readings are this shift's open.
+      const repositoryWarnings: AssemblyWarning[] = []
+
+      const { data: prevShift } = await db
+        .from('shifts')
+        .select('id')
+        .eq('station_id', shift.station_id)
+        .eq('status', 'closed')
+        .lt('shift_date', shift.shift_date)
+        .order('shift_date', { ascending: false })
+        .order('period',     { ascending: false }) // evening > morning within same date
+        .limit(1)
+        .maybeSingle()
+
+      let openDips:         { tank_id: string; litres: number }[] = []
+      let openPumpReadings: { pump_id: string; meter_reading: number; type: 'open' | 'close' }[] = []
+
+      if (prevShift) {
+        const [{ data: prevDips }, { data: prevPumps }] = await Promise.all([
+          db.from('dip_readings')
+            .select('tank_id, litres')
+            .eq('shift_id', prevShift.id)
+            .eq('type', 'close'),
+          db.from('pump_readings')
+            .select('pump_id, meter_reading')
+            .eq('shift_id', prevShift.id)
+            .eq('type', 'close'),
+        ])
+        openDips         = prevDips  ?? []
+        openPumpReadings = (prevPumps ?? []).map(r => ({ ...r, type: 'open' as const }))
+      } else {
+        // Fall back to owner-set station baselines
+        const { data: baselines } = await db
+          .from('shift_baselines')
+          .select('pump_id, tank_id, reading_type, value')
+          .eq('station_id', shift.station_id)
+
+        if (!baselines?.length) {
+          repositoryWarnings.push({
+            code:   'NO_PRIOR_SHIFT_BASELINE',
+            detail: `No prior closed shift and no station baseline found for station ${shift.station_id}; opening readings will default to 0`,
+          })
+        } else {
+          openDips = baselines
+            .filter(b => b.reading_type === 'dip' && b.tank_id)
+            .map(b => ({ tank_id: b.tank_id!, litres: b.value }))
+          openPumpReadings = baselines
+            .filter(b => b.reading_type === 'meter' && b.pump_id)
+            .map(b => ({ pump_id: b.pump_id!, meter_reading: b.value, type: 'open' as const }))
+        }
+      }
+
+      const pumpReadings = [
+        ...openPumpReadings,
+        ...(closePumpReadings ?? []).map(r => ({ ...r, type: 'close' as const })),
+      ]
 
       const posLines = posSubmission
         ? (await db
@@ -193,7 +250,7 @@ export function createSupabaseRepository(db: SupabaseClient): ShiftDataRepositor
           ).data ?? []
         : []
 
-      // ── 4. Deliveries for the shift day (unfiltered by period) ───────────
+      // ── 5. Deliveries for the shift day (unfiltered by period) ───────────
       // Period filtering happens in assemblePureInputs via getShiftPeriod().
       const dayStart = `${shift.shift_date}T00:00:00Z`
       const dayEnd   = `${shift.shift_date}T23:59:59Z`
@@ -204,7 +261,7 @@ export function createSupabaseRepository(db: SupabaseClient): ShiftDataRepositor
         .gte('delivered_at', dayStart)
         .lte('delivered_at', dayEnd)
 
-      // ── 5. Fuel prices (all versions for relevant grades) ────────────────
+      // ── 6. Fuel prices (all versions for relevant grades) ────────────────
       const gradeIds = [...new Set(tanks.map(t => t.fuel_grade_id))]
       const { data: priceRows } = await db
         .from('fuel_prices')
@@ -215,12 +272,13 @@ export function createSupabaseRepository(db: SupabaseClient): ShiftDataRepositor
         shift,
         tanks,
         pumps,
-        openDips:     (openDips  ?? []),
-        closeDips:    (closeDips ?? []),
-        pumpReadings: (pumpReadings ?? []) as ShiftDataBundle['pumpReadings'],
-        posLines:     (posLines  ?? []),
-        deliveries:   (deliveries ?? []),
-        priceRows:    (priceRows  ?? []),
+        openDips,
+        closeDips:          (closeDips ?? []),
+        pumpReadings:       pumpReadings as ShiftDataBundle['pumpReadings'],
+        posLines:           (posLines   ?? []),
+        deliveries:         (deliveries ?? []),
+        priceRows:          (priceRows  ?? []),
+        repositoryWarnings: repositoryWarnings.length ? repositoryWarnings : undefined,
       }
     },
   }

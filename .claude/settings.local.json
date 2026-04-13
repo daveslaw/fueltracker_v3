@@ -14,10 +14,27 @@
       "Read(//c/Users/David Lawrence/Projects/**)",
       "Bash(CI=true npx create-next-app@latest fueltracker_v3_scaffold --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --no-git)",
       "Bash(robocopy \"C:\\\\Users\\\\David Lawrence\\\\Projects\\\\fueltracker_v3_scaffold\" \"C:\\\\Users\\\\David Lawrence\\\\Projects\\\\fueltracker_v3\" /E /XD \".git\" /NFL /NDL /NJH /NJS)",
-      "Bash(npm install @supabase/ssr @supabase/supabase-js)"
+      "Bash(npm install @supabase/ssr @supabase/supabase-js)",
+      "Bash(npm test)",
+      "Bash(npx vitest run __tests__/reconciliation.test.ts)",
+      "Bash(npx vitest run)",
+      "Bash(npx vitest run __tests__/pricing.test.ts)",
+      "Bash(npx vitest run __tests__/supervisor-review.test.ts)",
+      "Bash(npx vitest run __tests__/owner-reports.test.ts)",
+      "Bash(npx vitest run __tests__/csv-export.test.ts)",
+      "Bash(npx vitest run __tests__/tank-trends.test.ts)",
+      "Bash(npx vitest run __tests__/offline-queue.test.ts)",
+      "Bash(git commit:*)",
+      "Read(//c/Users/David Lawrence/.claude/skills/improve-codebase-architecture/**)",
+      "Bash(gh issue:*)",
+      "Bash(npm test:*)",
+      "Bash(npx vitest:*)",
+      "Bash(grep -rn \"canReview\" app/ lib/ --include=\"*.ts\" --include=\"*.tsx\")",
+      "Bash(grep -rn \"supervisor-review\" app/ lib/ --include=\"*.ts\" --include=\"*.tsx\")"
     ],
     "additionalDirectories": [
-      "c:\\Users\\David Lawrence\\.claude\\projects\\c--Users-David-Lawrence-Projects-fueltracker-v3"
+      "c:\\Users\\David Lawrence\\.claude\\projects\\c--Users-David-Lawrence-Projects-fueltracker-v3",
+      "c:\\Users\\David Lawrence\\Projects\\fueltracker_v3\\app\\review"
     ]
   }
 }
