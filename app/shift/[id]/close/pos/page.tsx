@@ -14,7 +14,7 @@ export default async function ClosePosPage({ params }: Props) {
     .from('shifts').select('id, station_id, period, shift_date, status').eq('id', shiftId).single()
   if (!shift) notFound()
 
-  if (!['open', 'pending_pos'].includes(shift.status)) redirect('/shift')
+  if (shift.status !== 'pending') redirect(`/shift/${shiftId}/close/summary`)
 
   const [
     { data: pumps }, { data: closePumpReadings },

@@ -62,7 +62,7 @@ export default async function ShiftAuditPage({ params }: Props) {
     supabase.from('reconciliations')
       .select('id, expected_revenue, pos_revenue, revenue_variance, reconciliation_tank_lines(*), reconciliation_grade_lines(*)')
       .eq('shift_id', shiftId).maybeSingle(),
-    supabase.from('ocr_overrides').select('id, reading_id, reading_type, original_value, override_value, reason, created_at, overridden_by').eq('shift_id', shiftId),
+    supabase.from('ocr_overrides').select('id, reading_id, reading_type, original_value, override_value, reason, created_at, user_profiles!overridden_by(full_name)').eq('shift_id', shiftId),
     supabase.from('fuel_prices').select('fuel_grade_id, price_per_litre, effective_from').order('effective_from'),
   ])
 
@@ -312,7 +312,10 @@ export default async function ShiftAuditPage({ params }: Props) {
                   <span>{fmt(o.original_value)} → {fmt(o.override_value)}</span>
                 </div>
                 <div className="text-muted-foreground text-xs italic">{o.reason}</div>
-                <div className="text-muted-foreground text-xs">{new Date(o.created_at).toLocaleString('en-ZA')}</div>
+                <div className="text-muted-foreground text-xs">
+                  {new Date(o.created_at).toLocaleString('en-ZA')}
+                  {(o as any).user_profiles?.full_name && ` · ${(o as any).user_profiles.full_name}`}
+                </div>
               </div>
             ))}
           </div>

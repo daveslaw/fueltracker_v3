@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { buildStationDayStatus, countPendingShiftsPerStation } from '@/lib/owner-reports'
 import { DashboardPoller } from './_components/DashboardPoller'
 import { createShiftSlot } from './actions'
+import { signOut } from '@/app/(auth)/login/actions'
 
 type Status = string
 
@@ -68,7 +69,15 @@ export default async function DashboardPage() {
 
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Owner Dashboard</h1>
-        <span className="text-sm text-gray-500">{today}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500">{today}</span>
+          <form action={signOut}>
+            <button type="submit"
+              className="rounded border px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50">
+              Log out
+            </button>
+          </form>
+        </div>
       </div>
 
       <nav className="flex flex-wrap gap-4 text-sm text-blue-600">

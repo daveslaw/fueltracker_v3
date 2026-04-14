@@ -18,20 +18,20 @@ describe('resolveRedirect', () => {
       expect(resolveRedirect({ role: 'attendant', is_active: true }, '/dashboard')).toBe('/shift')
     })
 
-    it('redirects attendant away from /review to /shift', () => {
-      expect(resolveRedirect({ role: 'attendant', is_active: true }, '/review')).toBe('/shift')
-    })
-
-    it('redirects supervisor away from /dashboard to /review', () => {
-      expect(resolveRedirect({ role: 'supervisor', is_active: true }, '/dashboard')).toBe('/review')
+    it('redirects supervisor away from /dashboard to /shift', () => {
+      expect(resolveRedirect({ role: 'supervisor', is_active: true }, '/dashboard')).toBe('/shift')
     })
 
     it('allows attendant on /shift path', () => {
       expect(resolveRedirect({ role: 'attendant', is_active: true }, '/shift')).toBeNull()
     })
 
-    it('allows supervisor on /review path', () => {
-      expect(resolveRedirect({ role: 'supervisor', is_active: true }, '/review')).toBeNull()
+    it('allows supervisor on /shift path', () => {
+      expect(resolveRedirect({ role: 'supervisor', is_active: true }, '/shift')).toBeNull()
+    })
+
+    it('allows supervisor on nested /shift path', () => {
+      expect(resolveRedirect({ role: 'supervisor', is_active: true }, '/shift/abc/close/pumps')).toBeNull()
     })
 
     it('allows owner on /dashboard path', () => {
@@ -44,8 +44,8 @@ describe('resolveRedirect', () => {
       expect(resolveRedirect({ role: 'attendant', is_active: true }, '/')).toBe('/shift')
     })
 
-    it('redirects active supervisor from / to /review', () => {
-      expect(resolveRedirect({ role: 'supervisor', is_active: true }, '/')).toBe('/review')
+    it('redirects active supervisor from / to /shift', () => {
+      expect(resolveRedirect({ role: 'supervisor', is_active: true }, '/')).toBe('/shift')
     })
 
     it('redirects active owner from / to /dashboard', () => {

@@ -31,7 +31,7 @@ export async function middleware(request: NextRequest) {
       .select('role, is_active')
       .eq('user_id', user.id)
       .single()
-    console.log('[middleware] profile:', data, 'error:', error?.message)
+    console.log('[middleware] profile:', data, error ? `error: ${error.message}` : 'ok')
     if (data) {
       profile = data as UserProfile
     }

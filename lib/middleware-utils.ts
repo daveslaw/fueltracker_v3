@@ -7,7 +7,7 @@ export type UserProfile = {
 
 const ROLE_HOME: Record<UserRole, string> = {
   attendant: '/shift',
-  supervisor: '/review',
+  supervisor: '/shift',
   owner: '/dashboard',
 }
 
