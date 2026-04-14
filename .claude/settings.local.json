@@ -30,7 +30,10 @@
       "Bash(npm test:*)",
       "Bash(npx vitest:*)",
       "Bash(grep -rn \"canReview\" app/ lib/ --include=\"*.ts\" --include=\"*.tsx\")",
-      "Bash(grep -rn \"supervisor-review\" app/ lib/ --include=\"*.ts\" --include=\"*.tsx\")"
+      "Bash(grep -rn \"supervisor-review\" app/ lib/ --include=\"*.ts\" --include=\"*.tsx\")",
+      "Bash(supabase projects:*)",
+      "Bash(supabase migration:*)",
+      "Bash(supabase db:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\David Lawrence\\.claude\\projects\\c--Users-David-Lawrence-Projects-fueltracker-v3",

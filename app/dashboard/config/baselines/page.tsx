@@ -4,6 +4,7 @@ import { createSupabaseBaselinesRepository } from '@/lib/shift-baselines'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { savePumpBaseline, saveTankBaseline } from './actions'
+import { StationSelect } from './StationSelect'
 
 type Props = { searchParams: Promise<{ station?: string }> }
 
@@ -48,18 +49,7 @@ export default async function BaselinesPage({ searchParams }: Props) {
       </p>
 
       {/* Station selector */}
-      <form method="GET" className="flex gap-3 items-center">
-        <select name="station" defaultValue={selectedStation}
-          onChange="this.form.submit()"
-          className="rounded border px-3 py-2 text-sm">
-          {(stations ?? []).map(s => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-        <noscript>
-          <button type="submit" className="rounded border px-3 py-2 text-sm">Select</button>
-        </noscript>
-      </form>
+      <StationSelect stations={stations ?? []} selectedStation={selectedStation} />
 
       {!selectedStation && (
         <p className="text-sm text-gray-400">No stations configured.</p>
