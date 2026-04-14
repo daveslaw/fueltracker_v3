@@ -5,6 +5,8 @@ import { notFound, redirect } from 'next/navigation'
 import { getCloseProgress } from '@/lib/shift-close'
 import { canFlag, canOverride } from '@/lib/supervisor-review'
 import { submitShift, flagShift, unflagShift, createOverride } from '../../../actions'
+import { getShiftDeliveries } from '@/lib/deliveries'
+import { AddDeliveryForm } from '../deliveries/AddDeliveryForm'
 import Link from 'next/link'
 
 type Props = { params: Promise<{ id: string }> }
@@ -38,7 +40,7 @@ export default async function CloseSummaryPage({ params }: Props) {
     supabase.from('pump_readings')
       .select('id, pump_id, meter_reading, pumps(label)')
       .eq('shift_id', shiftId).eq('type', 'close'),
-    supabase.from('tanks').select('id, label').eq('station_id', shift.station_id).order('label'),
+    supabase.from('tanks').select('id, label, fuel_grade_id').eq('station_id', shift.station_id).order('label'),
     supabase.from('dip_readings')
       .select('id, tank_id, litres, tanks(label)')
       .eq('shift_id', shiftId).eq('type', 'close'),
@@ -52,6 +54,12 @@ export default async function CloseSummaryPage({ params }: Props) {
     (closeDipReadings ?? []).map(r => r.tank_id),
     !!posSubmission
   )
+
+  const shiftDeliveries = await getShiftDeliveries(supabase, {
+    stationId: shift.station_id,
+    shiftDate: shift.shift_date,
+    period: shift.period as 'morning' | 'evening',
+  })
 
   // ── Pending view: progress checklist + submit ─────────────────────────────
   if (shift.status === 'pending') {
@@ -89,6 +97,20 @@ export default async function CloseSummaryPage({ params }: Props) {
             total={1}
             href={`/shift/${shiftId}/close/pos`}
           />
+          <div className="flex items-center justify-between rounded-lg border px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="text-lg text-gray-300">○</span>
+              <span className="text-gray-500">Deliveries</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-400">
+                {shiftDeliveries.length} recorded
+              </span>
+              <Link href={`/shift/${shiftId}/close/deliveries`} className="text-xs text-blue-600 underline">
+                Manage
+              </Link>
+            </div>
+          </div>
         </section>
 
         {progress.isComplete ? (
@@ -252,6 +274,31 @@ export default async function CloseSummaryPage({ params }: Props) {
           </section>
         </>
       )}
+
+      {/* Deliveries */}
+      <section className="space-y-3">
+        <h2 className="font-semibold text-xs uppercase tracking-wide text-gray-500">Deliveries</h2>
+        {shiftDeliveries.length > 0 ? (
+          <div className="border rounded-md divide-y text-sm">
+            {shiftDeliveries.map(d => (
+              <div key={d.id} className="px-4 py-3 flex items-center justify-between">
+                <div>
+                  <div className="font-medium">{tankLabel(d.tank_id)}</div>
+                  <div className="text-xs text-gray-500">{fmtL(d.litres_received)}</div>
+                </div>
+                {d.delivery_note_url && (
+                  <a href={d.delivery_note_url} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-blue-600 underline">Receipt</a>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">No deliveries recorded.</p>
+        )}
+
+        <AddDeliveryForm shiftId={shiftId} tanks={tanks ?? []} />
+      </section>
 
       {/* Flag / unflag */}
       {isFlaggable && (
