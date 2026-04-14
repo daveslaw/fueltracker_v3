@@ -2,7 +2,7 @@
 
 ## Project Summary
 
-Multi-station fuel inventory PWA for South African petrol stations. Attendants capture shift open/close meter readings and tank dips (with OCR via Google Cloud Vision). Supervisors approve or flag shifts. Owners view cross-station variance reports. Three stations: Elegant Amaglug, Speedway, Truck Stop. Currency: ZAR.
+Multi-station fuel inventory PWA for South African petrol stations. Supervisors capture shift close meter readings, tank dips, and POS Z-reports (with OCR via Google Cloud Vision). Owners view cross-station variance reports and manage config. Three stations: Elegant Amaglug, Speedway, Truck Stop. Currency: ZAR.
 
 ## Tech Stack
 
@@ -48,37 +48,31 @@ fueltracker_v3/
 │   │   ├── pump-photo/route.ts
 │   │   └── pos-photo/route.ts
 │   │
-│   ├── shift/                      # Attendant shift workflow
-│   │   ├── page.tsx                # Shift list / new button
-│   │   ├── actions.ts              # Shift create/submit server actions
-│   │   ├── new/page.tsx            # Select station & shift period
-│   │   └── [id]/
-│   │       ├── pumps/              # Open: pump meter capture + OCR
-│   │       ├── dips/               # Open: tank dip entry
-│   │       ├── summary/            # Review open readings
-│   │       └── close/
-│   │           ├── pumps/          # Close: pump meter capture
-│   │           ├── dips/           # Close: tank dip entry
-│   │           ├── pos/            # POS Z-report photo + OCR confirm
-│   │           └── summary/        # Review & submit
-│   │
-│   ├── review/                     # Supervisor workflow
-│   │   ├── page.tsx                # List submitted shifts
-│   │   ├── [id]/                   # Shift detail: approve, flag, override
-│   │   │   ├── page.tsx
-│   │   │   ├── ApproveButton.tsx
-│   │   │   ├── FlagForm.tsx
-│   │   │   ├── OverrideForm.tsx
-│   │   │   └── actions.ts
-│   │   └── deliveries/             # Record fuel deliveries
-│   │       ├── DeliveryForm.tsx
-│   │       └── actions.ts
+│   ├── shift/                      # Supervisor shift workflow
+│   │   ├── page.tsx                # Shift list — auto-redirects to current period or lists pending/closed
+│   │   ├── actions.ts              # createShift, saveClosePumpReading, saveCloseDipReading,
+│   │   │                           #   savePosSubmission, submitShift, flagShift, unflagShift,
+│   │   │                           #   createOverride
+│   │   ├── new/page.tsx            # Period selector (station auto-filled from profile)
+│   │   └── [id]/close/
+│   │       ├── pumps/              # Close: pump meter capture + OCR
+│   │       ├── dips/               # Close: tank dip entry
+│   │       ├── pos/                # POS Z-report photo + OCR confirm
+│   │       └── summary/            # Progress (pending) or reconciliation results (closed)
+│   │                               #   Includes flag/unflag and correction forms
 │   │
 │   ├── dashboard/                  # Owner reports & config
-│   │   ├── page.tsx                # Cross-station status
-│   │   ├── config/                 # Station / tank / pump / pricing CRUD
+│   │   ├── page.tsx                # Cross-station status, pending counts, flagged alerts,
+│   │   │                           #   create shift slot form
+│   │   ├── actions.ts              # createShiftSlot server action
+│   │   ├── config/                 # Station / tank / pump / pricing / baselines CRUD
+│   │   │   ├── page.tsx            # Station tree + links to Baselines and Fuel pricing
 │   │   │   ├── stations/
 │   │   │   ├── pricing/
+│   │   │   ├── baselines/          # Opening baseline meter/dip values per station
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── actions.ts      # savePumpBaseline, saveTankBaseline
+│   │   │   │   └── StationSelect.tsx
 │   │   │   ├── StationForm.tsx
 │   │   │   ├── TankForm.tsx
 │   │   │   ├── PumpForm.tsx
@@ -113,15 +107,18 @@ fueltracker_v3/
 │   │   └── vision-client.ts        # Google Cloud Vision API wrapper
 │   ├── middleware-utils.ts         # Auth guard helpers
 │   ├── station-config.ts           # Station/tank/pump/grade CRUD
-│   ├── shift-open.ts               # Shift open workflow
-│   ├── shift-close.ts              # Shift close workflow (includes POS)
+│   ├── shift-open.ts               # canStartShift guard (blocks on pending/closed)
+│   ├── shift-close.ts              # getCloseProgress, canSubmit
+│   ├── shift-baselines.ts          # Port/adapter: rolling baseline from prior closed shift
+│   │                               #   or shift_baselines table fallback
 │   ├── reconciliation.ts           # Core formulas (tank variance, pump vs POS)
 │   ├── reconciliation-runner.ts    # Orchestrates reconciliation on submit
-│   ├── supervisor-review.ts        # Approve / flag / override logic
-│   ├── deliveries.ts               # Delivery CRUD
+│   ├── supervisor-review.ts        # canFlag, canOverride, validateFlagComment
+│   ├── deliveries.ts               # Delivery CRUD + getShiftPeriod
 │   ├── pricing.ts                  # Versioned fuel prices
 │   ├── tank-trends.ts              # Tank level time-series queries
-│   ├── owner-reports.ts            # Daily/weekly/monthly report generation
+│   ├── owner-reports.ts            # buildStationDayStatus, countPendingShiftsPerStation,
+│   │                               #   daily/weekly/monthly report generation
 │   ├── aggregate-reports.ts        # Cross-station aggregation
 │   ├── user-management.ts          # Invite / assign / deactivate
 │   ├── csv-export.ts               # Report CSV formatting
@@ -142,11 +139,23 @@ fueltracker_v3/
 │
 ├── __tests__/                      # Vitest unit tests
 │   ├── reconciliation.test.ts      # Formula 1 & 2, financial calc
+│   ├── reconciliation-runner.test.ts
+│   ├── ocr-service.test.ts
 │   ├── ocr-service-pos.test.ts     # POS Z-report OCR extraction
 │   ├── aggregate-reports.test.ts   # Cross-station aggregation
 │   ├── csv-export.test.ts          # CSV formatting
 │   ├── deliveries.test.ts          # Delivery CRUD + reconciliation trigger
-│   └── middleware.test.ts          # Auth guard routing
+│   ├── middleware.test.ts          # Auth guard routing
+│   ├── shift-open.test.ts          # canStartShift (pending/closed blocking)
+│   ├── shift-close.test.ts
+│   ├── shift-baselines.test.ts
+│   ├── supervisor-review.test.ts   # canFlag, canOverride, validateFlagComment
+│   ├── owner-reports.test.ts       # countPendingShiftsPerStation, buildStationDayStatus
+│   ├── station-config.test.ts
+│   ├── user-management.test.ts
+│   ├── pricing.test.ts
+│   ├── tank-trends.test.ts
+│   └── offline-queue.test.ts
 │
 ├── public/
 │   ├── manifest.json               # PWA manifest
@@ -162,21 +171,33 @@ fueltracker_v3/
 ### Roles
 | Role | Access |
 |---|---|
-| `attendant` | Submit shifts for any pump at their station |
-| `supervisor` | Approve/flag shifts, record deliveries, override OCR values |
-| `owner` | Cross-station reports, config, user management |
+| `supervisor` | Create and close shifts, capture readings, flag shifts, submit overrides |
+| `owner` | Cross-station reports, config, user management, create shift slots |
+
+Note: the `attendant` role is retired. Supervisors now own the full shift close workflow.
 
 ### Shift State Machine
 ```
-draft → open → submitted → approved
-                        ↘ flagged
+pending → closed
 ```
+- Shifts are created as `pending` (by supervisor via `/shift/new` or by owner via dashboard "Create shift slot")
+- Shift moves to `closed` only when supervisor explicitly submits via `submitShift`
+- `is_flagged` is a boolean field on `closed` shifts — set/cleared independently of status
+- Duplicate guard: `canStartShift` in `lib/shift-open.ts` blocks if a `pending` or `closed` shift already exists for the same station/period/date
 
 ### Reconciliation (runs on shift submit)
 - **Formula 1 — Tank Inventory:** `Expected Closing Dip = Opening Dip + Deliveries − POS Litres Sold`
 - **Formula 2 — Pump vs POS:** `Meter Delta per grade − POS Litres Sold per grade`
 - **Financial:** `Expected Revenue = POS Litres × Selling Price`
-- Re-runs automatically when a supervisor overrides a value or a delivery is added post-submit.
+- Re-runs automatically when a supervisor submits an override (`createOverride`) or a delivery is added post-close.
+- Opening baseline for Formula 1/2 comes from the previous closed shift for that station. If none exists, falls back to the `shift_baselines` table (configured via `/dashboard/config/baselines`). Logic is in `lib/shift-baselines.ts` (port/adapter pattern).
+
+### Rolling Baseline
+- `lib/shift-baselines.ts` exports `createSupabaseBaselinesRepository` which provides:
+  - `getBaselines(stationId)` — returns all pump/tank baselines for a station
+  - `upsertPumpBaseline(stationId, pumpId, value)` — set/update pump meter baseline
+  - `upsertTankBaseline(stationId, tankId, value)` — set/update tank dip baseline
+- The reconciliation runner resolves opening values by checking prior closed shift first, then falling back to `shift_baselines`.
 
 ### Offline-First PWA
 1. Photos captured → stored in IndexedDB as blobs
@@ -188,7 +209,8 @@ draft → open → submitted → approved
 1. Photo uploaded via `app/api/upload/pump-photo/route.ts` or `pos-photo/route.ts`
 2. `lib/ocr/vision-client.ts` calls Google Cloud Vision
 3. `lib/ocr/ocr-service.ts` extracts meter value or POS lines
-4. UI presents extracted value for attendant to confirm or override
+4. UI presents extracted value for supervisor to confirm or override
+5. Post-close corrections are submitted via `createOverride` server action (stored in `ocr_overrides`, triggers re-reconciliation)
 
 ## Database Tables
 
@@ -208,7 +230,8 @@ draft → open → submitted → approved
 | `reconciliation_records` | Per-shift reconciliation summary |
 | `reconciliation_line_items` | Per-grade/tank variance lines |
 | `deliveries` | Fuel deliveries by tank |
-| `supervisor_overrides` | Audit trail of overridden values |
+| `ocr_overrides` | Audit trail of post-close override corrections |
+| `shift_baselines` | Fallback opening meter/dip values per station (configured by owner) |
 | `fuel_prices` | Versioned ZAR/litre per grade |
 
 RLS policies scope all data to `station_id` via `user_profiles`. Use `lib/supabase/admin.ts` (service role) only for server-side operations that need to bypass RLS.
@@ -222,9 +245,22 @@ RLS policies scope all data to `station_id` via `user_profiles`. Use `lib/supaba
 - `lib/supabase/client.ts` — Browser (Client Components)
 - `lib/supabase/admin.ts` — Service role (bypasses RLS, server-only)
 
-**Auth guard:** `middleware.ts` intercepts all routes, checks session and role from `user_profiles`, redirects to `/login` or correct dashboard. Helper logic in `lib/middleware-utils.ts`.
+**Auth guard:** `middleware.ts` intercepts all routes, checks session and role from `user_profiles`, redirects to `/login` or correct dashboard. Helper logic in `lib/middleware-utils.ts`. The `/review/` route no longer exists — supervisor workflow lives under `/shift/`.
 
 **Config mutations** go through `lib/station-config.ts` (not raw Supabase calls in components).
+
+**Shift summary page (`/shift/[id]/close/summary`)** is a single server component that branches on status:
+- `pending`: shows a progress checklist (pumps, dips, POS) and a submit button
+- `closed`: shows reconciliation tables, flag/unflag controls, and `<details>` correction forms per reading. Uses zero-JS `<details>/<summary>` HTML for expand/collapse — no client component needed.
+
+**`lib/supervisor-review.ts`** pure functions:
+- `canFlag(status)` — true only for `closed` shifts
+- `canOverride(status)` — true only for `closed` shifts
+- `validateFlagComment(comment)` — returns `{ valid, error? }`
+
+**`lib/owner-reports.ts`** pure functions:
+- `buildStationDayStatus(shifts)` — returns `{ morning, evening }` status strings
+- `countPendingShiftsPerStation(shifts)` — returns `Record<stationId, count>` for badge display
 
 ## Testing
 
