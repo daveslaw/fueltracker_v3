@@ -73,10 +73,10 @@ export default async function CloseDipsPage({ params }: Props) {
         </Link>
         {progress.isReadyForPos && (
           <Link
-            href={`/shift/${shiftId}/close/pos`}
+            href={`/shift/${shiftId}/close/deliveries`}
             className="flex-1 rounded bg-black py-2 text-center text-sm font-medium text-white"
           >
-            POS Z-report
+            Deliveries
           </Link>
         )}
       </div>

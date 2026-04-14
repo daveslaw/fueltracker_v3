@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getShiftPeriod } from '../lib/deliveries'
+import { getShiftPeriod, validateDeliveryInput } from '../lib/deliveries'
 
 describe('getShiftPeriod', () => {
   it('returns morning for a timestamp before 12:00 UTC', () => {
@@ -20,5 +20,50 @@ describe('getShiftPeriod', () => {
 
   it('returns evening for 23:59 UTC', () => {
     expect(getShiftPeriod('2026-03-23T23:59:59Z')).toBe('evening')
+  })
+})
+
+describe('validateDeliveryInput', () => {
+  const valid = {
+    tankId: 'tank-1',
+    litresReceived: 5000,
+    deliveryNoteUrl: 'https://storage.example.com/receipt.jpg',
+  }
+
+  it('tracer bullet: valid inputs return { valid: true }', () => {
+    expect(validateDeliveryInput(valid)).toEqual({ valid: true })
+  })
+
+  it('litresReceived of 0 is invalid', () => {
+    const result = validateDeliveryInput({ ...valid, litresReceived: 0 })
+    expect(result.valid).toBe(false)
+    if (!result.valid) expect(result.error).toBeTruthy()
+  })
+
+  it('negative litresReceived is invalid', () => {
+    const result = validateDeliveryInput({ ...valid, litresReceived: -1 })
+    expect(result.valid).toBe(false)
+  })
+
+  it('empty tankId is invalid', () => {
+    const result = validateDeliveryInput({ ...valid, tankId: '' })
+    expect(result.valid).toBe(false)
+    if (!result.valid) expect(result.error).toBeTruthy()
+  })
+
+  it('whitespace-only tankId is invalid', () => {
+    const result = validateDeliveryInput({ ...valid, tankId: '   ' })
+    expect(result.valid).toBe(false)
+  })
+
+  it('empty deliveryNoteUrl is invalid', () => {
+    const result = validateDeliveryInput({ ...valid, deliveryNoteUrl: '' })
+    expect(result.valid).toBe(false)
+    if (!result.valid) expect(result.error).toBeTruthy()
+  })
+
+  it('whitespace-only deliveryNoteUrl is invalid', () => {
+    const result = validateDeliveryInput({ ...valid, deliveryNoteUrl: '   ' })
+    expect(result.valid).toBe(false)
   })
 })

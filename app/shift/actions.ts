@@ -7,6 +7,7 @@ import { canStartShift } from '@/lib/shift-open'
 import { getCloseProgress, canSubmit } from '@/lib/shift-close'
 import { runReconciliation } from '@/lib/reconciliation-runner'
 import { canFlag, canOverride, validateFlagComment, validateOverride } from '@/lib/supervisor-review'
+import { createDelivery, deleteDelivery as dbDeleteDelivery, validateDeliveryInput } from '@/lib/deliveries'
 import type { ShiftRow, ShiftPeriod, ShiftStatus } from '@/lib/shift-open'
 
 type ActionResult = { error: string } | { success: true }
@@ -231,6 +232,74 @@ export async function unflagShift(shiftId: string): Promise<ActionResult> {
   if (error) return { error: error.message }
 
   revalidatePath(`/shift/${shiftId}/close/summary`)
+  return { success: true }
+}
+
+// ── saveDelivery ──────────────────────────────────────────────────────────────
+
+export async function saveDelivery(
+  shiftId: string,
+  formData: FormData
+): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const tankId          = (formData.get('tank_id') as string) ?? ''
+  const litresReceived  = parseFloat(formData.get('litres_received') as string)
+  const deliveryNoteUrl = (formData.get('delivery_note_url') as string) ?? ''
+
+  const validation = validateDeliveryInput({ tankId, litresReceived, deliveryNoteUrl })
+  if (!validation.valid) return { error: validation.error }
+
+  const { data: shift } = await supabase
+    .from('shifts').select('station_id, status').eq('id', shiftId).single()
+  if (!shift) return { error: 'Shift not found' }
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { data: profile } = await supabase
+    .from('user_profiles').select('id').eq('user_id', user.id).single()
+  if (!profile) return { error: 'User profile not found' }
+
+  const result = await createDelivery(supabase, {
+    stationId:      shift.station_id,
+    tankId,
+    litresReceived,
+    deliveryNoteUrl,
+    recordedBy:     profile.id,
+  })
+  if (result.error) return { error: result.error }
+
+  // Re-run reconciliation if the shift is already closed
+  if (shift.status === 'closed') {
+    await runReconciliation(shiftId)
+  }
+
+  revalidatePath(`/shift/${shiftId}/close/deliveries`)
+  revalidatePath(`/shift/${shiftId}/close/summary`)
+  return { success: true }
+}
+
+// ── deleteDelivery ────────────────────────────────────────────────────────────
+
+export async function deleteDelivery(
+  deliveryId: string,
+  shiftId: string
+): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: shift } = await supabase
+    .from('shifts').select('station_id, status').eq('id', shiftId).single()
+  if (!shift) return { error: 'Shift not found' }
+  if (shift.status !== 'pending') return { error: 'Deliveries can only be removed from pending shifts' }
+
+  const result = await dbDeleteDelivery(supabase, {
+    deliveryId,
+    stationId: shift.station_id,
+  })
+  if (result.error) return { error: result.error }
+
+  revalidatePath(`/shift/${shiftId}/close/deliveries`)
   return { success: true }
 }
 
