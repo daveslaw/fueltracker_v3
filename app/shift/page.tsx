@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getShiftPeriod } from '@/lib/deliveries'
 import type { ShiftPeriod } from '@/lib/shift-open'
+import { signOut } from '@/app/(auth)/login/actions'
 
 function periodLabel(period: ShiftPeriod) {
   return period === 'morning' ? 'Morning' : 'Evening'
@@ -41,10 +42,18 @@ export default async function ShiftHomePage() {
     <main className="p-6 max-w-lg mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Shifts</h1>
-        <Link href="/shift/new"
-          className="rounded bg-black px-4 py-2 text-sm font-medium text-white">
-          Start shift
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/shift/new"
+            className="rounded bg-black px-4 py-2 text-sm font-medium text-white">
+            Start shift
+          </Link>
+          <form action={signOut}>
+            <button type="submit"
+              className="rounded border px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">
+              Log out
+            </button>
+          </form>
+        </div>
       </div>
 
       <p className="text-sm text-gray-500">{today} — {periodLabel(currentPeriod)} period</p>

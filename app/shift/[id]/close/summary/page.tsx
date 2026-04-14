@@ -293,7 +293,7 @@ export default async function CloseSummaryPage({ params }: Props) {
           {(closePumpReadings ?? []).map(r => (
             <details key={r.pump_id} className="border rounded-md">
               <summary className="px-4 py-3 text-sm cursor-pointer flex justify-between items-center">
-                <span>Pump: {(r.pumps as { label: string })?.label}</span>
+                <span>Pump: {(r.pumps as unknown as { label: string })?.label}</span>
                 <span className="text-gray-500">{r.meter_reading} L</span>
               </summary>
               <form action={handleOverride} className="px-4 pb-4 pt-2 space-y-2 border-t">
@@ -363,6 +363,9 @@ export default async function CloseSummaryPage({ params }: Props) {
                   {o.original_value} → <span className="font-medium">{o.override_value}</span>
                 </div>
                 <div className="text-xs text-gray-500">{o.reason}</div>
+                {(o.user_profiles as any)?.full_name && (
+                  <div className="text-xs text-gray-400">By {(o.user_profiles as any).full_name}</div>
+                )}
               </div>
             ))}
           </div>

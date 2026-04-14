@@ -5,7 +5,7 @@ import { saveClosePumpReading } from '../../../actions'
 import type { OcrStatus } from '@/lib/ocr/ocr-service'
 import { useOfflineQueue } from '@/components/OfflineQueueProvider'
 
-type Props = { shiftId: string; pumpId: string; defaultMeter: string }
+type Props = { shiftId: string; pumpId: string; defaultMeter: string; onSaved?: () => void }
 
 type OcrState =
   | { phase: 'idle' }
@@ -13,7 +13,7 @@ type OcrState =
   | { phase: 'done'; value: number | null; confidence: number; status: OcrStatus }
   | { phase: 'unreadable' }
 
-export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter }: Props) {
+export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter, onSaved }: Props) {
   const [ocr, setOcr] = useState<OcrState>({ phase: 'idle' })
   const [overridden, setOverridden] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -76,6 +76,7 @@ export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter }: Props) {
       )
       setPending(false)
       setSaved(true)
+      onSaved?.()
       return
     }
 
@@ -83,6 +84,7 @@ export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter }: Props) {
     setPending(false)
     if ('error' in result) { setError(result.error); return }
     setSaved(true)
+    onSaved?.()
   }
 
   const ocrDone = ocr.phase === 'done'
@@ -99,7 +101,7 @@ export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter }: Props) {
           accept="image/*"
           capture="environment"
           onChange={handlePhotoChange}
-          className="text-sm"
+          className="text-sm cursor-pointer"
         />
         {ocr.phase === 'uploading' && (
           <p className="text-xs text-gray-500 mt-1">Reading meter…</p>
@@ -144,7 +146,7 @@ export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter }: Props) {
         <button
           type="button"
           onClick={() => setOcr({ phase: 'unreadable' })}
-          className="text-xs text-gray-400 hover:text-gray-600 underline"
+          className="text-xs text-gray-400 hover:text-gray-600 underline cursor-pointer"
         >
           Mark photo as unreadable
         </button>
@@ -154,7 +156,7 @@ export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter }: Props) {
       <button
         type="submit"
         disabled={pending || ocr.phase === 'uploading'}
-        className="rounded bg-black px-4 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+        className="rounded bg-black px-4 py-1.5 text-xs font-medium text-white disabled:opacity-50 cursor-pointer disabled:cursor-default"
       >
         {pending ? 'Saving…' : saved ? 'Update' : 'Save'}
       </button>

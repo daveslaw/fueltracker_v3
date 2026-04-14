@@ -8,6 +8,9 @@ export async function signInWithPassword(formData: FormData) {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
 
+  // Clear any stale session from a previous user before signing in
+  await supabase.auth.signOut()
+
   const { error } = await supabase.auth.signInWithPassword({ email, password })
   console.log('[login] signInWithPassword result:', error ?? 'success')
   if (error) return { error: error.message }
