@@ -1,6 +1,6 @@
 export const INVITABLE_ROLES = ['attendant', 'supervisor'] as const
 export type InvitableRole = typeof INVITABLE_ROLES[number]
-export type UserStatus = 'active' | 'pending' | 'inactive'
+export type UserStatus = 'active' | 'inactive'
 
 // ── validateInvite ───────────────────────────────────────────────────────────
 
@@ -19,11 +19,6 @@ export function validateInvite(input: {
 
 // ── getUserStatus ────────────────────────────────────────────────────────────
 
-export function getUserStatus(profile: {
-  is_active: boolean
-  last_sign_in_at: string | null
-}): UserStatus {
-  if (!profile.is_active) return 'inactive'
-  if (!profile.last_sign_in_at) return 'pending'
-  return 'active'
+export function getUserStatus(profile: { is_active: boolean }): UserStatus {
+  return profile.is_active ? 'active' : 'inactive'
 }

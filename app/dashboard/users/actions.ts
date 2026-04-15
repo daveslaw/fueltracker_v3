@@ -26,6 +26,7 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
     role,
     station_id,
     is_active: true,
+    email: email.trim(),
   })
   if (profileError) return { error: profileError.message }
 

@@ -11,14 +11,12 @@ type User = {
   role: string
   station_id: string | null
   station_name: string
-  last_sign_in_at: string | null
   status: UserStatus
   is_active: boolean
 }
 
 const STATUS_BADGE: Record<UserStatus, string> = {
   active:   'bg-green-100 text-green-800',
-  pending:  'bg-yellow-100 text-yellow-800',
   inactive: 'bg-gray-100 text-gray-500',
 }
 
@@ -43,17 +41,12 @@ export function UserRow({ user, stations }: { user: User; stations: Station[] })
     setPending(false)
   }
 
-  const lastLogin = user.last_sign_in_at
-    ? new Date(user.last_sign_in_at).toLocaleDateString('en-ZA')
-    : '—'
-
   return (
     <>
       <tr className="border-b">
         <td className="py-2 pr-4 font-mono text-xs">{user.email}</td>
         <td className="py-2 pr-4 capitalize">{user.role}</td>
         <td className="py-2 pr-4">{user.station_name}</td>
-        <td className="py-2 pr-4 text-gray-500">{lastLogin}</td>
         <td className="py-2 pr-4">
           <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[user.status]}`}>
             {user.status}
@@ -72,7 +65,7 @@ export function UserRow({ user, stations }: { user: User; stations: Station[] })
       </tr>
       {editing && (
         <tr className="bg-gray-50">
-          <td colSpan={6} className="py-3 px-4">
+          <td colSpan={5} className="py-3 px-4">
             <form onSubmit={handleUpdate} className="flex flex-wrap gap-3 items-end">
               <div>
                 <label className="block text-xs font-medium mb-1">Role</label>

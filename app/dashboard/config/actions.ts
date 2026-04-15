@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { validateStation, validateTank, validatePump } from '@/lib/station-config'
+import { validateStation, validateTank, validatePump, revalidateStationConfig } from '@/lib/station-config'
 
 type ActionResult = { error: string } | { success: true }
 
@@ -19,6 +19,7 @@ export async function createStation(formData: FormData): Promise<ActionResult> {
   const { error: dbError } = await supabase.from('stations').insert({ name: name.trim(), address })
   if (dbError) return { error: dbError.message }
 
+  revalidateStationConfig()
   revalidatePath('/dashboard/config')
   return { success: true }
 }
@@ -37,6 +38,7 @@ export async function updateStation(id: string, formData: FormData): Promise<Act
     .eq('id', id)
   if (dbError) return { error: dbError.message }
 
+  revalidateStationConfig()
   revalidatePath('/dashboard/config')
   return { success: true }
 }
@@ -57,6 +59,7 @@ export async function createTank(stationId: string, formData: FormData): Promise
     .insert({ station_id: stationId, label: label.trim(), fuel_grade_id, capacity_litres })
   if (dbError) return { error: dbError.message }
 
+  revalidateStationConfig()
   revalidatePath('/dashboard/config')
   return { success: true }
 }
@@ -76,6 +79,7 @@ export async function updateTank(id: string, formData: FormData): Promise<Action
     .eq('id', id)
   if (dbError) return { error: dbError.message }
 
+  revalidateStationConfig()
   revalidatePath('/dashboard/config')
   return { success: true }
 }
@@ -95,6 +99,7 @@ export async function createPump(stationId: string, formData: FormData): Promise
     .insert({ station_id: stationId, tank_id, label: label.trim() })
   if (dbError) return { error: dbError.message }
 
+  revalidateStationConfig()
   revalidatePath('/dashboard/config')
   return { success: true }
 }
@@ -113,6 +118,7 @@ export async function updatePump(id: string, formData: FormData): Promise<Action
     .eq('id', id)
   if (dbError) return { error: dbError.message }
 
+  revalidateStationConfig()
   revalidatePath('/dashboard/config')
   return { success: true }
 }

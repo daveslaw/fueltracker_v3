@@ -27,15 +27,16 @@ export default async function CloseSummaryPage({ params }: Props) {
   if (!shift) notFound()
   if (!['pending', 'closed'].includes(shift.status)) redirect('/shift')
 
-  const { data: station } = await supabase
-    .from('stations').select('name').eq('id', shift.station_id).single()
-
-  // ── Always fetch close readings for progress + display ────────────────────
+  // ── Batch A: everything keyed on shiftId or station_id ───────────────────
   const [
+    { data: station },
     { data: pumps }, { data: closePumpReadings },
     { data: tanks }, { data: closeDipReadings },
     { data: posSubmission },
+    shiftDeliveries,
+    { data: rec },
   ] = await Promise.all([
+    supabase.from('stations').select('name').eq('id', shift.station_id).single(),
     supabase.from('pumps').select('id, label').eq('station_id', shift.station_id).order('label'),
     supabase.from('pump_readings')
       .select('id, pump_id, meter_reading, pumps(label)')
@@ -45,6 +46,15 @@ export default async function CloseSummaryPage({ params }: Props) {
       .select('id, tank_id, litres, tanks(label)')
       .eq('shift_id', shiftId).eq('type', 'close'),
     supabase.from('pos_submissions').select('id').eq('shift_id', shiftId).maybeSingle(),
+    getShiftDeliveries(supabase, {
+      stationId: shift.station_id,
+      shiftDate: shift.shift_date,
+      period: shift.period as 'morning' | 'evening',
+    }),
+    supabase.from('reconciliations')
+      .select('id, expected_revenue, pos_revenue, revenue_variance')
+      .eq('shift_id', shiftId)
+      .maybeSingle(),
   ])
 
   const progress = getCloseProgress(
@@ -54,12 +64,6 @@ export default async function CloseSummaryPage({ params }: Props) {
     (closeDipReadings ?? []).map(r => r.tank_id),
     !!posSubmission
   )
-
-  const shiftDeliveries = await getShiftDeliveries(supabase, {
-    stationId: shift.station_id,
-    shiftDate: shift.shift_date,
-    period: shift.period as 'morning' | 'evening',
-  })
 
   // ── Pending view: progress checklist + submit ─────────────────────────────
   if (shift.status === 'pending') {
@@ -133,42 +137,32 @@ export default async function CloseSummaryPage({ params }: Props) {
 
   // ── Closed view: reconciliation results + flag + overrides + audit trail ──
 
-  // Reconciliation
-  const { data: rec } = await supabase
-    .from('reconciliations')
-    .select('id, expected_revenue, pos_revenue, revenue_variance')
-    .eq('shift_id', shiftId)
-    .maybeSingle()
-
-  const [{ data: tankLines }, { data: gradeLines }] = await Promise.all([
-    rec
-      ? supabase.from('reconciliation_tank_lines')
-          .select('tank_id, opening_dip, deliveries_received, pos_litres_sold, expected_closing_dip, actual_closing_dip, variance_litres')
-          .eq('reconciliation_id', rec.id)
-      : Promise.resolve({ data: [] }),
-    rec
-      ? supabase.from('reconciliation_grade_lines')
-          .select('fuel_grade_id, meter_delta, pos_litres_sold, variance_litres')
-          .eq('reconciliation_id', rec.id)
-      : Promise.resolve({ data: [] }),
-  ])
+  // ── Batch B: keyed on rec.id / posSubmission.id (both known after Batch A) ─
+  const [{ data: tankLines }, { data: gradeLines }, { data: posLines }, { data: overrides }] =
+    await Promise.all([
+      rec
+        ? supabase.from('reconciliation_tank_lines')
+            .select('tank_id, opening_dip, deliveries_received, pos_litres_sold, expected_closing_dip, actual_closing_dip, variance_litres')
+            .eq('reconciliation_id', rec.id)
+        : Promise.resolve({ data: [] as any[] }),
+      rec
+        ? supabase.from('reconciliation_grade_lines')
+            .select('fuel_grade_id, meter_delta, pos_litres_sold, variance_litres')
+            .eq('reconciliation_id', rec.id)
+        : Promise.resolve({ data: [] as any[] }),
+      posSubmission
+        ? supabase.from('pos_submission_lines')
+            .select('id, fuel_grade_id, litres_sold, revenue_zar')
+            .eq('pos_submission_id', posSubmission.id)
+        : Promise.resolve({ data: [] as any[] }),
+      supabase.from('ocr_overrides')
+        .select('id, reading_type, original_value, override_value, reason, created_at, user_profiles(full_name)')
+        .eq('shift_id', shiftId)
+        .order('created_at', { ascending: false }),
+    ])
 
   const tankLabel = (tankId: string) =>
     tanks?.find(t => t.id === tankId)?.label ?? tankId
-
-  // POS lines for override display
-  const { data: posLines } = posSubmission
-    ? await supabase.from('pos_submission_lines')
-        .select('id, fuel_grade_id, litres_sold, revenue_zar')
-        .eq('pos_submission_id', posSubmission.id)
-    : { data: [] }
-
-  // Override audit trail
-  const { data: overrides } = await supabase
-    .from('ocr_overrides')
-    .select('id, reading_type, original_value, override_value, reason, created_at, user_profiles(full_name)')
-    .eq('shift_id', shiftId)
-    .order('created_at', { ascending: false })
 
   async function handleFlag(formData: FormData) {
     'use server'
