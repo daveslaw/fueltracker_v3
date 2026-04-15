@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound, redirect } from 'next/navigation'
 import { getShiftDeliveries } from '@/lib/deliveries'
-import { deleteDelivery } from '../../actions'
+import { deleteDelivery } from '../../../actions'
 import { AddDeliveryForm } from './AddDeliveryForm'
 import Link from 'next/link'
 
@@ -21,20 +21,15 @@ export default async function CloseDeliveriesPage({ params }: Props) {
   if (!shift) notFound()
   if (shift.status !== 'pending') redirect(`/shift/${shiftId}/close/summary`)
 
-  const { data: station } = await supabase
-    .from('stations').select('name').eq('id', shift.station_id).single()
-
-  const { data: tanks } = await supabase
-    .from('tanks')
-    .select('id, label, fuel_grade_id')
-    .eq('station_id', shift.station_id)
-    .order('label')
-
-  const deliveries = await getShiftDeliveries(supabase, {
-    stationId: shift.station_id,
-    shiftDate: shift.shift_date,
-    period: shift.period as 'morning' | 'evening',
-  })
+  const [{ data: station }, { data: tanks }, deliveries] = await Promise.all([
+    supabase.from('stations').select('name').eq('id', shift.station_id).single(),
+    supabase.from('tanks').select('id, label, fuel_grade_id').eq('station_id', shift.station_id).order('label'),
+    getShiftDeliveries(supabase, {
+      stationId: shift.station_id,
+      shiftDate: shift.shift_date,
+      period: shift.period as 'morning' | 'evening',
+    }),
+  ])
 
   const tankLabel = (tankId: string) =>
     tanks?.find(t => t.id === tankId)?.label ?? tankId

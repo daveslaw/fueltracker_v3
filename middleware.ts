@@ -22,16 +22,14 @@ export async function middleware(request: NextRequest) {
   )
 
   const { data: { user } } = await supabase.auth.getUser()
-  console.log('[middleware] user:', user?.id ?? 'null')
 
   let profile: UserProfile | null = null
   if (user) {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('user_profiles')
       .select('role, is_active')
       .eq('user_id', user.id)
       .single()
-    console.log('[middleware] profile:', data, error ? `error: ${error.message}` : 'ok')
     if (data) {
       profile = data as UserProfile
     }

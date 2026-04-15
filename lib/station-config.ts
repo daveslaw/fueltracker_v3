@@ -1,3 +1,6 @@
+import { unstable_cache, revalidateTag } from 'next/cache'
+import { createAdminClient } from '@/lib/supabase/admin'
+
 export const FUEL_GRADE_IDS = ['95', '93', 'D10', 'D50'] as const
 export type FuelGradeId = typeof FUEL_GRADE_IDS[number]
 
@@ -23,10 +26,32 @@ export function buildStationTree(
       .filter((t) => t.station_id === station.id)
       .map((tank) => ({
         ...tank,
-        pumps: pumps.filter((p) => p.tank_id === tank.id),
+        pumps: pumps
+          .filter((p) => p.tank_id === tank.id)
+          .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' })),
       }))
     return { ...station, tanks: stationTanks }
   })
+}
+
+// ── Cached station tree fetch ─────────────────────────────────────────────────
+
+export const getCachedStationTree = unstable_cache(
+  async (): Promise<StationNode[]> => {
+    const admin = createAdminClient()
+    const [{ data: stations }, { data: tanks }, { data: pumps }] = await Promise.all([
+      admin.from('stations').select('id, name, address').order('name'),
+      admin.from('tanks').select('id, station_id, label, fuel_grade_id, capacity_litres').order('label'),
+      admin.from('pumps').select('id, station_id, tank_id, label').order('label'),
+    ])
+    return buildStationTree(stations ?? [], tanks ?? [], pumps ?? [])
+  },
+  ['station-config'],
+  { tags: ['station-config'] }
+)
+
+export function revalidateStationConfig() {
+  revalidateTag('station-config')
 }
 
 // ── validateStation ──────────────────────────────────────────────────────────

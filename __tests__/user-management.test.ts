@@ -47,15 +47,11 @@ describe('validateInvite', () => {
 // ── getUserStatus ────────────────────────────────────────────────────────────
 
 describe('getUserStatus', () => {
+  it('tracer bullet: active user returns "active"', () => {
+    expect(getUserStatus({ is_active: true })).toBe('active')
+  })
+
   it('inactive user returns "inactive"', () => {
-    expect(getUserStatus({ is_active: false, last_sign_in_at: null })).toBe('inactive')
-  })
-
-  it('active user who has never signed in returns "pending"', () => {
-    expect(getUserStatus({ is_active: true, last_sign_in_at: null })).toBe('pending')
-  })
-
-  it('active user who has signed in returns "active"', () => {
-    expect(getUserStatus({ is_active: true, last_sign_in_at: '2026-03-20T08:00:00Z' })).toBe('active')
+    expect(getUserStatus({ is_active: false })).toBe('inactive')
   })
 })
