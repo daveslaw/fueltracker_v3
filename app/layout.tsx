@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Geist } from 'next/font/google'
+import { Barlow_Condensed, Outfit, JetBrains_Mono } from 'next/font/google'
 import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar'
 import { ToastProvider } from '@/components/Toaster'
 import { OfflineQueueProvider } from '@/components/OfflineQueueProvider'
@@ -7,7 +7,21 @@ import { PendingBadge } from '@/components/PendingBadge'
 import { FailedSyncBanner } from '@/components/FailedSyncBanner'
 import './globals.css'
 
-const geist = Geist({ subsets: ['latin'], variable: '--font-geist' })
+const heading = Barlow_Condensed({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-heading',
+})
+
+const ui = Outfit({
+  subsets: ['latin'],
+  variable: '--font-ui',
+})
+
+const code = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-code',
+})
 
 export const metadata: Metadata = {
   title: 'FuelTracker',
@@ -18,7 +32,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${geist.variable} font-sans antialiased`}>
+      <body className={`${heading.variable} ${ui.variable} ${code.variable} font-sans antialiased`}>
         <ToastProvider>
           <OfflineQueueProvider>
             <ServiceWorkerRegistrar />

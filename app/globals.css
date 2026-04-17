@@ -1,77 +1,112 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0B0F1A;
+  --foreground: #E2E8F0;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-code);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Amber replaces black — all `bg-black` buttons become amber CTA */
+  --color-black: #F59F00;
+
+  /* Dark-native gray ramp (light values map to dark surfaces, dark to light text) */
+  --color-gray-50:  #141B2D;
+  --color-gray-100: #1E2740;
+  --color-gray-200: #2A3656;
+  --color-gray-300: #3D4E6B;
+  --color-gray-400: #56698A;
+  --color-gray-500: #7B8EA8;
+  --color-gray-600: #94A3B8;
+  --color-gray-700: #B8C9D8;
+  --color-gray-800: #D1DCE8;
+  --color-gray-900: #E8EDF4;
+
+  /* Status: green */
+  --color-green-50:  rgba(16, 185, 129, 0.07);
+  --color-green-100: rgba(16, 185, 129, 0.13);
+  --color-green-600: #34D399;
+  --color-green-700: #10B981;
+  --color-green-800: #6EE7B7;
+
+  /* Status: red */
+  --color-red-50:  rgba(244, 63, 94, 0.07);
+  --color-red-100: rgba(244, 63, 94, 0.13);
+  --color-red-200: rgba(244, 63, 94, 0.20);
+  --color-red-300: rgba(244, 63, 94, 0.30);
+  --color-red-600: #F87171;
+  --color-red-700: #FB7185;
+  --color-red-800: #FCA5A5;
+
+  /* Status: yellow / amber */
+  --color-yellow-50:  rgba(245, 158, 11, 0.07);
+  --color-yellow-100: rgba(245, 158, 11, 0.13);
+  --color-yellow-800: #FCD34D;
+  --color-amber-500: #F59F00;
+  --color-amber-600: #E8930A;
+
+  /* Info / links */
+  --color-blue-100: rgba(56, 189, 248, 0.12);
+  --color-blue-600: #38BDF8;
+  --color-blue-800: #7DD3FC;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Default border colour for all elements */
+@layer base {
+  *, *::before, *::after {
+    border-color: #2A3656;
+  }
+}
+
+/* Heading font — Barlow Condensed applied to all heading levels */
+h1, h2, h3, h4 {
+  font-family: var(--font-heading), var(--font-ui), sans-serif;
+}
+
+/* Form elements — dark surface */
 input, select, textarea, option {
-  background-color: #ffffff;
-  color: #171717;
+  background-color: #141B2D;
+  color: #E2E8F0;
+  border-color: #2A3656;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-  }
-
-  input, select, textarea, option {
-    background-color: #1c1c1c;
-    color: #ededed;
-    border-color: #3f3f3f;
-  }
+input::placeholder,
+textarea::placeholder {
+  color: #56698A;
 }
 
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #F59F00;
+  outline-offset: -1px;
+}
+
+/* Spinner — amber ring */
 .loader {
-  width: 48px;
-  height: 48px;
-  border: 5px solid #FFF;
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(245, 159, 0, 0.18);
+  border-top-color: #F59F00;
   border-radius: 50%;
   display: inline-block;
   box-sizing: border-box;
-  position: relative;
-  animation: pulse 1s linear infinite;
-}
-.loader:after {
-  content: '';
-  position: absolute;
-  width: 48px;
-  height: 48px;
-  border: 5px solid #FFF;
-  border-radius: 50%;
-  display: inline-block;
-  box-sizing: border-box;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  animation: scaleUp 1s linear infinite;
+  animation: spin 0.75s linear infinite;
 }
 
-@keyframes scaleUp {
-  0% { transform: translate(-50%, -50%) scale(0) }
-  60%, 100% { transform: translate(-50%, -50%) scale(1) }
+.loader::after {
+  display: none;
 }
-@keyframes pulse {
-  0%, 60%, 100% { transform: scale(1) }
-  80% { transform: scale(1.2) }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }

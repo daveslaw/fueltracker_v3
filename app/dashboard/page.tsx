@@ -69,14 +69,21 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <nav className="flex flex-wrap gap-4 text-sm text-blue-600">
-        <Link href="/dashboard/reports" className="underline">Daily report</Link>
-        <Link href="/dashboard/reports/weekly" className="underline">Weekly</Link>
-        <Link href="/dashboard/reports/monthly" className="underline">Monthly</Link>
-        <Link href="/dashboard/tank-trends" className="underline">Tank trends</Link>
-        <Link href="/dashboard/history" className="underline">Shift history</Link>
-        <Link href="/dashboard/config" className="underline">Config</Link>
-        <Link href="/dashboard/users" className="underline">Users</Link>
+      <nav
+        className="flex flex-wrap items-center gap-1 rounded-xl p-1.5 text-sm"
+        style={{ background: '#141B2D', border: '1px solid #2A3656' }}
+      >
+        <Link href="/dashboard/reports"         className="px-3 py-1.5 rounded-lg font-medium transition-colors text-gray-500 hover:text-amber-500 hover:bg-gray-100">Daily report</Link>
+        <Link href="/dashboard/reports/weekly"  className="px-3 py-1.5 rounded-lg font-medium transition-colors text-gray-500 hover:text-amber-500 hover:bg-gray-100">Weekly</Link>
+        <Link href="/dashboard/reports/monthly" className="px-3 py-1.5 rounded-lg font-medium transition-colors text-gray-500 hover:text-amber-500 hover:bg-gray-100">Monthly</Link>
+        {/* visual divider */}
+        <span aria-hidden style={{ width: 1, height: 18, background: '#2A3656', flexShrink: 0 }} />
+        <Link href="/dashboard/tank-trends"     className="px-3 py-1.5 rounded-lg font-medium transition-colors text-gray-500 hover:text-amber-500 hover:bg-gray-100">Tank trends</Link>
+        <Link href="/dashboard/history"         className="px-3 py-1.5 rounded-lg font-medium transition-colors text-gray-500 hover:text-amber-500 hover:bg-gray-100">Shift history</Link>
+        {/* visual divider */}
+        <span aria-hidden style={{ width: 1, height: 18, background: '#2A3656', flexShrink: 0 }} />
+        <Link href="/dashboard/config"          className="px-3 py-1.5 rounded-lg font-medium transition-colors text-gray-500 hover:text-amber-500 hover:bg-gray-100">Config</Link>
+        <Link href="/dashboard/users"           className="px-3 py-1.5 rounded-lg font-medium transition-colors text-gray-500 hover:text-amber-500 hover:bg-gray-100">Users</Link>
       </nav>
 
       {stationList.length === 0 && (
