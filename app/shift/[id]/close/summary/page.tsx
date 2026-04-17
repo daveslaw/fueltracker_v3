@@ -52,7 +52,7 @@ export default async function CloseSummaryPage({ params }: Props) {
       period: shift.period as 'morning' | 'evening',
     }),
     supabase.from('reconciliations')
-      .select('id, expected_revenue, pos_revenue, revenue_variance')
+      .select('id')
       .eq('shift_id', shiftId)
       .maybeSingle(),
   ])
@@ -142,12 +142,12 @@ export default async function CloseSummaryPage({ params }: Props) {
     await Promise.all([
       rec
         ? supabase.from('reconciliation_tank_lines')
-            .select('tank_id, opening_dip, deliveries_received, pos_litres_sold, expected_closing_dip, actual_closing_dip, variance_litres')
+            .select('tank_id, opening_dip, deliveries_received, meter_delta, expected_closing_dip, actual_closing_dip, variance_litres')
             .eq('reconciliation_id', rec.id)
         : Promise.resolve({ data: [] as any[] }),
       rec
         ? supabase.from('reconciliation_grade_lines')
-            .select('fuel_grade_id, meter_delta, pos_litres_sold, variance_litres')
+            .select('fuel_grade_id, meter_delta, pos_litres_sold, variance_litres, price_per_litre, expected_revenue_zar, pos_revenue_zar, variance_zar')
             .eq('reconciliation_id', rec.id)
         : Promise.resolve({ data: [] as any[] }),
       posSubmission
@@ -156,7 +156,7 @@ export default async function CloseSummaryPage({ params }: Props) {
             .eq('pos_submission_id', posSubmission.id)
         : Promise.resolve({ data: [] as any[] }),
       supabase.from('ocr_overrides')
-        .select('id, reading_type, original_value, override_value, reason, created_at, user_profiles(full_name)')
+        .select('id, reading_type, field_name, original_value, override_value, reason, created_at, user_profiles(full_name)')
         .eq('shift_id', shiftId)
         .order('created_at', { ascending: false }),
     ])
@@ -211,13 +211,13 @@ export default async function CloseSummaryPage({ params }: Props) {
                   <div className="grid grid-cols-2 gap-x-4 text-gray-500 text-xs">
                     <span>Opening dip</span><span className="text-right">{fmtL(line.opening_dip)}</span>
                     <span>Deliveries</span><span className="text-right">+{fmtL(line.deliveries_received)}</span>
-                    <span>POS sold</span><span className="text-right">−{fmtL(line.pos_litres_sold)}</span>
+                    <span>Meter delta</span><span className="text-right">−{fmtL(line.meter_delta)}</span>
                     <span>Expected closing</span><span className="text-right">{fmtL(line.expected_closing_dip)}</span>
                     <span>Actual closing</span><span className="text-right">{fmtL(line.actual_closing_dip)}</span>
                   </div>
                   <div className={`flex justify-between font-semibold text-sm pt-1 border-t ${
-                    line.variance_litres > 0 ? 'text-red-600' :
-                    line.variance_litres < 0 ? 'text-amber-600' : 'text-green-600'
+                    line.variance_litres < 0 ? 'text-red-600' :
+                    line.variance_litres > 0 ? 'text-amber-600' : 'text-green-600'
                   }`}>
                     <span>Variance</span>
                     <span>{line.variance_litres > 0 ? '+' : ''}{fmtL(line.variance_litres)}</span>
@@ -228,42 +228,30 @@ export default async function CloseSummaryPage({ params }: Props) {
           </section>
 
           <section className="space-y-2">
-            <h2 className="font-semibold text-xs uppercase tracking-wide text-gray-500">Pump Meter vs POS</h2>
+            <h2 className="font-semibold text-xs uppercase tracking-wide text-gray-500">Pump Meter vs POS — Revenue</h2>
             <div className="border rounded-md divide-y text-sm">
               {(gradeLines ?? []).map(line => (
                 <div key={line.fuel_grade_id} className="px-4 py-3 space-y-1">
                   <div className="font-medium">{line.fuel_grade_id}</div>
                   <div className="grid grid-cols-2 gap-x-4 text-gray-500 text-xs">
                     <span>Meter delta</span><span className="text-right">{fmtL(line.meter_delta)}</span>
-                    <span>POS sold</span><span className="text-right">{fmtL(line.pos_litres_sold)}</span>
+                    <span>POS litres</span><span className="text-right">{fmtL(line.pos_litres_sold)}</span>
+                    <span>Litres variance</span>
+                    <span className={`text-right font-medium ${line.variance_litres < 0 ? 'text-red-600' : line.variance_litres > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                      {line.variance_litres > 0 ? '+' : ''}{fmtL(line.variance_litres)}
+                    </span>
+                    <span>Expected revenue</span><span className="text-right">{fmtR(line.expected_revenue_zar)}</span>
+                    <span>POS revenue</span><span className="text-right">{fmtR(line.pos_revenue_zar)}</span>
                   </div>
                   <div className={`flex justify-between font-semibold text-sm pt-1 border-t ${
-                    line.variance_litres !== 0 ? 'text-red-600' : 'text-green-600'
+                    line.variance_zar < 0 ? 'text-red-600' :
+                    line.variance_zar > 0 ? 'text-amber-600' : 'text-green-600'
                   }`}>
-                    <span>Variance</span>
-                    <span>{line.variance_litres > 0 ? '+' : ''}{fmtL(line.variance_litres)}</span>
+                    <span>Revenue variance</span>
+                    <span>{line.variance_zar > 0 ? '+' : ''}{fmtR(line.variance_zar)}</span>
                   </div>
                 </div>
               ))}
-            </div>
-          </section>
-
-          <section className="space-y-2">
-            <h2 className="font-semibold text-xs uppercase tracking-wide text-gray-500">Revenue</h2>
-            <div className="border rounded-md divide-y text-sm">
-              <div className="px-4 py-3 flex justify-between">
-                <span className="text-gray-500">Expected</span><span>{fmtR(rec.expected_revenue)}</span>
-              </div>
-              <div className="px-4 py-3 flex justify-between">
-                <span className="text-gray-500">POS reported</span><span>{fmtR(rec.pos_revenue)}</span>
-              </div>
-              <div className={`px-4 py-3 flex justify-between font-semibold ${
-                rec.revenue_variance > 0 ? 'text-red-600' :
-                rec.revenue_variance < 0 ? 'text-amber-600' : 'text-green-600'
-              }`}>
-                <span>Variance</span>
-                <span>{rec.revenue_variance > 0 ? '+' : ''}{fmtR(rec.revenue_variance)}</span>
-              </div>
             </div>
           </section>
         </>
@@ -359,18 +347,56 @@ export default async function CloseSummaryPage({ params }: Props) {
             </details>
           ))}
 
+          {(closeDipReadings ?? []).map(r => (
+            <details key={r.tank_id} className="border rounded-md">
+              <summary className="px-4 py-3 text-sm cursor-pointer flex justify-between items-center">
+                <span>Dip: {(r.tanks as unknown as { label: string })?.label}</span>
+                <span className="text-gray-500">{fmtL(r.litres)}</span>
+              </summary>
+              <form action={handleOverride} className="px-4 pb-4 pt-2 space-y-2 border-t">
+                <input type="hidden" name="reading_id"     value={r.id} />
+                <input type="hidden" name="reading_type"   value="dip" />
+                <input type="hidden" name="original_value" value={r.litres} />
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Corrected dip (L)</label>
+                  <input type="number" name="override_value" step="0.01" min="0" required
+                    className="w-full rounded border px-3 py-1.5 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Reason</label>
+                  <input type="text" name="reason" required
+                    className="w-full rounded border px-3 py-1.5 text-sm" />
+                </div>
+                <button type="submit"
+                  className="rounded bg-black px-3 py-1.5 text-xs font-medium text-white">
+                  Save correction
+                </button>
+              </form>
+            </details>
+          ))}
+
           {(posLines ?? []).map(l => (
             <details key={l.id} className="border rounded-md">
               <summary className="px-4 py-3 text-sm cursor-pointer flex justify-between items-center">
                 <span>POS: {l.fuel_grade_id}</span>
-                <span className="text-gray-500">{l.litres_sold} L</span>
+                <span className="text-gray-500">{fmtL(l.litres_sold)} · {fmtR(l.revenue_zar)}</span>
               </summary>
               <form action={handleOverride} className="px-4 pb-4 pt-2 space-y-2 border-t">
-                <input type="hidden" name="reading_id"     value={l.id} />
-                <input type="hidden" name="reading_type"   value="pos_line" />
-                <input type="hidden" name="original_value" value={l.litres_sold} />
+                <input type="hidden" name="reading_id"        value={l.id} />
+                <input type="hidden" name="reading_type"      value="pos_line" />
+                <input type="hidden" name="original_litres"   value={l.litres_sold} />
+                <input type="hidden" name="original_revenue"  value={l.revenue_zar} />
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Corrected litres sold</label>
+                  <label className="block text-xs text-gray-500 mb-1">Field to correct</label>
+                  <select name="field_name" required
+                    className="w-full rounded border px-3 py-1.5 text-sm bg-white">
+                    <option value="">— select —</option>
+                    <option value="litres_sold">Litres sold (current: {fmtL(l.litres_sold)})</option>
+                    <option value="revenue_zar">Revenue (current: {fmtR(l.revenue_zar)})</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Corrected value</label>
                   <input type="number" name="override_value" step="0.01" min="0" required
                     className="w-full rounded border px-3 py-1.5 text-sm" />
                 </div>
@@ -397,7 +423,9 @@ export default async function CloseSummaryPage({ params }: Props) {
             {(overrides ?? []).map(o => (
               <div key={o.id} className="px-4 py-3 space-y-0.5">
                 <div className="flex justify-between text-xs text-gray-400">
-                  <span className="capitalize">{o.reading_type} reading</span>
+                  <span className="capitalize">
+                    {o.reading_type} reading{(o as any).field_name ? ` — ${(o as any).field_name}` : ''}
+                  </span>
                   <span>{new Date(o.created_at).toLocaleString('en-ZA')}</span>
                 </div>
                 <div className="text-gray-700">

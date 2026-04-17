@@ -51,7 +51,7 @@ export default async function MonthlyReportPage({ searchParams }: Props) {
   const shiftIds = (shifts ?? []).map(s => s.id)
   const recsResult = shiftIds.length > 0
     ? await supabase.from('reconciliations')
-        .select('shift_id, reconciliation_tank_lines(variance_litres), reconciliation_grade_lines(variance_litres), revenue_variance')
+        .select('shift_id, reconciliation_tank_lines(variance_litres), reconciliation_grade_lines(variance_litres, variance_zar)')
         .in('shift_id', shiftIds)
     : { data: [] as any[] }
 
@@ -67,9 +67,9 @@ export default async function MonthlyReportPage({ searchParams }: Props) {
     for (const s of dayShifts) {
       const rec = recs.find((r: any) => r.shift_id === s.id)
       if (!rec) continue
-      tankVar += (rec.reconciliation_tank_lines ?? []).reduce((sum: number, l: any) => sum + l.variance_litres, 0)
+      tankVar  += (rec.reconciliation_tank_lines  ?? []).reduce((sum: number, l: any) => sum + l.variance_litres, 0)
       gradeVar += (rec.reconciliation_grade_lines ?? []).reduce((sum: number, l: any) => sum + l.variance_litres, 0)
-      revenueVar += rec.revenue_variance ?? 0
+      revenueVar += (rec.reconciliation_grade_lines ?? []).reduce((sum: number, l: any) => sum + (l.variance_zar ?? 0), 0)
     }
 
     return {

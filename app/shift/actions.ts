@@ -311,17 +311,23 @@ export async function createOverride(
 ): Promise<ActionResult> {
   const supabase = await createClient()
 
-  const reading_id     = formData.get('reading_id') as string
-  const reading_type   = formData.get('reading_type') as 'pump' | 'pos_line'
-  const original_value = parseFloat(formData.get('original_value') as string)
+  const reading_id   = formData.get('reading_id') as string
+  const reading_type = formData.get('reading_type') as 'pump' | 'dip' | 'pos_line'
+  const field_name   = (formData.get('field_name') as string) || null
   const override_value = parseFloat(formData.get('override_value') as string)
   const reason         = (formData.get('reason') as string) ?? ''
 
+  // pos_line forms submit original_litres / original_revenue instead of a single original_value,
+  // so the audit trail can record the right pre-correction value regardless of which field is corrected.
+  const original_value = reading_type === 'pos_line'
+    ? parseFloat(formData.get(field_name === 'revenue_zar' ? 'original_revenue' : 'original_litres') as string)
+    : parseFloat(formData.get('original_value') as string)
+
   if (!reading_id || !reading_type) return { error: 'Reading reference is required' }
-  if (isNaN(original_value) || isNaN(override_value))
+  if (isNaN(override_value))
     return { error: 'Values must be valid numbers' }
 
-  const validation = validateOverride({ value: override_value, reason })
+  const validation = validateOverride({ value: override_value, reason, reading_type, field_name })
   if (!validation.valid) return { error: validation.error }
 
   const { data: shift } = await supabase
@@ -337,10 +343,35 @@ export async function createOverride(
     .from('user_profiles').select('id').eq('user_id', user.id).single()
   if (!profile) return { error: 'User profile not found' }
 
+  // Mutate source table so re-reconciliation uses the corrected value.
+  // ocr_overrides is the audit trail only.
+  if (reading_type === 'pump') {
+    const { error: mutErr } = await supabase
+      .from('pump_readings')
+      .update({ meter_reading: override_value })
+      .eq('id', reading_id)
+      .eq('type', 'close')
+    if (mutErr) return { error: mutErr.message }
+  } else if (reading_type === 'dip') {
+    const { error: mutErr } = await supabase
+      .from('dip_readings')
+      .update({ litres: override_value })
+      .eq('id', reading_id)
+      .eq('type', 'close')
+    if (mutErr) return { error: mutErr.message }
+  } else if (reading_type === 'pos_line' && field_name) {
+    const { error: mutErr } = await supabase
+      .from('pos_submission_lines')
+      .update({ [field_name]: override_value })
+      .eq('id', reading_id)
+    if (mutErr) return { error: mutErr.message }
+  }
+
   const { error } = await supabase.from('ocr_overrides').insert({
     shift_id:      shiftId,
     reading_id,
     reading_type,
+    field_name,
     original_value,
     override_value,
     reason,

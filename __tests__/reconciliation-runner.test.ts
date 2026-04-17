@@ -194,9 +194,10 @@ describe('runReconciliationWith', () => {
     expect(result.error).toBeUndefined()
     expect(captured).toHaveLength(1)
     const [, reconciliationResult] = captured[0]
-    // 2000L × R17.00 = R34,000 expected; POS reported R34,000 → variance = 0
-    expect(reconciliationResult.expectedRevenue).toBe(34000)
-    expect(reconciliationResult.posRevenue).toBe(34000)
-    expect(reconciliationResult.revenueVariance).toBe(0)
+    // Grade 95: meter_delta=2000L × R17.00 = R34,000 expected; POS revenue=R34,000 → variance=0
+    const gradeLine = reconciliationResult.gradeLines.find(l => l.fuel_grade_id === '95')!
+    expect(gradeLine.expected_revenue_zar).toBe(34000)
+    expect(gradeLine.pos_revenue_zar).toBe(34000)
+    expect(gradeLine.variance_zar).toBe(0)
   })
 })

@@ -125,7 +125,7 @@ fueltracker_v3/
 │   ├── idb-queue.ts                # IndexedDB offline queue (browser)
 │   └── offline-queue.ts            # Enqueue / drain logic
 │
-├── supabase/migrations/            # 9 migration files (apply in order)
+├── supabase/migrations/            # 13 migration files (apply in order)
 │   ├── 20260319000001_user_profiles.sql
 │   ├── 20260320000001_station_config.sql
 │   ├── 20260320000002_station_seed.sql    # Seeds 3 stations
@@ -135,7 +135,11 @@ fueltracker_v3/
 │   ├── 20260320000006_reconciliation.sql
 │   ├── 20260320000007_deliveries.sql
 │   ├── 20260320000008_shifts_submitted_at.sql
-│   └── 20260320000009_supervisor_review.sql
+│   ├── 20260320000009_supervisor_review.sql
+│   ├── 20260320000010_shift_redesign.sql
+│   ├── 20260320000011_user_profile_email.sql
+│   ├── 20260320000012_indexes.sql
+│   └── 20260320000013_reconciliation_formula_revision.sql  # Revised formulas + override schema
 │
 ├── __tests__/                      # Vitest unit tests
 │   ├── reconciliation.test.ts      # Formula 1 & 2, financial calc
@@ -161,6 +165,10 @@ fueltracker_v3/
 │   ├── manifest.json               # PWA manifest
 │   └── sw.js                       # Service worker (offline sync)
 │
+├── scripts/
+│   └── backfill-reconciliation.ts  # One-off: wipe + re-run reconciliation for all closed shifts
+│                                   #   Run with: npx tsx scripts/backfill-reconciliation.ts
+│                                   #   Required after applying migration 000013
 ├── middleware.ts                   # Auth guard + role-based routing
 ├── PRD.md                          # Full product requirements (53 user stories)
 └── .issues/slice-01..15.md         # 15 development slices/epics
@@ -186,10 +194,17 @@ pending → closed
 - Duplicate guard: `canStartShift` in `lib/shift-open.ts` blocks if a `pending` or `closed` shift already exists for the same station/period/date
 
 ### Reconciliation (runs on shift submit)
-- **Formula 1 — Tank Inventory:** `Expected Closing Dip = Opening Dip + Deliveries − POS Litres Sold`
-- **Formula 2 — Pump vs POS:** `Meter Delta per grade − POS Litres Sold per grade`
-- **Financial:** `Expected Revenue = POS Litres × Selling Price`
+- **Formula 1 — Tank Inventory (per tank):** `Expected Closing Dip = Opening Dip + Deliveries − Meter Delta`
+  - Meter Delta = Σ(close − open) for all pumps whose `tank_id` matches this tank (not POS litres)
+  - `variance_litres = actual − expected` (negative = inventory loss)
+- **Formula 2 — Pump vs POS (per grade):**
+  - `variance_litres = pos_litres_sold − meter_delta` (negative = unrecorded dispensing)
+  - `expected_revenue_zar = meter_delta × price_per_litre`
+  - `variance_zar = pos_revenue_zar − expected_revenue_zar` (negative = revenue shortfall)
+- **Sign convention:** negative = loss/shortfall across all variances.
+- Revenue is per-grade on `reconciliation_grade_lines` — no station-level revenue total.
 - Re-runs automatically when a supervisor submits an override (`createOverride`) or a delivery is added post-close.
+- `createOverride` mutates the source reading table (`pump_readings`, `dip_readings`, or `pos_submission_lines`) before inserting into `ocr_overrides` (which is the audit trail only). Supports `reading_type` of `'pump'`, `'dip'`, or `'pos_line'`; pos_line overrides require `field_name` of `'litres_sold'` or `'revenue_zar'`.
 - Opening baseline for Formula 1/2 comes from the previous closed shift for that station. If none exists, falls back to the `shift_baselines` table (configured via `/dashboard/config/baselines`). Logic is in `lib/shift-baselines.ts` (port/adapter pattern).
 
 ### Rolling Baseline
@@ -257,6 +272,7 @@ RLS policies scope all data to `station_id` via `user_profiles`. Use `lib/supaba
 - `canFlag(status)` — true only for `closed` shifts
 - `canOverride(status)` — true only for `closed` shifts
 - `validateFlagComment(comment)` — returns `{ valid, error? }`
+- `validateOverride({ value, reason, reading_type, field_name? })` — validates override input; `pos_line` type requires `field_name` of `'litres_sold'` or `'revenue_zar'`
 
 **`lib/owner-reports.ts`** pure functions:
 - `buildStationDayStatus(shifts)` — returns `{ morning, evening }` status strings

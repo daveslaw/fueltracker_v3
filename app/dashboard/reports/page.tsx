@@ -55,7 +55,7 @@ export default async function DailyReportPage({ searchParams }: Props) {
     supabase.from('tanks').select('id, label, fuel_grade_id').eq('station_id', activeStationId).order('label'),
     shiftIds.length > 0
       ? supabase.from('reconciliations')
-          .select('shift_id, expected_revenue, pos_revenue, revenue_variance, reconciliation_tank_lines(*), reconciliation_grade_lines(*)')
+          .select('shift_id, reconciliation_tank_lines(*), reconciliation_grade_lines(*)')
           .in('shift_id', shiftIds)
       : Promise.resolve({ data: [] as any[] }),
     shiftIds.length > 0
@@ -173,7 +173,7 @@ export default async function DailyReportPage({ searchParams }: Props) {
                       <div className="grid grid-cols-2 gap-x-4 text-muted-foreground">
                         <span>Opening dip</span><span className="text-right">{fmtL(line.opening_dip)}</span>
                         <span>Deliveries</span><span className="text-right">+{fmtL(line.deliveries_received)}</span>
-                        <span>POS sold</span><span className="text-right">−{fmtL(line.pos_litres_sold)}</span>
+                        <span>Meter delta</span><span className="text-right">−{fmtL(line.meter_delta)}</span>
                         <span>Expected closing</span><span className="text-right">{fmtL(line.expected_closing_dip)}</span>
                         <span>Actual closing</span><span className="text-right">{fmtL(line.actual_closing_dip)}</span>
                       </div>

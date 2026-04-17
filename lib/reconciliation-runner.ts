@@ -291,11 +291,8 @@ export function createSupabaseWriter(db: SupabaseClient): ReconciliationWriter {
       const { data: rec, error: recErr } = await db
         .from('reconciliations')
         .upsert({
-          shift_id:         shiftId,
-          expected_revenue: result.expectedRevenue,
-          pos_revenue:      result.posRevenue,
-          revenue_variance: result.revenueVariance,
-          updated_at:       new Date().toISOString(),
+          shift_id:   shiftId,
+          updated_at: new Date().toISOString(),
         }, { onConflict: 'shift_id' })
         .select('id')
         .single()

@@ -13,25 +13,26 @@ export interface TankLine {
   tank_id:              string
   opening_dip:          number
   deliveries_received:  number
-  pos_litres_sold:      number
+  meter_delta:          number  // Σ(close − open) for pumps mapped to this tank
   expected_closing_dip: number
   actual_closing_dip:   number
-  variance_litres:      number  // expected − actual; positive = loss
+  variance_litres:      number  // actual − expected; negative = inventory loss
 }
 
 export interface GradeLine {
-  fuel_grade_id:  string
-  meter_delta:    number
-  pos_litres_sold: number
-  variance_litres: number  // meter_delta − pos_litres_sold
+  fuel_grade_id:        string
+  meter_delta:          number
+  pos_litres_sold:      number
+  variance_litres:      number  // pos_litres_sold − meter_delta; negative = unrecorded dispensing
+  price_per_litre:      number
+  expected_revenue_zar: number  // meter_delta × price_per_litre
+  pos_revenue_zar:      number
+  variance_zar:         number  // pos_revenue_zar − expected_revenue_zar; negative = revenue shortfall
 }
 
 export interface ReconciliationOutput {
-  tankLines:       TankLine[]
-  gradeLines:      GradeLine[]
-  expectedRevenue: number
-  posRevenue:      number
-  revenueVariance: number  // expected − pos
+  tankLines:  TankLine[]
+  gradeLines: GradeLine[]
 }
 
 // Pure function — no I/O. All inputs provided by caller; caller resolves DB reads and price snapshots.
@@ -42,60 +43,62 @@ export function computeReconciliation(inputs: ReconciliationInputs): Reconciliat
   const posLineByGrade = new Map(posLines.map(l => [l.fuel_grade_id, l]))
   const priceByGrade   = new Map(prices.map(p => [p.fuel_grade_id, p.price_per_litre]))
 
-  // ── Tank lines ────────────────────────────────────────────────────────────
+  // ── Tank lines (Formula 1) ────────────────────────────────────────────────
+  // Expected Closing Dip = Opening Dip + Deliveries − Meter Delta (per tank)
+  // variance_litres = actual − expected  (negative = loss)
   const tankLines: TankLine[] = tanks.map(t => {
-    const openDip   = openDips.find(d => d.tank_id === t.id)?.litres ?? 0
-    const closeDip  = closeDips.find(d => d.tank_id === t.id)?.litres ?? 0
-    const received  = deliveries
+    const openDip    = openDips.find(d => d.tank_id === t.id)?.litres ?? 0
+    const closeDip   = closeDips.find(d => d.tank_id === t.id)?.litres ?? 0
+    const received   = deliveries
       .filter(d => d.tank_id === t.id)
       .reduce((sum, d) => sum + d.litres_received, 0)
-    const sold      = posLineByGrade.get(t.fuel_grade_id)?.litres_sold ?? 0
-    const expected  = openDip + received - sold
+    const pumpIds    = pumps.filter(p => p.tank_id === t.id).map(p => p.id)
+    const meterDelta = pumpReadings
+      .filter(r => pumpIds.includes(r.pump_id))
+      .reduce((sum, r) => sum + (r.closing_reading - r.opening_reading), 0)
+    const expected   = openDip + received - meterDelta
     return {
       tank_id:              t.id,
       opening_dip:          openDip,
       deliveries_received:  received,
-      pos_litres_sold:      sold,
+      meter_delta:          meterDelta,
       expected_closing_dip: expected,
       actual_closing_dip:   closeDip,
-      variance_litres:      expected - closeDip,
+      variance_litres:      closeDip - expected,
     }
   })
 
-  // ── Grade lines ───────────────────────────────────────────────────────────
-  // Derive the set of grades that have at least one pump
-  const gradeIds = [...new Set(tanks.map(t => t.fuel_grade_id))]
+  // ── Grade lines (Formula 2) ───────────────────────────────────────────────
+  // variance_litres = pos_litres_sold − meter_delta  (negative = unrecorded dispensing)
+  // expected_revenue_zar = meter_delta × price_per_litre
+  // variance_zar = pos_revenue_zar − expected_revenue_zar  (negative = shortfall)
+  const gradeIds    = [...new Set(tanks.map(t => t.fuel_grade_id))]
   const tanksByGrade = new Map(
     gradeIds.map(g => [g, tanks.filter(t => t.fuel_grade_id === g).map(t => t.id)])
   )
 
   const gradeLines: GradeLine[] = gradeIds.map(gradeId => {
-    const tankIds     = tanksByGrade.get(gradeId) ?? []
-    const pumpIds     = pumps.filter(p => tankIds.includes(p.tank_id)).map(p => p.id)
-    const meterDelta  = pumpReadings
+    const tankIds        = tanksByGrade.get(gradeId) ?? []
+    const pumpIds        = pumps.filter(p => tankIds.includes(p.tank_id)).map(p => p.id)
+    const meterDelta     = pumpReadings
       .filter(r => pumpIds.includes(r.pump_id))
       .reduce((sum, r) => sum + (r.closing_reading - r.opening_reading), 0)
-    const sold        = posLineByGrade.get(gradeId)?.litres_sold ?? 0
+    const posLine        = posLineByGrade.get(gradeId)
+    const sold           = posLine?.litres_sold ?? 0
+    const posRevenue     = posLine?.revenue_zar ?? 0
+    const pricePerLitre  = priceByGrade.get(gradeId) ?? 0
+    const expectedRev    = meterDelta * pricePerLitre
     return {
-      fuel_grade_id:   gradeId,
-      meter_delta:     meterDelta,
-      pos_litres_sold: sold,
-      variance_litres: meterDelta - sold,
+      fuel_grade_id:        gradeId,
+      meter_delta:          meterDelta,
+      pos_litres_sold:      sold,
+      variance_litres:      sold - meterDelta,
+      price_per_litre:      pricePerLitre,
+      expected_revenue_zar: expectedRev,
+      pos_revenue_zar:      posRevenue,
+      variance_zar:         posRevenue - expectedRev,
     }
   })
 
-  // ── Financial ─────────────────────────────────────────────────────────────
-  const expectedRevenue = posLines.reduce((sum, l) => {
-    const p = priceByGrade.get(l.fuel_grade_id) ?? 0
-    return sum + l.litres_sold * p
-  }, 0)
-  const posRevenue = posLines.reduce((sum, l) => sum + l.revenue_zar, 0)
-
-  return {
-    tankLines,
-    gradeLines,
-    expectedRevenue,
-    posRevenue,
-    revenueVariance: expectedRevenue - posRevenue,
-  }
+  return { tankLines, gradeLines }
 }
