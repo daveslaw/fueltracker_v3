@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 
     const [recsResult, posSubsResult, { data: allPrices }, { data: tanks }] = await Promise.all([
       supabase.from('reconciliations')
-        .select('shift_id, reconciliation_tank_lines(*), reconciliation_grade_lines(*), revenue_variance')
+        .select('shift_id, reconciliation_tank_lines(*), reconciliation_grade_lines(*)')
         .in('shift_id', shiftIds),
       supabase.from('pos_submissions').select('id, shift_id').in('shift_id', shiftIds),
       supabase.from('fuel_prices').select('fuel_grade_id, price_per_litre, effective_from').order('effective_from'),
@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
   const shiftIds = (shifts ?? []).map(s => s.id)
   const recsResult = shiftIds.length > 0
     ? await supabase.from('reconciliations')
-        .select('shift_id, reconciliation_tank_lines(variance_litres), reconciliation_grade_lines(variance_litres), revenue_variance')
+        .select('shift_id, reconciliation_tank_lines(variance_litres), reconciliation_grade_lines(variance_litres, variance_zar)')
         .in('shift_id', shiftIds)
     : { data: [] as any[] }
 
@@ -134,7 +134,7 @@ export async function GET(req: NextRequest) {
       if (!rec) continue
       tankVar   += (rec.reconciliation_tank_lines ?? []).reduce((a: number, l: any) => a + l.variance_litres, 0)
       gradeVar  += (rec.reconciliation_grade_lines ?? []).reduce((a: number, l: any) => a + l.variance_litres, 0)
-      revenueVar += rec.revenue_variance ?? 0
+      revenueVar += (rec.reconciliation_grade_lines ?? []).reduce((a: number, l: any) => a + (l.variance_zar ?? 0), 0)
     }
     return {
       date: d,

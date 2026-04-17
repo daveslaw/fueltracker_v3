@@ -101,7 +101,7 @@ export function countPendingShiftsPerStation(
 
 // ── isReportPartial ───────────────────────────────────────────────────────
 
-const COMPLETE_STATUSES: Array<ShiftStatus | 'not_started'> = ['submitted', 'approved', 'flagged']
+const COMPLETE_STATUSES: Array<ShiftStatus | 'not_started'> = ['submitted', 'approved', 'flagged', 'closed']
 
 export function isReportPartial(status: ShiftStatus | 'not_started'): boolean {
   return !COMPLETE_STATUSES.includes(status)

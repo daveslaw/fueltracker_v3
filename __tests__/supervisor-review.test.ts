@@ -55,29 +55,55 @@ describe('validateFlagComment', () => {
 })
 
 describe('validateOverride', () => {
-  it('valid: non-negative value and non-empty reason', () => {
-    const result = validateOverride({ value: 52000, reason: 'Misread digit' })
+  it('valid: pump override with non-negative value and non-empty reason', () => {
+    const result = validateOverride({ value: 52000, reason: 'Misread digit', reading_type: 'pump' })
+    expect(result).toEqual({ valid: true })
+  })
+
+  it('valid: dip override with non-negative value and non-empty reason', () => {
+    const result = validateOverride({ value: 8500, reason: 'Stick misread', reading_type: 'dip' })
     expect(result).toEqual({ valid: true })
   })
 
   it('valid: value of zero is allowed', () => {
-    const result = validateOverride({ value: 0, reason: 'Pump not used' })
+    const result = validateOverride({ value: 0, reason: 'Pump not used', reading_type: 'pump' })
     expect(result).toEqual({ valid: true })
   })
 
   it('invalid: negative value', () => {
-    const result = validateOverride({ value: -1, reason: 'Typo' })
+    const result = validateOverride({ value: -1, reason: 'Typo', reading_type: 'pump' })
     expect(result.valid).toBe(false)
     if (!result.valid) expect(result.error).toBeTruthy()
   })
 
   it('invalid: empty reason', () => {
-    const result = validateOverride({ value: 52000, reason: '' })
+    const result = validateOverride({ value: 52000, reason: '', reading_type: 'pump' })
     expect(result.valid).toBe(false)
   })
 
   it('invalid: whitespace-only reason', () => {
-    const result = validateOverride({ value: 52000, reason: '   ' })
+    const result = validateOverride({ value: 52000, reason: '   ', reading_type: 'pump' })
+    expect(result.valid).toBe(false)
+  })
+
+  it('valid: pos_line override with field_name = litres_sold', () => {
+    const result = validateOverride({ value: 1800, reason: 'OCR misread', reading_type: 'pos_line', field_name: 'litres_sold' })
+    expect(result).toEqual({ valid: true })
+  })
+
+  it('valid: pos_line override with field_name = revenue_zar', () => {
+    const result = validateOverride({ value: 30600, reason: 'Wrong price applied', reading_type: 'pos_line', field_name: 'revenue_zar' })
+    expect(result).toEqual({ valid: true })
+  })
+
+  it('invalid: pos_line override with no field_name', () => {
+    const result = validateOverride({ value: 1800, reason: 'OCR misread', reading_type: 'pos_line' })
+    expect(result.valid).toBe(false)
+    if (!result.valid) expect(result.error).toMatch(/field_name/i)
+  })
+
+  it('invalid: pos_line override with unrecognised field_name', () => {
+    const result = validateOverride({ value: 1800, reason: 'OCR misread', reading_type: 'pos_line', field_name: 'unknown_field' })
     expect(result.valid).toBe(false)
   })
 })

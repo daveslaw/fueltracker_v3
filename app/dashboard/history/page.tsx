@@ -9,7 +9,7 @@ interface Props {
     to?: string
     period?: string
     status?: string
-    attendant?: string
+    supervisor?: string
   }>
 }
 
@@ -25,18 +25,18 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
   if (!profile?.is_active || profile.role !== 'owner') redirect('/login')
 
   const today = new Date().toISOString().slice(0, 10)
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
-  const fromDate = filters.from ?? thirtyDaysAgo
+  const fromDate = filters.from ?? sixtyDaysAgo
   const toDate   = filters.to   ?? today
 
-  const [{ data: stations }, { data: attendants }] = await Promise.all([
+  const [{ data: stations }, { data: supervisors }] = await Promise.all([
     supabase.from('stations').select('id, name').order('name'),
     supabase.from('user_profiles')
-      .select('user_id, first_name, last_name')
-      .eq('role', 'attendant')
+      .select('id, email')
+      .eq('role', 'supervisor')
       .eq('is_active', true)
-      .order('first_name'),
+      .order('email'),
   ])
 
   let query = supabase
@@ -44,7 +44,7 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
     .select(`
       id, shift_date, period, status, submitted_at,
       stations ( name ),
-      user_profiles!attendant_id ( first_name, last_name )
+      user_profiles!supervisor_id ( email )
     `)
     .gte('shift_date', fromDate)
     .lte('shift_date', toDate)
@@ -52,18 +52,19 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
     .order('period', { ascending: true })
     .limit(200)
 
-  if (filters.station)  query = query.eq('station_id', filters.station)
-  if (filters.period)   query = query.eq('period', filters.period)
-  if (filters.status)   query = query.eq('status', filters.status)
-  if (filters.attendant) query = query.eq('attendant_id', filters.attendant)
+  if (filters.station)    query = query.eq('station_id', filters.station)
+  if (filters.period)     query = query.eq('period', filters.period)
+  if (filters.status)     query = query.eq('status', filters.status)
+  if (filters.supervisor) query = query.eq('supervisor_id', filters.supervisor)
 
-  const { data: shifts } = await query
+  const { data: shifts, error: shiftsError } = await query
+  if (shiftsError) console.error('[history] shifts query error:', shiftsError.message)
 
   // Load variance summary per shift
   const shiftIds = (shifts ?? []).map(s => s.id)
   const recsResult = shiftIds.length > 0
     ? await supabase.from('reconciliations')
-        .select('shift_id, revenue_variance, reconciliation_tank_lines(variance_litres)')
+        .select('shift_id, reconciliation_tank_lines(variance_litres), reconciliation_grade_lines(variance_zar)')
         .in('shift_id', shiftIds)
     : { data: [] as any[] }
 
@@ -73,13 +74,14 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
     const rec = recMap.get(shiftId)
     if (!rec) return null
     const totalTankVar = (rec.reconciliation_tank_lines ?? []).reduce((s: number, l: any) => s + l.variance_litres, 0)
-    return { tankVar: Math.round(totalTankVar * 100) / 100, revenueVar: Math.round((rec.revenue_variance ?? 0) * 100) / 100 }
+    const totalRevenueVar = (rec.reconciliation_grade_lines ?? []).reduce((s: number, l: any) => s + l.variance_zar, 0)
+    return { tankVar: Math.round(totalTankVar * 100) / 100, revenueVar: Math.round(totalRevenueVar * 100) / 100 }
   }
 
   const statusColour = (s: string) =>
-    s === 'approved'  ? 'bg-green-100 text-green-800' :
-    s === 'flagged'   ? 'bg-red-100 text-red-800' :
-    s === 'submitted' ? 'bg-blue-100 text-blue-800' :
+    s === 'closed'   ? 'bg-green-100 text-green-800' :
+    s === 'flagged'  ? 'bg-red-100 text-red-800' :
+    s === 'pending'  ? 'bg-blue-100 text-blue-800' :
     'bg-gray-100 text-gray-600'
 
   return (
@@ -118,17 +120,17 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
           <label className="text-xs text-muted-foreground">Status</label>
           <select name="status" defaultValue={filters.status ?? ''} className="border rounded px-2 py-1.5 text-sm">
             <option value="">All statuses</option>
-            <option value="submitted">Submitted</option>
-            <option value="approved">Approved</option>
+            <option value="closed">Closed</option>
+            <option value="pending">Pending</option>
             <option value="flagged">Flagged</option>
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs text-muted-foreground">Attendant</label>
-          <select name="attendant" defaultValue={filters.attendant ?? ''} className="border rounded px-2 py-1.5 text-sm">
-            <option value="">All attendants</option>
-            {(attendants ?? []).map(a => (
-              <option key={a.user_id} value={a.user_id}>{a.first_name} {a.last_name}</option>
+          <label className="text-xs text-muted-foreground">Supervisor</label>
+          <select name="supervisor" defaultValue={filters.supervisor ?? ''} className="border rounded px-2 py-1.5 text-sm">
+            <option value="">All supervisors</option>
+            {(supervisors ?? []).map(s => (
+              <option key={s.id} value={s.id}>{s.email}</option>
             ))}
           </select>
         </div>
@@ -142,38 +144,39 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
               <th className="text-left px-3 py-2">Date</th>
               <th className="text-left px-3 py-2">Station</th>
               <th className="text-left px-3 py-2">Period</th>
-              <th className="text-left px-3 py-2">Attendant</th>
+              <th className="text-left px-3 py-2">Supervisor</th>
               <th className="text-left px-3 py-2">Submitted</th>
               <th className="text-left px-3 py-2">Status</th>
               <th className="text-right px-3 py-2">Tank var (L)</th>
               <th className="text-right px-3 py-2">Rev var (ZAR)</th>
+              <th></th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {(shifts ?? []).length === 0 && (
-              <tr><td colSpan={8} className="px-3 py-4 text-muted-foreground text-center">No shifts found.</td></tr>
+              <tr><td colSpan={9} className="px-3 py-4 text-muted-foreground text-center">No shifts found.</td></tr>
             )}
             {(shifts ?? []).map(s => {
               const vs = varianceSummary(s.id)
               const ss = s as any
-              const attendantName = `${ss.user_profiles?.first_name ?? ''} ${ss.user_profiles?.last_name ?? ''}`.trim() || '—'
+              const supervisorName = ss.user_profiles?.email ?? '—'
               const submittedAt = s.submitted_at ? new Date(s.submitted_at).toLocaleString('en-ZA', { dateStyle: 'short', timeStyle: 'short' }) : '—'
               return (
                 <tr key={s.id} className="hover:bg-muted/30">
                   <td className="px-3 py-2">{s.shift_date}</td>
                   <td className="px-3 py-2">{ss.stations?.name ?? '—'}</td>
                   <td className="px-3 py-2 capitalize">{s.period}</td>
-                  <td className="px-3 py-2">{attendantName}</td>
+                  <td className="px-3 py-2">{supervisorName}</td>
                   <td className="px-3 py-2 text-muted-foreground">{submittedAt}</td>
                   <td className="px-3 py-2">
                     <span className={`text-xs px-2 py-0.5 rounded capitalize ${statusColour(s.status)}`}>
                       {s.status}
                     </span>
                   </td>
-                  <td className={`px-3 py-2 text-right ${vs ? (vs.tankVar > 0 ? 'text-destructive' : vs.tankVar < 0 ? 'text-amber-600' : 'text-green-600') : 'text-muted-foreground'}`}>
+                  <td className={`px-3 py-2 text-right ${vs ? (vs.tankVar < 0 ? 'text-destructive' : vs.tankVar > 0 ? 'text-amber-600' : 'text-green-600') : 'text-muted-foreground'}`}>
                     {vs ? (vs.tankVar > 0 ? '+' : '') + vs.tankVar.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' L' : '—'}
                   </td>
-                  <td className={`px-3 py-2 text-right ${vs ? (vs.revenueVar > 0 ? 'text-destructive' : vs.revenueVar < 0 ? 'text-amber-600' : 'text-green-600') : 'text-muted-foreground'}`}>
+                  <td className={`px-3 py-2 text-right ${vs ? (vs.revenueVar < 0 ? 'text-destructive' : vs.revenueVar > 0 ? 'text-amber-600' : 'text-green-600') : 'text-muted-foreground'}`}>
                     {vs ? (vs.revenueVar > 0 ? '+R ' : 'R ') + Math.abs(vs.revenueVar).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
                   </td>
                   <td className="px-3 py-2">
