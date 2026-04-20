@@ -25,7 +25,7 @@ export default function LoginPage() {
 
     setPending(false)
     if (result?.error) setError(result.error)
-    if (result?.message) setMessage(result.message)
+    if (result && 'message' in result) setMessage(result.message)
   }
 
   return (

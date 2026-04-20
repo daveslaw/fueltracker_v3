@@ -17,7 +17,7 @@ export default async function NewShiftPage() {
   return (
     <main className="p-6 max-w-lg mx-auto space-y-6">
       <h1 className="text-xl font-semibold">Start shift</h1>
-      <form action={createShift} className="space-y-4">
+      <form action={createShift as unknown as (f: FormData) => Promise<void>} className="space-y-4">
         <input type="hidden" name="station_id" value={profile?.station_id ?? ''} />
         <div>
           <label className="block text-sm font-medium mb-1">Period</label>

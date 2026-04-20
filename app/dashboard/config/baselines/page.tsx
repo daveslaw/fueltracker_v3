@@ -67,7 +67,7 @@ export default async function BaselinesPage({ searchParams }: Props) {
                 {(pumps ?? []).map(pump => {
                   const current = pumpBaseline(pump.id)
                   return (
-                    <form key={pump.id} action={savePumpBaseline}
+                    <form key={pump.id} action={savePumpBaseline as unknown as (f: FormData) => Promise<void>}
                       className="flex items-center gap-3 rounded border px-4 py-3">
                       <input type="hidden" name="station_id" value={selectedStation} />
                       <input type="hidden" name="pump_id" value={pump.id} />
@@ -103,7 +103,7 @@ export default async function BaselinesPage({ searchParams }: Props) {
                 {(tanks ?? []).map(tank => {
                   const current = tankBaseline(tank.id)
                   return (
-                    <form key={tank.id} action={saveTankBaseline}
+                    <form key={tank.id} action={saveTankBaseline as unknown as (f: FormData) => Promise<void>}
                       className="flex items-center gap-3 rounded border px-4 py-3">
                       <input type="hidden" name="station_id" value={selectedStation} />
                       <input type="hidden" name="tank_id" value={tank.id} />
