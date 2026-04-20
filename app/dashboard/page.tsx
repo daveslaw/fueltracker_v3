@@ -138,7 +138,7 @@ export default async function DashboardPage() {
         <p className="text-xs text-gray-500">
           Pre-create a morning or evening slot so supervisors can begin the close check.
         </p>
-        <form action={createShiftSlot} className="flex flex-wrap gap-3 items-end">
+        <form action={createShiftSlot as unknown as (f: FormData) => Promise<void>} className="flex flex-wrap gap-3 items-end">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Station</label>
             <select name="station_id" required
