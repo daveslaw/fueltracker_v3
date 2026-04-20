@@ -166,11 +166,14 @@ export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter, onSaved }:
 
 async function compressImage(file: File): Promise<Blob> {
   const bitmap = await createImageBitmap(file)
-  const maxW = 1200
+  const maxW = 1920
   const scale = Math.min(1, maxW / bitmap.width)
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(bitmap.width * scale)
   canvas.height = Math.round(bitmap.height * scale)
-  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-  return new Promise((res) => canvas.toBlob((b) => res(b!), 'image/jpeg', 0.8))
+  const ctx = canvas.getContext('2d')!
+  // Boost contrast and brightness — helps Vision API read dark LCD displays behind glass
+  ctx.filter = 'contrast(160%) brightness(130%)'
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+  return new Promise((res) => canvas.toBlob((b) => res(b!), 'image/jpeg', 0.92))
 }
