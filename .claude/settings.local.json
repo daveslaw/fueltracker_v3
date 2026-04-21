@@ -38,11 +38,13 @@
       "Bash(NEXT_PUBLIC_SUPABASE_URL=https://rdkbxivesbbfjtkipusa.supabase.co SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJka2J4aXZlc2JiZmp0a2lwdXNhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDMyNTk3MSwiZXhwIjoyMDg5OTAxOTcxfQ.dp4gxOGCeSO8SNpNaJ-ZiN618SMfLNloKXp0z1p7y3k npx tsx scripts/backfill-reconciliation.ts)",
       "Skill(update-config)",
       "Skill(update-config:*)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(taskkill /F /IM node.exe)"
     ],
     "additionalDirectories": [
       "c:\\Users\\David Lawrence\\.claude\\projects\\c--Users-David-Lawrence-Projects-fueltracker-v3",
-      "c:\\Users\\David Lawrence\\Projects\\fueltracker_v3\\app\\review"
+      "c:\\Users\\David Lawrence\\Projects\\fueltracker_v3\\app\\review",
+      "c:\\Users\\David Lawrence\\Projects\\fueltracker_v3\\.next"
     ]
   }
 }

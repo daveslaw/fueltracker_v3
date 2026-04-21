@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { buildFinancialLines } from '@/lib/owner-reports'
 import { selectActivePriceAt } from '@/lib/pricing'
+import { canFlag, canOverride } from '@/lib/supervisor-review'
+import { flagShift, unflagShift, createOverride } from '@/app/shift/actions'
 
 interface Props { params: Promise<{ id: string }> }
 
@@ -35,10 +37,10 @@ export default async function ShiftAuditPage({ params }: Props) {
   const { data: shift } = await supabase
     .from('shifts')
     .select(`
-      id, period, shift_date, status, submitted_at, flag_comment,
+      id, period, shift_date, status, submitted_at, is_flagged, flag_comment,
       station_id,
       stations ( name ),
-      user_profiles!attendant_id ( first_name, last_name )
+      user_profiles!supervisor_id ( email )
     `)
     .eq('id', shiftId)
     .single()
@@ -57,7 +59,7 @@ export default async function ShiftAuditPage({ params }: Props) {
     supabase.from('pumps').select('id, label, tank_id').eq('station_id', shift.station_id).order('label'),
     supabase.from('tanks').select('id, label, fuel_grade_id').eq('station_id', shift.station_id).order('label'),
     supabase.from('pump_readings').select('id, pump_id, type, meter_reading, photo_url, ocr_status').eq('shift_id', shiftId),
-    supabase.from('dip_readings').select('tank_id, type, litres').eq('shift_id', shiftId),
+    supabase.from('dip_readings').select('id, tank_id, type, litres').eq('shift_id', shiftId),
     supabase.from('pos_submissions').select('id, photo_url').eq('shift_id', shiftId).maybeSingle(),
     supabase.from('reconciliations')
       .select('id, expected_revenue, pos_revenue, revenue_variance, reconciliation_tank_lines(*), reconciliation_grade_lines(*)')
@@ -83,8 +85,23 @@ export default async function ShiftAuditPage({ params }: Props) {
   const financial = posLines.length > 0 ? buildFinancialLines(posLines as any, prices) : null
 
   const tankLabel = (id: string) => (tanks ?? []).find(t => t.id === id)?.label ?? id
-  const pumpLabel = (id: string) => (pumps ?? []).find(p => p.id === id)?.label ?? id
   const overriddenIds = new Set((overrides ?? []).map(o => o.reading_id))
+
+  const isFlaggable = canFlag(shift.status as any)
+  const isOverridable = canOverride(shift.status as any)
+
+  async function handleFlag(formData: FormData) {
+    'use server'
+    await flagShift(shiftId, formData.get('comment') as string)
+  }
+  async function handleUnflag() {
+    'use server'
+    await unflagShift(shiftId)
+  }
+  async function handleOverride(formData: FormData) {
+    'use server'
+    await createOverride(shiftId, formData)
+  }
 
   const ss = shift as any
 
@@ -96,7 +113,7 @@ export default async function ShiftAuditPage({ params }: Props) {
           <Link href="/dashboard/history" className="text-xs text-muted-foreground hover:underline">← Shift history</Link>
           <h1 className="text-xl font-semibold mt-1 capitalize">{shift.period} shift · {shift.shift_date}</h1>
           <p className="text-sm text-muted-foreground">
-            {ss.stations?.name} · {ss.user_profiles?.first_name} {ss.user_profiles?.last_name}
+            {ss.stations?.name} · {ss.user_profiles?.email ?? '—'}
           </p>
           {shift.submitted_at && (
             <p className="text-xs text-muted-foreground">
@@ -147,6 +164,25 @@ export default async function ShiftAuditPage({ params }: Props) {
                     )}
                   </span>
                 </div>
+                {isOverridable && close && (
+                  <details className="mt-2 border-t pt-2">
+                    <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">Edit close reading</summary>
+                    <form action={handleOverride} className="pt-2 space-y-2">
+                      <input type="hidden" name="reading_id" value={close.id} />
+                      <input type="hidden" name="reading_type" value="pump" />
+                      <input type="hidden" name="original_value" value={close.meter_reading} />
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Corrected reading</label>
+                        <input type="number" name="override_value" step="0.01" min="0" required className="w-full rounded border px-3 py-1.5 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Reason</label>
+                        <input type="text" name="reason" required className="w-full rounded border px-3 py-1.5 text-sm" />
+                      </div>
+                      <button type="submit" className="rounded bg-black px-3 py-1.5 text-xs font-medium text-white">Save correction</button>
+                    </form>
+                  </details>
+                )}
               </div>
             )
           })}
@@ -167,6 +203,25 @@ export default async function ShiftAuditPage({ params }: Props) {
                   <span>Open</span><span className="text-right">{open ? fmtL(open.litres) : '—'}</span>
                   <span>Close</span><span className="text-right">{close ? fmtL(close.litres) : '—'}</span>
                 </div>
+                {isOverridable && close && (
+                  <details className="mt-2 border-t pt-2">
+                    <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">Edit close reading</summary>
+                    <form action={handleOverride} className="pt-2 space-y-2">
+                      <input type="hidden" name="reading_id" value={close.id} />
+                      <input type="hidden" name="reading_type" value="dip" />
+                      <input type="hidden" name="original_value" value={close.litres} />
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Corrected dip (L)</label>
+                        <input type="number" name="override_value" step="0.01" min="0" required className="w-full rounded border px-3 py-1.5 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-1">Reason</label>
+                        <input type="text" name="reason" required className="w-full rounded border px-3 py-1.5 text-sm" />
+                      </div>
+                      <button type="submit" className="rounded bg-black px-3 py-1.5 text-xs font-medium text-white">Save correction</button>
+                    </form>
+                  </details>
+                )}
               </div>
             )
           })}
@@ -188,11 +243,41 @@ export default async function ShiftAuditPage({ params }: Props) {
                 </div>
               )}
               {posLines.map((line: any) => (
-                <div key={line.id} className="px-4 py-3 flex justify-between">
-                  <span className={`font-medium ${overriddenIds.has(line.id) ? 'text-amber-600' : ''}`}>
-                    {line.fuel_grade_id}{overriddenIds.has(line.id) ? ' (overridden)' : ''}
-                  </span>
-                  <span>{fmtL(line.litres_sold)} · {fmtR(line.revenue_zar)}</span>
+                <div key={line.id} className="px-4 py-3">
+                  <div className="flex justify-between">
+                    <span className={`font-medium ${overriddenIds.has(line.id) ? 'text-amber-600' : ''}`}>
+                      {line.fuel_grade_id}{overriddenIds.has(line.id) ? ' (overridden)' : ''}
+                    </span>
+                    <span>{fmtL(line.litres_sold)} · {fmtR(line.revenue_zar)}</span>
+                  </div>
+                  {isOverridable && (
+                    <details className="mt-2 border-t pt-2">
+                      <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">Edit POS line</summary>
+                      <form action={handleOverride} className="pt-2 space-y-2">
+                        <input type="hidden" name="reading_id" value={line.id} />
+                        <input type="hidden" name="reading_type" value="pos_line" />
+                        <input type="hidden" name="original_litres" value={line.litres_sold} />
+                        <input type="hidden" name="original_revenue" value={line.revenue_zar} />
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Field to correct</label>
+                          <select name="field_name" required className="w-full rounded border px-3 py-1.5 text-sm bg-white">
+                            <option value="">— select —</option>
+                            <option value="litres_sold">Litres sold (current: {fmtL(line.litres_sold)})</option>
+                            <option value="revenue_zar">Revenue (current: {fmtR(line.revenue_zar)})</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Corrected value</label>
+                          <input type="number" name="override_value" step="0.01" min="0" required className="w-full rounded border px-3 py-1.5 text-sm" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-muted-foreground mb-1">Reason</label>
+                          <input type="text" name="reason" required className="w-full rounded border px-3 py-1.5 text-sm" />
+                        </div>
+                        <button type="submit" className="rounded bg-black px-3 py-1.5 text-xs font-medium text-white">Save correction</button>
+                      </form>
+                    </details>
+                  )}
                 </div>
               ))}
             </div>
@@ -296,6 +381,31 @@ export default async function ShiftAuditPage({ params }: Props) {
                 </table>
               </div>
             </div>
+          )}
+        </section>
+      )}
+
+      {/* Flag / unflag */}
+      {isFlaggable && (
+        <section className="border rounded-md p-4 space-y-3">
+          <h2 className="text-sm font-medium">Flag this shift</h2>
+          {shift.is_flagged ? (
+            <>
+              <p className="text-sm text-muted-foreground">{shift.flag_comment}</p>
+              <form action={handleUnflag}>
+                <button type="submit" className="rounded border px-3 py-1.5 text-sm font-medium text-red-700 border-red-200 hover:bg-red-50">
+                  Remove flag
+                </button>
+              </form>
+            </>
+          ) : (
+            <form action={handleFlag} className="space-y-2">
+              <textarea name="comment" rows={2} placeholder="Describe the discrepancy…" required
+                className="w-full rounded border px-3 py-2 text-sm resize-none" />
+              <button type="submit" className="rounded border px-3 py-1.5 text-sm font-medium text-red-700 border-red-200 hover:bg-red-50">
+                Flag shift
+              </button>
+            </form>
           )}
         </section>
       )}
