@@ -213,6 +213,7 @@ export async function flagShift(shiftId: string, comment: string): Promise<Actio
   if (error) return { error: error.message }
 
   revalidatePath(`/shift/${shiftId}/close/summary`)
+  revalidatePath(`/dashboard/history/${shiftId}`)
   return { success: true }
 }
 
@@ -232,6 +233,7 @@ export async function unflagShift(shiftId: string): Promise<ActionResult> {
   if (error) return { error: error.message }
 
   revalidatePath(`/shift/${shiftId}/close/summary`)
+  revalidatePath(`/dashboard/history/${shiftId}`)
   return { success: true }
 }
 
@@ -382,6 +384,7 @@ export async function createOverride(
   await runReconciliation(shiftId)
 
   revalidatePath(`/shift/${shiftId}/close/summary`)
+  revalidatePath(`/dashboard/history/${shiftId}`)
   return { success: true }
 }
 
