@@ -426,7 +426,7 @@ export default async function CloseSummaryPage({ params }: Props) {
                   <span className="capitalize">
                     {o.reading_type} reading{(o as any).field_name ? ` — ${(o as any).field_name}` : ''}
                   </span>
-                  <span>{new Date(o.created_at).toLocaleString('en-ZA')}</span>
+                  <span>{(() => { const d = new Date(o.created_at); return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) })()}</span>
                 </div>
                 <div className="text-gray-700">
                   {o.original_value} → <span className="font-medium">{o.override_value}</span>

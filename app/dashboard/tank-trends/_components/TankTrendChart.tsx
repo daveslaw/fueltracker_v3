@@ -48,8 +48,8 @@ export function TankTrendChart({ series, deliveries }: Props) {
   })
 
   const fmtDate = (d: string) =>
-    new Date(d + 'T00:00:00Z').toLocaleDateString('en-ZA', {
-      month: 'short', day: 'numeric', timeZone: 'UTC',
+    new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', {
+      day: '2-digit', month: '2-digit', timeZone: 'UTC',
     })
 
   const fmtL = (v: number) => v.toLocaleString('en-ZA') + ' L'

@@ -117,7 +117,7 @@ export default async function ShiftAuditPage({ params }: Props) {
           </p>
           {shift.submitted_at && (
             <p className="text-xs text-muted-foreground">
-              Submitted: {new Date(shift.submitted_at).toLocaleString('en-ZA')}
+              Submitted: {(() => { const d = new Date(shift.submitted_at); return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) })()}
             </p>
           )}
         </div>
@@ -423,7 +423,7 @@ export default async function ShiftAuditPage({ params }: Props) {
                 </div>
                 <div className="text-muted-foreground text-xs italic">{o.reason}</div>
                 <div className="text-muted-foreground text-xs">
-                  {new Date(o.created_at).toLocaleString('en-ZA')}
+                  {(() => { const d = new Date(o.created_at); return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) })()}
                   {(o as any).user_profiles?.full_name && ` · ${(o as any).user_profiles.full_name}`}
                 </div>
               </div>
