@@ -80,7 +80,7 @@ export default async function PricingPage() {
                 <span>{fmt(row.price_per_litre)}</span>
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                Effective {new Date(row.effective_from).toLocaleString('en-ZA')}
+                Effective {new Date(row.effective_from).toLocaleDateString('en-GB')}
               </div>
             </div>
           ))}

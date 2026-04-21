@@ -160,7 +160,7 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
               const vs = varianceSummary(s.id)
               const ss = s as any
               const supervisorName = ss.user_profiles?.email ?? '—'
-              const submittedAt = s.submitted_at ? new Date(s.submitted_at).toLocaleString('en-ZA', { dateStyle: 'short', timeStyle: 'short' }) : '—'
+              const submittedAt = s.submitted_at ? (() => { const d = new Date(s.submitted_at); return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) })() : '—'
               return (
                 <tr key={s.id} className="hover:bg-muted/30">
                   <td className="px-3 py-2">{s.shift_date}</td>
