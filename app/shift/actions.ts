@@ -34,12 +34,19 @@ export async function createShift(formData: FormData) {
   // Duplicate guard
   const { data: existing } = await supabase
     .from('shifts')
-    .select('station_id, period, shift_date, status')
+    .select('id, station_id, period, shift_date, status')
     .eq('station_id', station_id)
     .eq('shift_date', shift_date)
 
   if (!canStartShift((existing ?? []) as ShiftRow[], station_id, period, shift_date)) {
-    return { error: `A ${period} shift for this station is already in progress today.` }
+    const existingShift = (existing ?? []).find(
+      s => s.period === period && (s.status === 'pending' || s.status === 'closed')
+    )
+    return {
+      error: `A ${period} shift for this station is already in progress today.`,
+      existingShiftId: existingShift?.id ?? null,
+      existingShiftStatus: existingShift?.status ?? null,
+    }
   }
 
   const { data: shift, error } = await supabase

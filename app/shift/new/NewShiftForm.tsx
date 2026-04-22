@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createShift } from '../actions'
 
 type Props = {
@@ -10,19 +11,31 @@ type Props = {
 
 export function NewShiftForm({ stationId, currentPeriod }: Props) {
   const [error, setError] = useState<string | null>(null)
+  const [existingShiftId, setExistingShiftId] = useState<string | null>(null)
+  const [existingShiftStatus, setExistingShiftStatus] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
+    setExistingShiftId(null)
     setPending(true)
     const formData = new FormData(e.currentTarget)
     const result = await createShift(formData)
     if (result && 'error' in result) {
       setError(result.error)
+      setExistingShiftId(result.existingShiftId ?? null)
+      setExistingShiftStatus(result.existingShiftStatus ?? null)
       setPending(false)
     }
   }
+
+  const existingHref = existingShiftId
+    ? existingShiftStatus === 'closed'
+      ? `/shift/${existingShiftId}/close/summary`
+      : `/shift/${existingShiftId}/close/pumps`
+    : null
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -36,10 +49,20 @@ export function NewShiftForm({ stationId, currentPeriod }: Props) {
         </select>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" disabled={pending}
-        className="w-full rounded bg-black py-2 text-sm font-medium text-white disabled:opacity-50">
-        {pending ? 'Creating…' : 'Begin close check'}
-      </button>
+      {existingHref ? (
+        <button
+          type="button"
+          onClick={() => router.push(existingHref)}
+          className="w-full rounded bg-yellow-500 py-2 text-sm font-medium text-white"
+        >
+          Continue existing shift
+        </button>
+      ) : (
+        <button type="submit" disabled={pending}
+          className="w-full rounded bg-black py-2 text-sm font-medium text-white disabled:opacity-50">
+          {pending ? 'Creating…' : 'Begin close check'}
+        </button>
+      )}
     </form>
   )
 }

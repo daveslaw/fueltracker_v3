@@ -144,8 +144,13 @@ export function buildOcrResult(raw: RawVisionResponse): OcrResult {
 
     if (!numbers.length) return FALLBACK
 
-    // Pick the largest number — most likely the cumulative meter reading
-    const value = Math.max(...numbers)
+    // Totalizer readings are always >= 1,000 L and typically whole numbers.
+    // Prefer whole-number candidates in that range first to avoid picking up
+    // small transaction amounts (e.g. 23.57 L) or pump label stickers (e.g. 5).
+    const integers = numbers.filter((n) => n >= 1000 && Number.isInteger(n))
+    const overThreshold = numbers.filter((n) => n >= 1000)
+    const candidates = integers.length > 0 ? integers : overThreshold
+    const value = candidates.length > 0 ? Math.max(...candidates) : Math.max(...numbers)
 
     // Confidence: use the first block's confidence if available
     const confidence =
