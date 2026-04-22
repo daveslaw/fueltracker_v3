@@ -172,8 +172,7 @@ async function compressImage(file: File): Promise<Blob> {
   canvas.width = Math.round(bitmap.width * scale)
   canvas.height = Math.round(bitmap.height * scale)
   const ctx = canvas.getContext('2d')!
-  // Boost contrast and brightness — helps Vision API read dark LCD displays behind glass
-  ctx.filter = 'contrast(160%) brightness(130%)'
+  ctx.filter = 'none'
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
   return new Promise((res) => canvas.toBlob((b) => res(b!), 'image/jpeg', 0.92))
 }
