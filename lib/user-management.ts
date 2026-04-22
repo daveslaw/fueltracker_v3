@@ -1,4 +1,4 @@
-export const INVITABLE_ROLES = ['attendant', 'supervisor'] as const
+export const INVITABLE_ROLES = ['supervisor'] as const
 export type InvitableRole = typeof INVITABLE_ROLES[number]
 export type UserStatus = 'active' | 'inactive'
 
