@@ -11,7 +11,8 @@ Multi-station fuel inventory PWA for South African petrol stations. Supervisors 
 - **TypeScript 5** — Strict mode, path alias `@/*` → root
 - **Supabase** — Auth, Postgres with RLS, Storage (photos)
 - **Tailwind CSS v4** + **shadcn/ui** — Styling and UI primitives
-- **Google Cloud Vision API** — OCR for pump meters and POS Z-reports
+- **Anthropic Vision API** — OCR for pump meter readings
+- **Google Cloud Vision API** — OCR for POS Z-reports
 - **PWA** — Service worker (`public/sw.js`) + IndexedDB offline queue
 - **Recharts** — Tank level trend charts
 - **Vitest** + **Testing Library** — Unit and integration tests
@@ -32,10 +33,9 @@ npm run test:watch   # Vitest watch mode
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
+ANTHROPIC_API_KEY
 GOOGLE_CLOUD_VISION_API_KEY
 ```
-
-Copy `.env.local.example` → `.env.local` and fill in values.
 
 ## File Structure
 
@@ -46,13 +46,14 @@ fueltracker_v3/
 │   ├── (auth)/login/               # Login page + server actions
 │   ├── api/upload/                 # Photo upload API routes
 │   │   ├── pump-photo/route.ts
-│   │   └── pos-photo/route.ts
+│   │   ├── pos-photo/route.ts
+│   │   └── delivery-photo/route.ts
 │   │
 │   ├── shift/                      # Supervisor shift workflow
 │   │   ├── page.tsx                # Shift list — auto-redirects to current period or lists pending/closed
 │   │   ├── actions.ts              # createShift, saveClosePumpReading, saveCloseDipReading,
 │   │   │                           #   savePosSubmission, submitShift, flagShift, unflagShift,
-│   │   │                           #   createOverride
+│   │   │                           #   createOverride, saveDelivery, deleteDelivery
 │   │   ├── new/page.tsx            # Period selector (station auto-filled from profile)
 │   │   └── [id]/close/
 │   │       ├── pumps/              # Close: pump meter capture + OCR
@@ -95,6 +96,7 @@ fueltracker_v3/
 │   ├── OfflineQueueProvider.tsx    # Offline queue context
 │   ├── FailedSyncBanner.tsx        # Failed sync notification
 │   ├── PendingBadge.tsx            # Pending items count
+│   ├── Spinner.tsx                 # Loading spinner
 │   └── Toaster.tsx                 # Toast notifications
 │
 ├── lib/                            # Business logic (no React)
@@ -125,7 +127,7 @@ fueltracker_v3/
 │   ├── idb-queue.ts                # IndexedDB offline queue (browser)
 │   └── offline-queue.ts            # Enqueue / drain logic
 │
-├── supabase/migrations/            # 13 migration files (apply in order)
+├── supabase/migrations/            # 14 migration files (apply in order)
 │   ├── 20260319000001_user_profiles.sql
 │   ├── 20260320000001_station_config.sql
 │   ├── 20260320000002_station_seed.sql    # Seeds 3 stations
@@ -182,8 +184,6 @@ fueltracker_v3/
 | `supervisor` | Create and close shifts, capture readings, flag shifts, submit overrides |
 | `owner` | Cross-station reports, config, user management, create shift slots |
 
-Note: the `attendant` role is retired. Supervisors now own the full shift close workflow.
-
 ### Shift State Machine
 ```
 pending → closed
@@ -222,7 +222,7 @@ pending → closed
 
 ### OCR Pipeline
 1. Photo uploaded via `app/api/upload/pump-photo/route.ts` or `pos-photo/route.ts`
-2. `lib/ocr/vision-client.ts` calls Google Cloud Vision
+2. `lib/ocr/vision-client.ts` — calls Anthropic Vision for pump meters, Google Cloud Vision for POS Z-reports
 3. `lib/ocr/ocr-service.ts` extracts meter value or POS lines
 4. UI presents extracted value for supervisor to confirm or override
 5. Post-close corrections are submitted via `createOverride` server action (stored in `ocr_overrides`, triggers re-reconciliation)
@@ -243,7 +243,8 @@ pending → closed
 | `pos_submissions` | Z-report per shift |
 | `pos_lines` | OCR-extracted sales lines |
 | `reconciliation_records` | Per-shift reconciliation summary |
-| `reconciliation_line_items` | Per-grade/tank variance lines |
+| `reconciliation_tank_lines` | Per-tank inventory variance lines |
+| `reconciliation_grade_lines` | Per-grade pump vs POS variance lines |
 | `deliveries` | Fuel deliveries by tank |
 | `ocr_overrides` | Audit trail of post-close override corrections |
 | `shift_baselines` | Fallback opening meter/dip values per station (configured by owner) |

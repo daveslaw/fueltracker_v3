@@ -36,7 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ToastProvider>
           <OfflineQueueProvider>
             <ServiceWorkerRegistrar />
-            {/* Pending sync badge — fixed top-right, visible on attendant pages */}
+            {/* Pending sync badge — fixed top-right, visible on shift pages */}
             <div className="fixed top-3 right-3 z-40">
               <PendingBadge />
             </div>
