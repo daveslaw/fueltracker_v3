@@ -80,4 +80,20 @@ describe('buildOcrResult', () => {
     const result = buildOcrResult(visionOk('3\n54321.00\n12', HIGH_CONF))
     expect(result.value).toBeCloseTo(54321.0)
   })
+
+  it('pump label + transaction + totalizer → picks totalizer (integer >= 1000)', () => {
+    // Real-world pump: label "5", current transaction "23.57 L", totalizer "50017"
+    const result = buildOcrResult(visionOk('5\n23.57\n0050017', HIGH_CONF))
+    expect(result.value).toBe(50017)
+  })
+
+  it('transaction amount only (Vision misses totalizer) → falls back to number >= 1000 if present', () => {
+    const result = buildOcrResult(visionOk('5\n1234.56', HIGH_CONF))
+    expect(result.value).toBeCloseTo(1234.56)
+  })
+
+  it('only small numbers (no totalizer readable) → falls back to largest overall', () => {
+    const result = buildOcrResult(visionOk('5\n23.57', HIGH_CONF))
+    expect(result.value).toBeCloseTo(23.57)
+  })
 })
