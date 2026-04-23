@@ -35,7 +35,7 @@ const themeScript = `(function(){var t=localStorage.getItem('theme');if(!t)t=win
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en-ZA" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
