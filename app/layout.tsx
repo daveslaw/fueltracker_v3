@@ -5,6 +5,8 @@ import { ToastProvider } from '@/components/Toaster'
 import { OfflineQueueProvider } from '@/components/OfflineQueueProvider'
 import { PendingBadge } from '@/components/PendingBadge'
 import { FailedSyncBanner } from '@/components/FailedSyncBanner'
+import { ThemeProvider } from '@/components/ThemeProvider'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import './globals.css'
 
 const heading = Barlow_Condensed({
@@ -29,21 +31,28 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
 }
 
+const themeScript = `(function(){var t=localStorage.getItem('theme');if(!t)t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';if(t==='dark')document.documentElement.classList.add('dark');})()`
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className={`${heading.variable} ${ui.variable} ${code.variable} font-sans antialiased`}>
-        <ToastProvider>
-          <OfflineQueueProvider>
-            <ServiceWorkerRegistrar />
-            {/* Pending sync badge — fixed top-right, visible on shift pages */}
-            <div className="fixed top-3 right-3 z-40">
-              <PendingBadge />
-            </div>
-            <FailedSyncBanner />
-            {children}
-          </OfflineQueueProvider>
-        </ToastProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <OfflineQueueProvider>
+              <ServiceWorkerRegistrar />
+              <div className="fixed top-3 right-3 z-40 flex items-center gap-2">
+                <ThemeToggle />
+                <PendingBadge />
+              </div>
+              <FailedSyncBanner />
+              {children}
+            </OfflineQueueProvider>
+          </ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   )
