@@ -1,58 +1,168 @@
 @import "tailwindcss";
 
+/* Class-based dark mode — applied to <html> */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Light mode (default) ──────────────────────────────────────── */
 :root {
-  --background: #0B0F1A;
-  --foreground: #E2E8F0;
+  --background: #F8FAFC;
+  --foreground: #0F172A;
+
+  /* Gray ramp */
+  --gray-50:  #F8FAFC;
+  --gray-100: #F1F5F9;
+  --gray-200: #E2E8F0;
+  --gray-300: #CBD5E1;
+  --gray-400: #94A3B8;
+  --gray-500: #64748B;
+  --gray-600: #475569;
+  --gray-700: #334155;
+  --gray-800: #1E293B;
+  --gray-900: #0F172A;
+
+  /* Border */
+  --border-default: #E2E8F0;
+
+  /* Status: green */
+  --green-50:  #F0FDF4;
+  --green-100: #DCFCE7;
+  --green-600: #16A34A;
+  --green-700: #15803D;
+  --green-800: #166534;
+
+  /* Status: red */
+  --red-50:  #FFF1F2;
+  --red-100: #FFE4E6;
+  --red-200: #FECDD3;
+  --red-300: #FDA4AF;
+  --red-600: #DC2626;
+  --red-700: #B91C1C;
+  --red-800: #991B1B;
+
+  /* Status: yellow / amber */
+  --yellow-50:  #FFFBEB;
+  --yellow-100: #FEF3C7;
+  --yellow-800: #92400E;
+  --amber-500:  #F59F00;
+  --amber-600:  #D97706;
+
+  /* Info / links */
+  --blue-100: #E0F2FE;
+  --blue-600: #0284C7;
+  --blue-800: #075985;
+
+  /* Form elements */
+  --input-bg:          #FFFFFF;
+  --input-color:       #0F172A;
+  --input-border:      #CBD5E1;
+  --input-placeholder: #94A3B8;
+  --input-focus:       #F59F00;
 }
 
-@theme inline {
+/* ── Dark mode overrides ───────────────────────────────────────── */
+.dark {
+  --background: #0B0F1A;
+  --foreground: #E2E8F0;
+
+  /* Gray ramp — inverted: 50 = darkest surface, 900 = lightest text */
+  --gray-50:  #141B2D;
+  --gray-100: #1E2740;
+  --gray-200: #2A3656;
+  --gray-300: #3D4E6B;
+  --gray-400: #56698A;
+  --gray-500: #7B8EA8;
+  --gray-600: #94A3B8;
+  --gray-700: #B8C9D8;
+  --gray-800: #D1DCE8;
+  --gray-900: #E8EDF4;
+
+  --border-default: #2A3656;
+
+  /* Status: green */
+  --green-50:  rgba(16, 185, 129, 0.07);
+  --green-100: rgba(16, 185, 129, 0.13);
+  --green-600: #34D399;
+  --green-700: #10B981;
+  --green-800: #6EE7B7;
+
+  /* Status: red */
+  --red-50:  rgba(244, 63, 94, 0.07);
+  --red-100: rgba(244, 63, 94, 0.13);
+  --red-200: rgba(244, 63, 94, 0.20);
+  --red-300: rgba(244, 63, 94, 0.30);
+  --red-600: #F87171;
+  --red-700: #FB7185;
+  --red-800: #FCA5A5;
+
+  /* Status: yellow / amber */
+  --yellow-50:  rgba(245, 158, 11, 0.07);
+  --yellow-100: rgba(245, 158, 11, 0.13);
+  --yellow-800: #FCD34D;
+  --amber-500:  #F59F00;
+  --amber-600:  #E8930A;
+
+  /* Info / links */
+  --blue-100: rgba(56, 189, 248, 0.12);
+  --blue-600: #38BDF8;
+  --blue-800: #7DD3FC;
+
+  /* Form elements */
+  --input-bg:          #141B2D;
+  --input-color:       #E2E8F0;
+  --input-border:      #2A3656;
+  --input-placeholder: #56698A;
+  --input-focus:       #F59F00;
+}
+
+/* ── Tailwind theme mapping ────────────────────────────────────── */
+@theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-ui);
   --font-mono: var(--font-code);
 
-  /* Amber replaces black — all `bg-black` buttons become amber CTA */
+  /* Amber replaces black for CTA buttons */
   --color-black: #F59F00;
 
-  /* Dark-native gray ramp (light values map to dark surfaces, dark to light text) */
-  --color-gray-50:  #141B2D;
-  --color-gray-100: #1E2740;
-  --color-gray-200: #2A3656;
-  --color-gray-300: #3D4E6B;
-  --color-gray-400: #56698A;
-  --color-gray-500: #7B8EA8;
-  --color-gray-600: #94A3B8;
-  --color-gray-700: #B8C9D8;
-  --color-gray-800: #D1DCE8;
-  --color-gray-900: #E8EDF4;
+  /* Gray ramp */
+  --color-gray-50:  var(--gray-50);
+  --color-gray-100: var(--gray-100);
+  --color-gray-200: var(--gray-200);
+  --color-gray-300: var(--gray-300);
+  --color-gray-400: var(--gray-400);
+  --color-gray-500: var(--gray-500);
+  --color-gray-600: var(--gray-600);
+  --color-gray-700: var(--gray-700);
+  --color-gray-800: var(--gray-800);
+  --color-gray-900: var(--gray-900);
 
   /* Status: green */
-  --color-green-50:  rgba(16, 185, 129, 0.07);
-  --color-green-100: rgba(16, 185, 129, 0.13);
-  --color-green-600: #34D399;
-  --color-green-700: #10B981;
-  --color-green-800: #6EE7B7;
+  --color-green-50:  var(--green-50);
+  --color-green-100: var(--green-100);
+  --color-green-600: var(--green-600);
+  --color-green-700: var(--green-700);
+  --color-green-800: var(--green-800);
 
   /* Status: red */
-  --color-red-50:  rgba(244, 63, 94, 0.07);
-  --color-red-100: rgba(244, 63, 94, 0.13);
-  --color-red-200: rgba(244, 63, 94, 0.20);
-  --color-red-300: rgba(244, 63, 94, 0.30);
-  --color-red-600: #F87171;
-  --color-red-700: #FB7185;
-  --color-red-800: #FCA5A5;
+  --color-red-50:  var(--red-50);
+  --color-red-100: var(--red-100);
+  --color-red-200: var(--red-200);
+  --color-red-300: var(--red-300);
+  --color-red-600: var(--red-600);
+  --color-red-700: var(--red-700);
+  --color-red-800: var(--red-800);
 
   /* Status: yellow / amber */
-  --color-yellow-50:  rgba(245, 158, 11, 0.07);
-  --color-yellow-100: rgba(245, 158, 11, 0.13);
-  --color-yellow-800: #FCD34D;
-  --color-amber-500: #F59F00;
-  --color-amber-600: #E8930A;
+  --color-yellow-50:  var(--yellow-50);
+  --color-yellow-100: var(--yellow-100);
+  --color-yellow-800: var(--yellow-800);
+  --color-amber-500:  var(--amber-500);
+  --color-amber-600:  var(--amber-600);
 
   /* Info / links */
-  --color-blue-100: rgba(56, 189, 248, 0.12);
-  --color-blue-600: #38BDF8;
-  --color-blue-800: #7DD3FC;
+  --color-blue-100: var(--blue-100);
+  --color-blue-600: var(--blue-600);
+  --color-blue-800: var(--blue-800);
 }
 
 body {
@@ -60,38 +170,34 @@ body {
   color: var(--foreground);
 }
 
-/* Default border colour for all elements */
 @layer base {
   *, *::before, *::after {
-    border-color: #2A3656;
+    border-color: var(--border-default);
   }
 }
 
-/* Heading font — Barlow Condensed applied to all heading levels */
 h1, h2, h3, h4 {
   font-family: var(--font-heading), var(--font-ui), sans-serif;
 }
 
-/* Form elements — dark surface */
 input, select, textarea, option {
-  background-color: #141B2D;
-  color: #E2E8F0;
-  border-color: #2A3656;
+  background-color: var(--input-bg);
+  color: var(--input-color);
+  border-color: var(--input-border);
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: #56698A;
+  color: var(--input-placeholder);
 }
 
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid #F59F00;
+  outline: 2px solid var(--input-focus);
   outline-offset: -1px;
 }
 
-/* Spinner — amber ring */
 .loader {
   width: 40px;
   height: 40px;
