@@ -36,7 +36,7 @@ export default async function CloseSummaryPage({ params }: Props) {
     shiftDeliveries,
     { data: rec },
   ] = await Promise.all([
-    supabase.from('stations').select('name').eq('id', shift.station_id).single(),
+    supabase.from('stations').select('name, catalogue_id').eq('id', shift.station_id).single(),
     supabase.from('pumps').select('id, label').eq('station_id', shift.station_id).order('label'),
     supabase.from('pump_readings')
       .select('id, pump_id, meter_reading, pumps(label)')
@@ -57,12 +57,25 @@ export default async function CloseSummaryPage({ params }: Props) {
       .maybeSingle(),
   ])
 
+  // Dry stock complete = all active products for this station's catalogue have a closing count
+  let hasDryStock = true
+  if (station?.catalogue_id) {
+    const [{ data: activeProducts }, { data: stockReadings }] = await Promise.all([
+      supabase.from('products').select('id').eq('catalogue_id', station.catalogue_id).eq('is_active', true),
+      supabase.from('stock_readings').select('product_id').eq('shift_id', shiftId),
+    ])
+    const productIds = (activeProducts ?? []).map(p => p.id)
+    const readIds = new Set((stockReadings ?? []).map(r => r.product_id))
+    hasDryStock = productIds.every(id => readIds.has(id))
+  }
+
   const progress = getCloseProgress(
     (pumps ?? []).map(p => p.id),
     (closePumpReadings ?? []).map(r => r.pump_id),
     (tanks ?? []).map(t => t.id),
     (closeDipReadings ?? []).map(r => r.tank_id),
-    !!posSubmission
+    !!posSubmission,
+    hasDryStock,
   )
 
   // ── Pending view: progress checklist + submit ─────────────────────────────

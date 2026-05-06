@@ -39,7 +39,7 @@ export default async function DailyReportPage({ searchParams }: Props) {
   // Load shifts for this station + date
   const { data: shifts } = await supabase
     .from('shifts')
-    .select('id, period, status, submitted_at')
+    .select('id, period, status, submitted_at, station_id, started_at')
     .eq('station_id', activeStationId)
     .eq('shift_date', selectedDate)
 

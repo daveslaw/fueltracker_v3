@@ -32,7 +32,8 @@ export default async function CloseDipsPage({ params }: Props) {
     (closePumpReadings ?? []).map((r) => r.pump_id),
     (tanks ?? []).map((t) => t.id),
     (closeDipReadings ?? []).map((r) => r.tank_id),
-    !!posSubmission
+    !!posSubmission,
+    false, // dry stock track belongs to cashier — not checked on dips page
   )
 
   const dipMap = new Map((closeDipReadings ?? []).map((d) => [d.tank_id, d.litres]))

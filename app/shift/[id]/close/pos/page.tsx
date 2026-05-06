@@ -40,7 +40,8 @@ export default async function ClosePosPage({ params }: Props) {
     (closePumpReadings ?? []).map((r) => r.pump_id),
     (tanks ?? []).map((t) => t.id),
     (closeDipReadings ?? []).map((r) => r.tank_id),
-    !!posSubmission
+    !!posSubmission,
+    false, // dry stock track belongs to cashier — not checked on pos page
   )
 
   // Block access to POS page until close readings are complete

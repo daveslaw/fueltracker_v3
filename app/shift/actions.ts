@@ -34,7 +34,7 @@ export async function createShift(formData: FormData) {
   // Duplicate guard
   const { data: existing } = await supabase
     .from('shifts')
-    .select('id, station_id, period, shift_date, status')
+    .select('id, station_id, period, shift_date, status, part')
     .eq('station_id', station_id)
     .eq('shift_date', shift_date)
 

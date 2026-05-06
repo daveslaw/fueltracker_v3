@@ -41,7 +41,8 @@ export default async function ClosePumpsPage({ params }: Props) {
     (closePumpReadings ?? []).map((r) => r.pump_id),
     (tanks ?? []).map((t) => t.id),
     (closeDipReadings ?? []).map((r) => r.tank_id),
-    !!posSubmission
+    !!posSubmission,
+    false, // dry stock track belongs to cashier — not checked on pumps page
   )
 
   const readingMap = new Map((closePumpReadings ?? []).map((r) => [r.pump_id, r]))
