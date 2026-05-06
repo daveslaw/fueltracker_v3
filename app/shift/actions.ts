@@ -164,9 +164,6 @@ export async function submitShift(shiftId: string): Promise<ActionResult> {
   const { data: shift } = await supabase
     .from('shifts').select('station_id, status').eq('id', shiftId).single()
   if (!shift) return { error: 'Shift not found' }
-  if (!canSubmit(shift.status as ShiftStatus))
-    return { error: 'Shift cannot be submitted from its current status' }
-
   // Validate all close readings present
   const [
     { data: pumps }, { data: closePumpReadings },
@@ -180,15 +177,35 @@ export async function submitShift(shiftId: string): Promise<ActionResult> {
     supabase.from('pos_submissions').select('id').eq('shift_id', shiftId).maybeSingle(),
   ])
 
+  const hasCashierPos = !!posSubmission
+
+  // Dry stock complete = all active products for this station's catalogue have a closing count
+  const { data: stationRow } = await supabase
+    .from('stations').select('catalogue_id').eq('id', shift.station_id).single()
+  let hasDryStock = true
+  if (stationRow?.catalogue_id) {
+    const [{ data: activeProducts }, { data: stockReadings }] = await Promise.all([
+      supabase.from('products').select('id').eq('catalogue_id', stationRow.catalogue_id).eq('is_active', true),
+      supabase.from('stock_readings').select('product_id').eq('shift_id', shiftId),
+    ])
+    const productIds = (activeProducts ?? []).map((p) => p.id)
+    const readIds = new Set((stockReadings ?? []).map((r) => r.product_id))
+    hasDryStock = productIds.every((id) => readIds.has(id))
+  }
+
+  if (!canSubmit(shift.status as ShiftStatus, hasCashierPos, hasDryStock))
+    return { error: 'Shift cannot be submitted: check shift status and that cashier POS and dry stock tracks are complete.' }
+
   const progress = getCloseProgress(
     (pumps ?? []).map((p) => p.id),
     (closePumpReadings ?? []).map((r) => r.pump_id),
     (tanks ?? []).map((t) => t.id),
     (closeDipReadings ?? []).map((r) => r.tank_id),
-    !!posSubmission
+    hasCashierPos,
+    hasDryStock,
   )
 
-  if (!progress.isComplete) return { error: 'All close readings and POS submission are required before submitting.' }
+  if (!progress.isComplete) return { error: 'All close readings, cashier POS, and dry stock count are required before submitting.' }
 
   const submittedAt = new Date().toISOString()
   const { error } = await supabase

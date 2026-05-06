@@ -99,6 +99,95 @@ export function countPendingShiftsPerStation(
   return counts
 }
 
+// ── buildDailyFuelReport ──────────────────────────────────────────────────
+
+export interface DailyFuelGradeInput {
+  date:                 string
+  fuel_grade_id:        string
+  opening_dip:          number
+  deliveries_litres:    number
+  delivery_note:        string | null
+  driver_name:          string | null
+  pos_litres:           number
+  variance_litres:      number
+  cost_per_litre:       number
+  sell_price_per_litre: number
+}
+
+export interface DailyFuelGradeRow extends DailyFuelGradeInput {
+  accumulated_variance: number
+  gp_zar:              number
+}
+
+export function buildDailyFuelReport(inputs: DailyFuelGradeInput[]): DailyFuelGradeRow[] {
+  const accumulators = new Map<string, number>()
+
+  return inputs.map(row => {
+    const acc = (accumulators.get(row.fuel_grade_id) ?? 0) + row.variance_litres
+    accumulators.set(row.fuel_grade_id, acc)
+
+    const gp_zar = Math.round((row.sell_price_per_litre - row.cost_per_litre) * row.pos_litres * 100) / 100
+
+    return { ...row, accumulated_variance: acc, gp_zar }
+  })
+}
+
+// ── computePriceChangeImpact ──────────────────────────────────────────────
+
+export interface PriceChangeBoundary {
+  station_id:         string
+  fuel_grade_id:      string
+  closing_dip_litres: number
+  old_cost_per_litre: number
+  new_cost_per_litre: number
+}
+
+export interface PriceChangeImpactRow {
+  station_id:    string
+  fuel_grade_id: string
+  impact_zar:    number
+}
+
+/**
+ * Gain/loss from a fuel cost price change.
+ * Formula: closing_dip_litres × (new_cost - old_cost) per boundary.
+ * Positive = inventory gain; negative = inventory loss.
+ */
+export function computePriceChangeImpact(boundaries: PriceChangeBoundary[]): PriceChangeImpactRow[] {
+  return boundaries.map(b => ({
+    station_id:    b.station_id,
+    fuel_grade_id: b.fuel_grade_id,
+    impact_zar:    Math.round(b.closing_dip_litres * (b.new_cost_per_litre - b.old_cost_per_litre) * 100) / 100,
+  }))
+}
+
+// ── buildInventorySnapshot ────────────────────────────────────────────────
+
+export interface InventorySnapshotInput {
+  station_id:         string
+  fuel_grade_id:      string
+  closing_dip_litres: number
+  cost_per_litre:     number
+}
+
+export interface InventorySnapshotRow {
+  station_id:     string
+  fuel_grade_id:  string
+  litres:         number
+  cost_per_litre: number
+  total_value_zar: number
+}
+
+export function buildInventorySnapshot(inputs: InventorySnapshotInput[]): InventorySnapshotRow[] {
+  return inputs.map(row => ({
+    station_id:      row.station_id,
+    fuel_grade_id:   row.fuel_grade_id,
+    litres:          row.closing_dip_litres,
+    cost_per_litre:  row.cost_per_litre,
+    total_value_zar: Math.round(row.closing_dip_litres * row.cost_per_litre * 100) / 100,
+  }))
+}
+
 // ── isReportPartial ───────────────────────────────────────────────────────
 
 const COMPLETE_STATUSES: Array<ShiftStatus | 'not_started'> = ['submitted', 'approved', 'flagged', 'closed']

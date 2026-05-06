@@ -4,8 +4,10 @@ export type CloseProgress = {
   pumps: { done: number; total: number }
   tanks: { done: number; total: number }
   pos: boolean
+  cashierPos: boolean     // cashier POS track: Z-report submitted by cashier
+  dryStock: boolean       // cashier dry stock track: closing count submitted
   isReadyForPos: boolean  // all close pump + dip readings complete
-  isComplete: boolean     // isReadyForPos + POS submitted
+  isComplete: boolean     // isReadyForPos + cashierPos + dryStock
 }
 
 // ── getCloseProgress ──────────────────────────────────────────────────────────
@@ -15,18 +17,21 @@ export function getCloseProgress(
   completedClosePumpIds: string[],
   tankIds: string[],
   completedCloseTankIds: string[],
-  hasPosSubmission: boolean
+  hasCashierPosSubmission: boolean,
+  hasDryStockComplete: boolean,
 ): CloseProgress {
   const pumpsDone = pumpIds.filter((id) => completedClosePumpIds.includes(id)).length
   const tanksDone = tankIds.filter((id) => completedCloseTankIds.includes(id)).length
 
   const isReadyForPos = pumpsDone === pumpIds.length && tanksDone === tankIds.length
-  const isComplete = isReadyForPos && hasPosSubmission
+  const isComplete = isReadyForPos && hasCashierPosSubmission && hasDryStockComplete
 
   return {
     pumps: { done: pumpsDone, total: pumpIds.length },
     tanks: { done: tanksDone, total: tankIds.length },
-    pos: hasPosSubmission,
+    pos: hasCashierPosSubmission,
+    cashierPos: hasCashierPosSubmission,
+    dryStock: hasDryStockComplete,
     isReadyForPos,
     isComplete,
   }
@@ -50,8 +55,8 @@ const SUBMITTABLE_FROM = new Set<ShiftStatus>(['pending'])
 
 /**
  * Guards the submit transition.
- * Only shifts in 'pending' may be submitted (transitions to 'closed').
+ * Shift must be in 'pending' and the cashier POS track must be complete.
  */
-export function canSubmit(status: ShiftStatus): boolean {
-  return SUBMITTABLE_FROM.has(status)
+export function canSubmit(status: ShiftStatus, cashierPosComplete: boolean, dryStockComplete: boolean): boolean {
+  return SUBMITTABLE_FROM.has(status) && cashierPosComplete && dryStockComplete
 }
