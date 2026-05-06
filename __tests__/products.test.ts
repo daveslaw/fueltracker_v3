@@ -4,7 +4,7 @@ import type { Product } from '@/lib/products'
 
 const base: Product = {
   id: 'p1',
-  catalogue_id: 'cat-1',
+  station_id: 'station-1',
   stock_code: 'COKE-500',
   description: 'Coke 500ml',
   cost_price: 8.5,
