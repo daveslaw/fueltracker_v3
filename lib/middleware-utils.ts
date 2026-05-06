@@ -1,4 +1,4 @@
-export type UserRole = 'supervisor' | 'owner'
+export type UserRole = 'supervisor' | 'owner' | 'cashier'
 
 export type UserProfile = {
   role: UserRole
@@ -8,6 +8,7 @@ export type UserProfile = {
 const ROLE_HOME: Record<UserRole, string> = {
   supervisor: '/shift',
   owner: '/dashboard',
+  cashier: '/cashier',
 }
 
 /**

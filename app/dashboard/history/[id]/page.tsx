@@ -65,7 +65,7 @@ export default async function ShiftAuditPage({ params }: Props) {
       .select('id, expected_revenue, pos_revenue, revenue_variance, reconciliation_tank_lines(*), reconciliation_grade_lines(*)')
       .eq('shift_id', shiftId).maybeSingle(),
     supabase.from('ocr_overrides').select('id, reading_id, reading_type, original_value, override_value, reason, created_at, user_profiles!overridden_by(full_name)').eq('shift_id', shiftId),
-    supabase.from('fuel_prices').select('fuel_grade_id, price_per_litre, effective_from').order('effective_from'),
+    supabase.from('fuel_prices').select('station_id, fuel_grade_id, sell_price_per_litre, cost_per_litre, valid_from, valid_to').order('valid_from'),
   ])
 
   const posLines = posSubmission
@@ -75,13 +75,16 @@ export default async function ShiftAuditPage({ params }: Props) {
     : []
 
   const gradeIds = [...new Set(posLines.map((l: any) => l.fuel_grade_id as string))]
-  const prices = gradeIds.map(gid => ({
-    fuel_grade_id: gid,
-    price_per_litre: selectActivePriceAt(
-      (allPrices ?? []).filter(p => p.fuel_grade_id === gid),
-      shift.submitted_at ?? shift.shift_date,
-    ) ?? 0,
-  }))
+  const prices = gradeIds.map(gid => {
+    const rows = (allPrices ?? []).filter(
+      (p: any) => p.fuel_grade_id === gid && p.station_id === shift.station_id,
+    )
+    const active = selectActivePriceAt(rows, (shift as any).started_at ?? shift.submitted_at ?? shift.shift_date)
+    return {
+      fuel_grade_id:        gid,
+      sell_price_per_litre: active?.sell_price_per_litre ?? 0,
+    }
+  })
   const financial = posLines.length > 0 ? buildFinancialLines(posLines as any, prices) : null
 
   const tankLabel = (id: string) => (tanks ?? []).find(t => t.id === id)?.label ?? id
@@ -362,7 +365,7 @@ export default async function ShiftAuditPage({ params }: Props) {
                         <tr key={line.fuel_grade_id}>
                           <td className="px-3 py-2 font-medium">{line.fuel_grade_id}</td>
                           <td className="px-3 py-2 text-right">{fmtL(line.litres_sold)}</td>
-                          <td className="px-3 py-2 text-right">R {line.price_per_litre.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right">R {line.sell_price_per_litre.toFixed(2)}</td>
                           <td className="px-3 py-2 text-right">{fmtR(line.expected_revenue_zar)}</td>
                           <td className="px-3 py-2 text-right">{fmtR(line.pos_revenue_zar)}</td>
                           <td className={`px-3 py-2 text-right font-semibold ${cls}`}>{v > 0 ? '+' : ''}{fmtR(v)}</td>

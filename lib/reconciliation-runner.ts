@@ -33,6 +33,7 @@ export interface ShiftDataBundle {
     station_id:   string
     period:       'morning' | 'evening'
     shift_date:   string        // YYYY-MM-DD
+    started_at:   string | null // ISO timestamp; used for price lookup
     submitted_at: string | null // ISO timestamp; null if shift not yet submitted
   }
   tanks:        { id: string; fuel_grade_id: string }[]
@@ -51,7 +52,7 @@ export interface ShiftDataBundle {
 // Logged by runReconciliationWith; surface to supervisors in a future PR.
 
 export interface AssemblyWarning {
-  code:   'PUMP_NO_CLOSE_READING' | 'SUBMITTED_AT_NULL' | 'PRICE_NOT_FOUND' | 'TANK_MISSING_DIP' | 'NO_PRIOR_SHIFT_BASELINE'
+  code:   'PUMP_NO_CLOSE_READING' | 'STARTED_AT_NULL' | 'PRICE_NOT_FOUND' | 'TANK_MISSING_DIP' | 'NO_PRIOR_SHIFT_BASELINE'
   detail: string
 }
 
@@ -94,26 +95,26 @@ export function assemblePureInputs(
     .filter(d => getShiftPeriod(d.delivered_at) === bundle.shift.period)
     .map(d => ({ tank_id: d.tank_id, litres_received: d.litres_received }))
 
-  // Price snapshot at submitted_at.
-  // Falls back to current time only if submitted_at is null (edge case: re-run on unsubmitted shift).
-  if (bundle.shift.submitted_at === null) {
+  // Price snapshot at started_at.
+  // Falls back to current time only if started_at is null (should not happen after migration).
+  if (bundle.shift.started_at === null) {
     warnings.push({
-      code:   'SUBMITTED_AT_NULL',
-      detail: 'shift.submitted_at is null; prices resolved against current time — historical accuracy not guaranteed',
+      code:   'STARTED_AT_NULL',
+      detail: 'shift.started_at is null; prices resolved against current time — historical accuracy not guaranteed',
     })
   }
-  const priceAsOf = bundle.shift.submitted_at ?? new Date().toISOString()
+  const priceAsOf = bundle.shift.started_at ?? new Date().toISOString()
   const gradeIds  = [...new Set(bundle.tanks.map(t => t.fuel_grade_id))]
   const prices = gradeIds.map(gradeId => {
-    const rows  = bundle.priceRows.filter(r => r.fuel_grade_id === gradeId)
+    const rows  = bundle.priceRows.filter(r => r.fuel_grade_id === gradeId && r.station_id === bundle.shift.station_id)
     const price = selectActivePriceAt(rows, priceAsOf)
     if (price === null) {
       warnings.push({
         code:   'PRICE_NOT_FOUND',
-        detail: `no active price found for grade ${gradeId} at ${priceAsOf}; defaulting to 0`,
+        detail: `no active price found for grade ${gradeId} at station ${bundle.shift.station_id} at ${priceAsOf}; defaulting to 0`,
       })
     }
-    return { fuel_grade_id: gradeId, price_per_litre: price ?? 0 }
+    return { fuel_grade_id: gradeId, sell_price_per_litre: price?.sell_price_per_litre ?? 0 }
   })
 
   // Check that every tank has both an open and close dip reading.
@@ -157,7 +158,7 @@ export function createSupabaseRepository(db: SupabaseClient): ShiftDataRepositor
       // ── 1. Shift ──────────────────────────────────────────────────────────
       const { data: shift, error: shiftErr } = await db
         .from('shifts')
-        .select('id, station_id, period, shift_date, status, submitted_at')
+        .select('id, station_id, period, shift_date, status, started_at, submitted_at')
         .eq('id', shiftId)
         .single()
       if (shiftErr || !shift) return { error: shiftErr?.message ?? 'Shift not found' }
@@ -261,11 +262,12 @@ export function createSupabaseRepository(db: SupabaseClient): ShiftDataRepositor
         .gte('delivered_at', dayStart)
         .lte('delivered_at', dayEnd)
 
-      // ── 6. Fuel prices (all versions for relevant grades) ────────────────
+      // ── 6. Fuel prices for this station's grades ─────────────────────────
       const gradeIds = [...new Set(tanks.map(t => t.fuel_grade_id))]
       const { data: priceRows } = await db
         .from('fuel_prices')
-        .select('fuel_grade_id, price_per_litre, effective_from')
+        .select('station_id, fuel_grade_id, sell_price_per_litre, cost_per_litre, valid_from, valid_to')
+        .eq('station_id', shift.station_id)
         .in('fuel_grade_id', gradeIds)
 
       return {

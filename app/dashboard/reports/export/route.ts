@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
         .select('shift_id, reconciliation_tank_lines(*), reconciliation_grade_lines(*)')
         .in('shift_id', shiftIds),
       supabase.from('pos_submissions').select('id, shift_id').in('shift_id', shiftIds),
-      supabase.from('fuel_prices').select('fuel_grade_id, price_per_litre, effective_from').order('effective_from'),
+      supabase.from('fuel_prices').select('station_id, fuel_grade_id, sell_price_per_litre, cost_per_litre, valid_from, valid_to').order('valid_from'),
       supabase.from('tanks').select('id, label').eq('station_id', stationId),
     ])
 
@@ -65,12 +65,16 @@ export async function GET(req: NextRequest) {
       const posSub = posSubs.find((ps: any) => ps.shift_id === s.id)
       const posLines = posSub ? (allPosLines ?? []).filter((pl: any) => pl.pos_submission_id === posSub.id) : []
       const gradeIds = [...new Set(posLines.map((l: any) => l.fuel_grade_id as string))]
-      const prices = gradeIds.map(gid => ({
-        fuel_grade_id: gid,
-        price_per_litre: selectActivePriceAt(
-          (allPrices ?? []).filter(p => p.fuel_grade_id === gid), s.submitted_at ?? date
-        ) ?? 0,
-      }))
+      const prices = gradeIds.map(gid => {
+        const rows = (allPrices ?? []).filter(
+          (p: any) => p.fuel_grade_id === gid && p.station_id === stationId,
+        )
+        const active = selectActivePriceAt(rows, (s as any).started_at ?? s.submitted_at ?? date)
+        return {
+          fuel_grade_id:        gid,
+          sell_price_per_litre: active?.sell_price_per_litre ?? 0,
+        }
+      })
       const financial = buildFinancialLines(posLines as any, prices)
 
       for (const line of (rec as any).reconciliation_tank_lines ?? []) {

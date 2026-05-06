@@ -14,8 +14,8 @@ const reading = (pump_id: string, opening_reading: number, closing_reading: numb
 const posLine = (fuel_grade_id: string, litres_sold: number, revenue_zar: number) => ({
   fuel_grade_id, litres_sold, revenue_zar,
 })
-const price = (fuel_grade_id: string, price_per_litre: number) => ({
-  fuel_grade_id, price_per_litre,
+const price = (fuel_grade_id: string, sell_price_per_litre: number) => ({
+  fuel_grade_id, sell_price_per_litre,
 })
 
 // ── Formula 1: Tank Inventory (per tank) ──────────────────────────────────────

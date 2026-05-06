@@ -18,21 +18,22 @@ export type DeliveryValidationResult =
   | { valid: false; error: string }
 
 export function validateDeliveryInput(params: {
-  tankId: string
-  litresReceived: number
-  deliveryNoteUrl: string
+  tankId:             string
+  litresReceived:     number
+  deliveryNoteUrl:    string
+  deliveryNoteNumber: string
+  driverName?:        string
 }): DeliveryValidationResult {
-  const { tankId, litresReceived, deliveryNoteUrl } = params
+  const { tankId, litresReceived, deliveryNoteUrl, deliveryNoteNumber } = params
 
-  if (!tankId || !tankId.trim()) {
+  if (!tankId || !tankId.trim())
     return { valid: false, error: 'Tank is required' }
-  }
-  if (litresReceived <= 0) {
+  if (litresReceived <= 0)
     return { valid: false, error: 'Litres received must be greater than zero' }
-  }
-  if (!deliveryNoteUrl || !deliveryNoteUrl.trim()) {
+  if (!deliveryNoteUrl || !deliveryNoteUrl.trim())
     return { valid: false, error: 'Delivery receipt photo is required' }
-  }
+  if (!deliveryNoteNumber || !deliveryNoteNumber.trim())
+    return { valid: false, error: 'Delivery note number is required' }
 
   return { valid: true }
 }
@@ -40,36 +41,46 @@ export function validateDeliveryInput(params: {
 // ── I/O ───────────────────────────────────────────────────────────────────────
 
 export interface DeliveryRow {
-  id:                string
-  tank_id:           string
-  litres_received:   number
-  delivery_note_url: string | null
-  delivered_at:      string
+  id:                    string
+  tank_id:               string
+  litres_received:       number
+  delivery_note_number:  string
+  driver_name:           string | null
+  delivery_note_url:     string | null
+  delivered_at:          string
 }
 
 export async function createDelivery(
   db: SupabaseClient,
   params: {
-    stationId:       string
-    tankId:          string
-    litresReceived:  number
-    deliveryNoteUrl: string
-    recordedBy:      string
+    stationId:          string
+    tankId:             string
+    litresReceived:     number
+    deliveryNoteUrl:    string
+    deliveryNoteNumber: string
+    driverName:         string | null
+    recordedBy:         string
   }
 ): Promise<{ data?: DeliveryRow; error?: string }> {
   const { data, error } = await db
     .from('deliveries')
     .insert({
-      station_id:        params.stationId,
-      tank_id:           params.tankId,
-      litres_received:   params.litresReceived,
-      delivery_note_url: params.deliveryNoteUrl,
-      recorded_by:       params.recordedBy,
+      station_id:           params.stationId,
+      tank_id:              params.tankId,
+      litres_received:      params.litresReceived,
+      delivery_note_url:    params.deliveryNoteUrl,
+      delivery_note_number: params.deliveryNoteNumber,
+      driver_name:          params.driverName,
+      recorded_by:          params.recordedBy,
     })
-    .select('id, tank_id, litres_received, delivery_note_url, delivered_at')
+    .select('id, tank_id, litres_received, delivery_note_number, driver_name, delivery_note_url, delivered_at')
     .single()
 
-  if (error) return { error: error.message }
+  if (error) {
+    if ((error as any).code === '23505')
+      return { error: 'Delivery note number already recorded for this station' }
+    return { error: error.message }
+  }
   return { data: data as DeliveryRow }
 }
 
@@ -86,7 +97,7 @@ export async function getShiftDeliveries(
 
   const { data } = await db
     .from('deliveries')
-    .select('id, tank_id, litres_received, delivery_note_url, delivered_at')
+    .select('id, tank_id, litres_received, delivery_note_number, driver_name, delivery_note_url, delivered_at')
     .eq('station_id', params.stationId)
     .gte('delivered_at', dayStart)
     .lte('delivered_at', dayEnd)

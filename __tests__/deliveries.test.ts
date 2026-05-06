@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { getShiftPeriod, validateDeliveryInput } from '../lib/deliveries'
+import { describe, it, expect, vi } from 'vitest'
+import { getShiftPeriod, validateDeliveryInput, createDelivery } from '../lib/deliveries'
 
 describe('getShiftPeriod', () => {
   it('returns morning for a timestamp before 12:00 UTC', () => {
@@ -25,9 +25,10 @@ describe('getShiftPeriod', () => {
 
 describe('validateDeliveryInput', () => {
   const valid = {
-    tankId: 'tank-1',
-    litresReceived: 5000,
-    deliveryNoteUrl: 'https://storage.example.com/receipt.jpg',
+    tankId:             'tank-1',
+    litresReceived:     5000,
+    deliveryNoteUrl:    'https://storage.example.com/receipt.jpg',
+    deliveryNoteNumber: 'DN-2026-001',
   }
 
   it('tracer bullet: valid inputs return { valid: true }', () => {
@@ -65,5 +66,52 @@ describe('validateDeliveryInput', () => {
   it('whitespace-only deliveryNoteUrl is invalid', () => {
     const result = validateDeliveryInput({ ...valid, deliveryNoteUrl: '   ' })
     expect(result.valid).toBe(false)
+  })
+
+  it('empty deliveryNoteNumber is invalid', () => {
+    const result = validateDeliveryInput({ ...valid, deliveryNoteNumber: '' })
+    expect(result.valid).toBe(false)
+    if (!result.valid) expect(result.error).toBeTruthy()
+  })
+
+  it('whitespace-only deliveryNoteNumber is invalid', () => {
+    const result = validateDeliveryInput({ ...valid, deliveryNoteNumber: '   ' })
+    expect(result.valid).toBe(false)
+  })
+
+  it('omitting driverName is still valid', () => {
+    const { ...withoutDriver } = valid
+    expect(validateDeliveryInput(withoutDriver)).toEqual({ valid: true })
+  })
+})
+
+// ── createDelivery — duplicate guard ──────────────────────────────────────────
+
+describe('createDelivery — duplicate note number', () => {
+  it('returns a user-readable error when the DB reports a unique constraint violation', async () => {
+    const db = {
+      from: () => ({
+        insert: () => ({
+          select: () => ({
+            single: async () => ({
+              data: null,
+              error: { message: 'duplicate key value violates unique constraint', code: '23505' },
+            }),
+          }),
+        }),
+      }),
+    } as any
+
+    const result = await createDelivery(db, {
+      stationId:          'station-1',
+      tankId:             'tank-1',
+      litresReceived:     5000,
+      deliveryNoteUrl:    'https://storage.example.com/receipt.jpg',
+      deliveryNoteNumber: 'DN-2026-001',
+      driverName:         null,
+      recordedBy:         'user-1',
+    })
+
+    expect(result.error).toBe('Delivery note number already recorded for this station')
   })
 })

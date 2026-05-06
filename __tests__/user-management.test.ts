@@ -26,6 +26,10 @@ describe('validateInvite', () => {
     expect(validateInvite({ ...validSupervisor, role: 'owner' })).toMatch(/role/)
   })
 
+  it('cashier role is valid — returns null', () => {
+    expect(validateInvite({ ...validSupervisor, role: 'cashier' })).toBeNull()
+  })
+
   it('attendant role returns error — role has been retired', () => {
     expect(validateInvite({ ...validSupervisor, role: 'attendant' })).toMatch(/role/)
   })

@@ -6,7 +6,7 @@ export interface ReconciliationInputs {
   deliveries:   { tank_id: string; litres_received: number }[]
   pumpReadings: { pump_id: string; opening_reading: number; closing_reading: number }[]
   posLines:     { fuel_grade_id: string; litres_sold: number; revenue_zar: number }[]
-  prices:       { fuel_grade_id: string; price_per_litre: number }[]
+  prices:       { fuel_grade_id: string; sell_price_per_litre: number }[]
 }
 
 export interface TankLine {
@@ -24,8 +24,8 @@ export interface GradeLine {
   meter_delta:          number
   pos_litres_sold:      number
   variance_litres:      number  // pos_litres_sold − meter_delta; negative = unrecorded dispensing
-  price_per_litre:      number
-  expected_revenue_zar: number  // meter_delta × price_per_litre
+  sell_price_per_litre: number
+  expected_revenue_zar: number  // meter_delta × sell_price_per_litre
   pos_revenue_zar:      number
   variance_zar:         number  // pos_revenue_zar − expected_revenue_zar; negative = revenue shortfall
 }
@@ -41,7 +41,7 @@ export function computeReconciliation(inputs: ReconciliationInputs): Reconciliat
 
   // Index helpers
   const posLineByGrade = new Map(posLines.map(l => [l.fuel_grade_id, l]))
-  const priceByGrade   = new Map(prices.map(p => [p.fuel_grade_id, p.price_per_litre]))
+  const priceByGrade   = new Map(prices.map(p => [p.fuel_grade_id, p.sell_price_per_litre]))
 
   // ── Tank lines (Formula 1) ────────────────────────────────────────────────
   // Expected Closing Dip = Opening Dip + Deliveries − Meter Delta (per tank)
@@ -86,14 +86,14 @@ export function computeReconciliation(inputs: ReconciliationInputs): Reconciliat
     const posLine        = posLineByGrade.get(gradeId)
     const sold           = posLine?.litres_sold ?? 0
     const posRevenue     = posLine?.revenue_zar ?? 0
-    const pricePerLitre  = priceByGrade.get(gradeId) ?? 0
-    const expectedRev    = meterDelta * pricePerLitre
+    const sellPrice      = priceByGrade.get(gradeId) ?? 0
+    const expectedRev    = meterDelta * sellPrice
     return {
       fuel_grade_id:        gradeId,
       meter_delta:          meterDelta,
       pos_litres_sold:      sold,
       variance_litres:      sold - meterDelta,
-      price_per_litre:      pricePerLitre,
+      sell_price_per_litre: sellPrice,
       expected_revenue_zar: expectedRev,
       pos_revenue_zar:      posRevenue,
       variance_zar:         posRevenue - expectedRev,

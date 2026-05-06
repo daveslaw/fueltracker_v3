@@ -39,5 +39,31 @@ describe('resolveRedirect', () => {
     it('redirects active owner from / to /dashboard', () => {
       expect(resolveRedirect({ role: 'owner', is_active: true }, '/')).toBe('/dashboard')
     })
+
+    it('tracer bullet: redirects active cashier from / to /cashier', () => {
+      expect(resolveRedirect({ role: 'cashier', is_active: true }, '/')).toBe('/cashier')
+    })
+  })
+
+  describe('cashier path guards', () => {
+    it('allows cashier on /cashier path', () => {
+      expect(resolveRedirect({ role: 'cashier', is_active: true }, '/cashier')).toBeNull()
+    })
+
+    it('allows cashier on nested /cashier path', () => {
+      expect(resolveRedirect({ role: 'cashier', is_active: true }, '/cashier/stock')).toBeNull()
+    })
+
+    it('redirects cashier away from /shift to /cashier', () => {
+      expect(resolveRedirect({ role: 'cashier', is_active: true }, '/shift')).toBe('/cashier')
+    })
+
+    it('redirects cashier away from /dashboard to /cashier', () => {
+      expect(resolveRedirect({ role: 'cashier', is_active: true }, '/dashboard')).toBe('/cashier')
+    })
+
+    it('redirects inactive cashier to /login', () => {
+      expect(resolveRedirect({ role: 'cashier', is_active: false }, '/cashier')).toBe('/login')
+    })
   })
 })

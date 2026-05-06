@@ -102,6 +102,29 @@ export function AddDeliveryForm({ shiftId, tanks }: Props) {
         />
       </div>
 
+      {/* Delivery note number */}
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">Delivery note number</label>
+        <input
+          name="delivery_note_number"
+          type="text"
+          required
+          placeholder="e.g. DN-2026-001"
+          className="w-full rounded border px-3 py-2 text-sm"
+        />
+      </div>
+
+      {/* Driver name */}
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">Driver name <span className="text-gray-400">(optional)</span></label>
+        <input
+          name="driver_name"
+          type="text"
+          placeholder="e.g. John Dube"
+          className="w-full rounded border px-3 py-2 text-sm"
+        />
+      </div>
+
       {/* Receipt photo */}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Delivery receipt photo (required)</label>

@@ -252,11 +252,13 @@ export async function saveDelivery(
 ): Promise<ActionResult> {
   const supabase = await createClient()
 
-  const tankId          = (formData.get('tank_id') as string) ?? ''
-  const litresReceived  = parseFloat(formData.get('litres_received') as string)
-  const deliveryNoteUrl = (formData.get('delivery_note_url') as string) ?? ''
+  const tankId             = (formData.get('tank_id') as string) ?? ''
+  const litresReceived     = parseFloat(formData.get('litres_received') as string)
+  const deliveryNoteUrl    = (formData.get('delivery_note_url') as string) ?? ''
+  const deliveryNoteNumber = (formData.get('delivery_note_number') as string) ?? ''
+  const driverName         = (formData.get('driver_name') as string) || null
 
-  const validation = validateDeliveryInput({ tankId, litresReceived, deliveryNoteUrl })
+  const validation = validateDeliveryInput({ tankId, litresReceived, deliveryNoteUrl, deliveryNoteNumber })
   if (!validation.valid) return { error: validation.error }
 
   const { data: shift } = await supabase
@@ -271,11 +273,13 @@ export async function saveDelivery(
   if (!profile) return { error: 'User profile not found' }
 
   const result = await createDelivery(supabase, {
-    stationId:      shift.station_id,
+    stationId:          shift.station_id,
     tankId,
     litresReceived,
     deliveryNoteUrl,
-    recordedBy:     profile.id,
+    deliveryNoteNumber,
+    driverName,
+    recordedBy:         profile.id,
   })
   if (result.error) return { error: result.error }
 

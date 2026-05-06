@@ -18,6 +18,7 @@ function makeBundle(overrides: Partial<ShiftDataBundle> = {}): ShiftDataBundle {
       station_id:   'station-1',
       period:       'morning',
       shift_date:   '2026-03-20',
+      started_at:   '2026-03-20T06:00:00Z',
       submitted_at: '2026-03-20T08:00:00Z',
     },
     tanks:        [{ id: 'T1', fuel_grade_id: '95' }],
@@ -30,7 +31,7 @@ function makeBundle(overrides: Partial<ShiftDataBundle> = {}): ShiftDataBundle {
     ],
     posLines:   [{ fuel_grade_id: '95', litres_sold: 2000, revenue_zar: 34000 }],
     deliveries: [],
-    priceRows:  [{ fuel_grade_id: '95', price_per_litre: 17.00, effective_from: '2026-01-01T00:00:00Z' }],
+    priceRows:  [{ station_id: 'station-1', fuel_grade_id: '95', sell_price_per_litre: 17.00, cost_per_litre: 14.00, valid_from: '2026-01-01T00:00:00Z', valid_to: null }],
     ...overrides,
   }
 }
@@ -70,7 +71,7 @@ describe('assemblePureInputs — delivery period filtering', () => {
     const { inputs } = assemblePureInputs(makeBundle({
       shift: {
         id: 'shift-1', station_id: 'station-1', period: 'morning',
-        shift_date: '2026-03-20', submitted_at: '2026-03-20T08:00:00Z',
+        shift_date: '2026-03-20', started_at: '2026-03-20T06:00:00Z', submitted_at: '2026-03-20T08:00:00Z',
       },
       deliveries: [
         { tank_id: 'T1', litres_received: 5000, delivered_at: '2026-03-20T06:00:00Z' }, // morning ✓
@@ -85,7 +86,7 @@ describe('assemblePureInputs — delivery period filtering', () => {
     const { inputs } = assemblePureInputs(makeBundle({
       shift: {
         id: 'shift-1', station_id: 'station-1', period: 'evening',
-        shift_date: '2026-03-20', submitted_at: '2026-03-20T20:00:00Z',
+        shift_date: '2026-03-20', started_at: '2026-03-20T12:00:00Z', submitted_at: '2026-03-20T20:00:00Z',
       },
       deliveries: [
         { tank_id: 'T1', litres_received: 5000, delivered_at: '2026-03-20T06:00:00Z' }, // morning ✗
@@ -100,19 +101,19 @@ describe('assemblePureInputs — delivery period filtering', () => {
 // ── assemblePureInputs — price snapshot ───────────────────────────────────────
 
 describe('assemblePureInputs — price snapshot', () => {
-  it('emits SUBMITTED_AT_NULL when submitted_at is null', () => {
+  it('emits STARTED_AT_NULL when started_at is null', () => {
     const { warnings } = assemblePureInputs(makeBundle({
       shift: {
         id: 'shift-1', station_id: 'station-1', period: 'morning',
-        shift_date: '2026-03-20', submitted_at: null,
+        shift_date: '2026-03-20', started_at: null, submitted_at: null,
       },
     }))
-    expect(warnings.some(w => w.code === 'SUBMITTED_AT_NULL')).toBe(true)
+    expect(warnings.some(w => w.code === 'STARTED_AT_NULL')).toBe(true)
   })
 
   it('emits PRICE_NOT_FOUND and defaults to 0 when no price row exists for a grade', () => {
     const { inputs, warnings } = assemblePureInputs(makeBundle({ priceRows: [] }))
-    expect(inputs.prices[0].price_per_litre).toBe(0)
+    expect(inputs.prices[0].sell_price_per_litre).toBe(0)
     expect(warnings.some(w => w.code === 'PRICE_NOT_FOUND')).toBe(true)
   })
 })

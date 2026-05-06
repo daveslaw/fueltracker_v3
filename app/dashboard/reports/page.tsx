@@ -61,7 +61,7 @@ export default async function DailyReportPage({ searchParams }: Props) {
     shiftIds.length > 0
       ? supabase.from('pos_submissions').select('id, shift_id').in('shift_id', shiftIds)
       : Promise.resolve({ data: [] as any[] }),
-    supabase.from('fuel_prices').select('fuel_grade_id, price_per_litre, effective_from').order('effective_from'),
+    supabase.from('fuel_prices').select('station_id, fuel_grade_id, sell_price_per_litre, cost_per_litre, valid_from, valid_to').order('valid_from'),
   ])
 
   const recs = recsResult.data ?? []
@@ -93,13 +93,16 @@ export default async function DailyReportPage({ searchParams }: Props) {
       : []
 
     const gradeIds = [...new Set(posLines.map((l: any) => l.fuel_grade_id as string))]
-    const prices = gradeIds.map(gid => ({
-      fuel_grade_id: gid,
-      price_per_litre: selectActivePriceAt(
-        (allPrices ?? []).filter(p => p.fuel_grade_id === gid),
-        s.submitted_at ?? selectedDate,
-      ) ?? 0,
-    }))
+    const prices = gradeIds.map(gid => {
+      const rows = (allPrices ?? []).filter(
+        (p: any) => p.fuel_grade_id === gid && p.station_id === s.station_id,
+      )
+      const active = selectActivePriceAt(rows, s.started_at ?? s.submitted_at ?? selectedDate)
+      return {
+        fuel_grade_id:        gid,
+        sell_price_per_litre: active?.sell_price_per_litre ?? 0,
+      }
+    })
 
     const financial = buildFinancialLines(posLines, prices)
     return { period, status, partial, rec, financial }
@@ -234,7 +237,7 @@ export default async function DailyReportPage({ searchParams }: Props) {
                           <tr key={line.fuel_grade_id}>
                             <td className="px-3 py-2 font-medium">{line.fuel_grade_id}</td>
                             <td className="px-3 py-2 text-right">{fmtL(line.litres_sold)}</td>
-                            <td className="px-3 py-2 text-right">R {line.price_per_litre.toFixed(2)}</td>
+                            <td className="px-3 py-2 text-right">R {line.sell_price_per_litre.toFixed(2)}</td>
                             <td className="px-3 py-2 text-right">{fmtR(line.expected_revenue_zar)}</td>
                             <td className="px-3 py-2 text-right">{fmtR(line.pos_revenue_zar)}</td>
                             <td className="px-3 py-2 text-right"><VarianceCell v={line.variance_zar} unit="R" /></td>

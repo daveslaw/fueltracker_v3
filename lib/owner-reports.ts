@@ -25,17 +25,17 @@ export interface PosLine {
 }
 
 export interface FuelPrice {
-  fuel_grade_id: string
-  price_per_litre: number
+  fuel_grade_id:        string
+  sell_price_per_litre: number
 }
 
 export interface FinancialLine {
-  fuel_grade_id: string
-  litres_sold: number
-  price_per_litre: number
+  fuel_grade_id:        string
+  litres_sold:          number
+  sell_price_per_litre: number
   expected_revenue_zar: number
-  pos_revenue_zar: number
-  variance_zar: number
+  pos_revenue_zar:      number
+  variance_zar:         number
 }
 
 export interface FinancialTotals {
@@ -53,15 +53,15 @@ export function buildFinancialLines(
   posLines: PosLine[],
   prices: FuelPrice[],
 ): FinancialReport {
-  const priceMap = new Map(prices.map(p => [p.fuel_grade_id, p.price_per_litre]))
+  const priceMap = new Map(prices.map(p => [p.fuel_grade_id, p.sell_price_per_litre]))
 
   const lines: FinancialLine[] = posLines.map(pl => {
-    const price_per_litre = priceMap.get(pl.fuel_grade_id) ?? 0
-    const expected = Math.round(pl.litres_sold * price_per_litre * 100) / 100
+    const sell_price_per_litre = priceMap.get(pl.fuel_grade_id) ?? 0
+    const expected = Math.round(pl.litres_sold * sell_price_per_litre * 100) / 100
     return {
       fuel_grade_id: pl.fuel_grade_id,
       litres_sold: pl.litres_sold,
-      price_per_litre,
+      sell_price_per_litre,
       expected_revenue_zar: expected,
       pos_revenue_zar: pl.revenue_zar,
       variance_zar: Math.round((expected - pl.revenue_zar) * 100) / 100,

@@ -9,7 +9,7 @@ import {
 // --- fixtures ---
 const shift = (period: 'morning' | 'evening', status: string) => ({ period, status }) as { period: 'morning' | 'evening'; status: import('../lib/owner-reports').ShiftStatus }
 const posLine = (fuel_grade_id: string, litres_sold: number, revenue_zar: number) => ({ fuel_grade_id, litres_sold, revenue_zar })
-const price = (fuel_grade_id: string, price_per_litre: number) => ({ fuel_grade_id, price_per_litre })
+const price = (fuel_grade_id: string, sell_price_per_litre: number) => ({ fuel_grade_id, sell_price_per_litre })
 
 // ── buildStationDayStatus ──────────────────────────────────────────────────
 
@@ -62,12 +62,12 @@ describe('buildFinancialLines', () => {
     expect(result.totals.variance_zar).toBe(500)
   })
 
-  it('uses 0 price_per_litre when grade has no price entry', () => {
+  it('uses 0 sell_price_per_litre when grade has no price entry', () => {
     const result = buildFinancialLines(
       [posLine('93', 500, 8000)],
       [],
     )
-    expect(result.lines[0].price_per_litre).toBe(0)
+    expect(result.lines[0].sell_price_per_litre).toBe(0)
     expect(result.lines[0].expected_revenue_zar).toBe(0)
     expect(result.lines[0].variance_zar).toBe(-8000)
   })

@@ -147,7 +147,7 @@ export default async function CloseSummaryPage({ params }: Props) {
         : Promise.resolve({ data: [] as any[] }),
       rec
         ? supabase.from('reconciliation_grade_lines')
-            .select('fuel_grade_id, meter_delta, pos_litres_sold, variance_litres, price_per_litre, expected_revenue_zar, pos_revenue_zar, variance_zar')
+            .select('fuel_grade_id, meter_delta, pos_litres_sold, variance_litres, sell_price_per_litre, expected_revenue_zar, pos_revenue_zar, variance_zar')
             .eq('reconciliation_id', rec.id)
         : Promise.resolve({ data: [] as any[] }),
       posSubmission
