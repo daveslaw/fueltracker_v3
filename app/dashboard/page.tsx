@@ -139,22 +139,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <nav
-        className="flex flex-wrap items-center gap-1 rounded-xl p-1.5 text-sm"
-        style={{ background: '#141B2D', border: '1px solid #2A3656' }}
-      >
-        <Link href="/dashboard/reports"         className="px-3 py-1.5 rounded-lg font-medium transition-colors text-gray-500 hover:text-amber-500 hover:bg-gray-100">Daily report</Link>
-        <Link href="/dashboard/reports/weekly"  className="px-3 py-1.5 rounded-lg font-medium transition-colors text-gray-500 hover:text-amber-500 hover:bg-gray-100">Weekly</Link>
-        <Link href="/dashboard/reports/monthly" className="px-3 py-1.5 rounded-lg font-medium transition-colors text-gray-500 hover:text-amber-500 hover:bg-gray-100">Monthly</Link>
-        <span aria-hidden style={{ width: 1, height: 18, background: '#2A3656', flexShrink: 0 }} />
-        <Link href="/dashboard/tank-trends"     className="px-3 py-1.5 rounded-lg font-medium transition-colors text-gray-500 hover:text-amber-500 hover:bg-gray-100">Tank trends</Link>
-        <Link href="/dashboard/history"         className="px-3 py-1.5 rounded-lg font-medium transition-colors text-gray-500 hover:text-amber-500 hover:bg-gray-100">Shift history</Link>
-        <span aria-hidden style={{ width: 1, height: 18, background: '#2A3656', flexShrink: 0 }} />
-        <Link href="/dashboard/config"          className="px-3 py-1.5 rounded-lg font-medium transition-colors text-gray-500 hover:text-amber-500 hover:bg-gray-100">Config</Link>
-        <Link href="/dashboard/users"           className="px-3 py-1.5 rounded-lg font-medium transition-colors text-gray-500 hover:text-amber-500 hover:bg-gray-100">Users</Link>
-      </nav>
-
-      {stationList.length === 0 && (
+{stationList.length === 0 && (
         <p className="text-sm text-gray-400">No stations configured.</p>
       )}
 
