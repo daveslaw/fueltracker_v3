@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+﻿import { describe, it, expect, vi } from 'vitest'
 import {
   assembleStockInputs,
   runStockReconciliationWith,
@@ -8,16 +8,27 @@ import type {
   StockDataRepository,
   StockWriter,
 } from '../lib/dry-stock-runner'
+import type { ProductPriceRow } from '../lib/product-pricing'
 
 // ── Fixture builder ────────────────────────────────────────────────────────────
 
+const DEFAULT_PRICE_ROW: ProductPriceRow = {
+  product_id: 'prod-1',
+  station_id: 'station-1',
+  cost_price:  8.50,
+  sell_price:  100,
+  valid_from:  '2026-01-01T00:00:00Z',
+  valid_to:    null,
+}
+
 function makeBundle(overrides: Partial<StockDataBundle> = {}): StockDataBundle {
   return {
-    shift: { id: 'shift-1', station_id: 'station-1' },
-    products: [{ id: 'prod-1', sell_price: 100 }],
-    openingCounts: [{ product_id: 'prod-1', count: 10 }],
-    closingCounts: [{ product_id: 'prod-1', closing_count: 8 }],
-    deliveries: [],
+    shift:            { id: 'shift-1', station_id: 'station-1', started_at: '2026-03-20T06:00:00Z' },
+    products:         [{ id: 'prod-1' }],
+    priceRows:        [DEFAULT_PRICE_ROW],
+    openingCounts:    [{ product_id: 'prod-1', count: 10 }],
+    closingCounts:    [{ product_id: 'prod-1', closing_count: 8 }],
+    deliveries:       [],
     posDryStockLines: [{ product_id: 'prod-1', units_sold: 2 }],
     ...overrides,
   }
@@ -42,82 +53,111 @@ describe('assembleStockInputs — tracer bullet', () => {
   })
 })
 
-describe('assembleStockInputs — opening count resolution', () => {
-  it('uses opening count from openingCounts for each product', () => {
+describe('assembleStockInputs — versioned price lookup', () => {
+  it('resolves sellPrice from priceRows at shift.started_at', () => {
+    const inputs = assembleStockInputs(makeBundle({
+      priceRows: [{ ...DEFAULT_PRICE_ROW, sell_price: 55 }],
+    }))
+    expect(inputs[0].sellPrice).toBe(55)
+  })
+
+  it('uses the price active at shift.started_at, not a newer price', () => {
     const bundle = makeBundle({
-      openingCounts: [{ product_id: 'prod-1', count: 25 }],
+      shift: { id: 'shift-1', station_id: 'station-1', started_at: '2026-02-01T06:00:00Z' },
+      priceRows: [
+        { ...DEFAULT_PRICE_ROW, sell_price: 80, valid_from: '2026-01-01T00:00:00Z', valid_to: '2026-03-01T00:00:00Z' },
+        { ...DEFAULT_PRICE_ROW, sell_price: 120, valid_from: '2026-03-01T00:00:00Z', valid_to: null },
+      ],
     })
     const inputs = assembleStockInputs(bundle)
+    expect(inputs[0].sellPrice).toBe(80)
+  })
+
+  it('defaults sellPrice to 0 when no price record exists for the product', () => {
+    const bundle = makeBundle({ priceRows: [] })
+    const inputs = assembleStockInputs(bundle)
+    expect(inputs[0].sellPrice).toBe(0)
+  })
+
+  it('does not throw when price record is missing — produces variance_zar of 0', () => {
+    const bundle = makeBundle({
+      priceRows:        [],
+      openingCounts:    [{ product_id: 'prod-1', count: 10 }],
+      closingCounts:    [{ product_id: 'prod-1', closing_count: 8 }],
+      posDryStockLines: [{ product_id: 'prod-1', units_sold: 2 }],
+    })
+    expect(() => assembleStockInputs(bundle)).not.toThrow()
+    const inputs = assembleStockInputs(bundle)
+    expect(inputs[0].sellPrice).toBe(0)
+  })
+})
+
+describe('assembleStockInputs — opening count resolution', () => {
+  it('uses opening count from openingCounts for each product', () => {
+    const inputs = assembleStockInputs(makeBundle({
+      openingCounts: [{ product_id: 'prod-1', count: 25 }],
+    }))
     expect(inputs[0].openingCount).toBe(25)
   })
 
   it('defaults opening count to 0 when product has no entry in openingCounts', () => {
-    const bundle = makeBundle({ openingCounts: [] })
-    const inputs = assembleStockInputs(bundle)
+    const inputs = assembleStockInputs(makeBundle({ openingCounts: [] }))
     expect(inputs[0].openingCount).toBe(0)
   })
 })
 
 describe('assembleStockInputs — deliveries', () => {
   it('sums deliveries for the matching product', () => {
-    const bundle = makeBundle({
+    const inputs = assembleStockInputs(makeBundle({
       deliveries: [
         { product_id: 'prod-1', quantity: 6 },
         { product_id: 'prod-1', quantity: 4 },
       ],
-    })
-    const inputs = assembleStockInputs(bundle)
+    }))
     expect(inputs[0].deliveries).toBe(10)
   })
 
   it('defaults deliveries to 0 for a product with no delivery rows', () => {
     const bundle = makeBundle({
-      products: [{ id: 'prod-1', sell_price: 50 }, { id: 'prod-2', sell_price: 75 }],
-      openingCounts: [
-        { product_id: 'prod-1', count: 5 },
-        { product_id: 'prod-2', count: 3 },
+      products:         [{ id: 'prod-1' }, { id: 'prod-2' }],
+      priceRows:        [
+        DEFAULT_PRICE_ROW,
+        { ...DEFAULT_PRICE_ROW, product_id: 'prod-2' },
       ],
-      closingCounts: [
-        { product_id: 'prod-1', closing_count: 5 },
-        { product_id: 'prod-2', closing_count: 3 },
-      ],
-      deliveries: [{ product_id: 'prod-1', quantity: 2 }],
+      openingCounts:    [{ product_id: 'prod-1', count: 5 }, { product_id: 'prod-2', count: 3 }],
+      closingCounts:    [{ product_id: 'prod-1', closing_count: 5 }, { product_id: 'prod-2', closing_count: 3 }],
+      deliveries:       [{ product_id: 'prod-1', quantity: 2 }],
       posDryStockLines: [],
     })
     const inputs = assembleStockInputs(bundle)
-    const prod2 = inputs.find(i => i.productId === 'prod-2')!
-    expect(prod2.deliveries).toBe(0)
+    expect(inputs.find(i => i.productId === 'prod-2')!.deliveries).toBe(0)
   })
 
   it('does not include deliveries for a different product', () => {
-    const bundle = makeBundle({
+    const inputs = assembleStockInputs(makeBundle({
       deliveries: [{ product_id: 'prod-OTHER', quantity: 99 }],
-    })
-    const inputs = assembleStockInputs(bundle)
+    }))
     expect(inputs[0].deliveries).toBe(0)
   })
 })
 
 describe('assembleStockInputs — POS units sold', () => {
   it('uses pos units sold from posDryStockLines', () => {
-    const bundle = makeBundle({
+    const inputs = assembleStockInputs(makeBundle({
       posDryStockLines: [{ product_id: 'prod-1', units_sold: 7 }],
-    })
-    const inputs = assembleStockInputs(bundle)
+    }))
     expect(inputs[0].posUnitsSold).toBe(7)
   })
 
   it('defaults posUnitsSold to 0 when no POS line for product', () => {
-    const bundle = makeBundle({ posDryStockLines: [] })
-    const inputs = assembleStockInputs(bundle)
+    const inputs = assembleStockInputs(makeBundle({ posDryStockLines: [] }))
     expect(inputs[0].posUnitsSold).toBe(0)
   })
 })
 
 describe('assembleStockInputs — actual closing count', () => {
   it('defaults actualClosing to 0 when no stock reading for product', () => {
-    const bundle = makeBundle({ closingCounts: [] })
-    const inputs = assembleStockInputs(bundle)
+    const inputs = assembleStockInputs(makeBundle({ closingCounts: [] }))
     expect(inputs[0].actualClosing).toBe(0)
   })
 })
@@ -125,9 +165,13 @@ describe('assembleStockInputs — actual closing count', () => {
 describe('assembleStockInputs — multiple products', () => {
   it('returns one input per product', () => {
     const bundle = makeBundle({
-      products: [{ id: 'prod-1', sell_price: 100 }, { id: 'prod-2', sell_price: 200 }],
-      openingCounts: [{ product_id: 'prod-1', count: 10 }, { product_id: 'prod-2', count: 5 }],
-      closingCounts: [{ product_id: 'prod-1', closing_count: 8 }, { product_id: 'prod-2', closing_count: 5 }],
+      products:         [{ id: 'prod-1' }, { id: 'prod-2' }],
+      priceRows:        [
+        DEFAULT_PRICE_ROW,
+        { ...DEFAULT_PRICE_ROW, product_id: 'prod-2', sell_price: 200 },
+      ],
+      openingCounts:    [{ product_id: 'prod-1', count: 10 }, { product_id: 'prod-2', count: 5 }],
+      closingCounts:    [{ product_id: 'prod-1', closing_count: 8 }, { product_id: 'prod-2', closing_count: 5 }],
       posDryStockLines: [{ product_id: 'prod-1', units_sold: 2 }],
     })
     const inputs = assembleStockInputs(bundle)

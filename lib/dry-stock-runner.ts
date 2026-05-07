@@ -7,17 +7,20 @@
  *       →  StockWriter.persist (I/O, injected)
  */
 
-import { createAdminClient }              from '@/lib/supabase/admin'
-import { computeStockReconciliation }     from '@/lib/stock-reconciliation'
-import type { StockLine }                 from '@/lib/stock-reconciliation'
-import type { StockReconciliationInput }  from '@/lib/stock-reconciliation'
-import type { SupabaseClient }            from '@supabase/supabase-js'
+import { createAdminClient }                    from '@/lib/supabase/admin'
+import { computeStockReconciliation }           from '@/lib/stock-reconciliation'
+import { selectActiveProductPriceAt }           from '@/lib/product-pricing'
+import type { StockLine }                       from '@/lib/stock-reconciliation'
+import type { StockReconciliationInput }        from '@/lib/stock-reconciliation'
+import type { ProductPriceRow }                 from '@/lib/product-pricing'
+import type { SupabaseClient }                  from '@supabase/supabase-js'
 
 // ── Raw data bundle ────────────────────────────────────────────────────────────
 
 export interface StockDataBundle {
-  shift:           { id: string; station_id: string }
-  products:        { id: string; sell_price: number }[]
+  shift:           { id: string; station_id: string; started_at: string }
+  products:        { id: string }[]
+  priceRows:       ProductPriceRow[]
   openingCounts:   { product_id: string; count: number }[]
   closingCounts:   { product_id: string; closing_count: number }[]
   deliveries:      { product_id: string; quantity: number }[]
@@ -45,13 +48,16 @@ export function assembleStockInputs(bundle: StockDataBundle): StockReconciliatio
       .filter(d => d.product_id === product.id)
       .reduce((sum, d) => sum + d.quantity, 0)
 
+    const productPrices = bundle.priceRows.filter(r => r.product_id === product.id)
+    const price = selectActiveProductPriceAt(productPrices, bundle.shift.started_at)
+
     return {
       productId:     product.id,
       openingCount:  opening?.count ?? 0,
       deliveries:    deliveriesTotal,
       posUnitsSold:  posLine?.units_sold ?? 0,
       actualClosing: closing?.closing_count ?? 0,
-      sellPrice:     product.sell_price,
+      sellPrice:     price?.sell_price ?? 0,
     }
   })
 }
@@ -64,7 +70,7 @@ export function createSupabaseStockRepository(db: SupabaseClient): StockDataRepo
       // ── 1. Shift ──────────────────────────────────────────────────────────
       const { data: shift, error: shiftErr } = await db
         .from('shifts')
-        .select('id, station_id, shift_date')
+        .select('id, station_id, shift_date, started_at')
         .eq('id', shiftId)
         .single()
       if (shiftErr || !shift) return { error: shiftErr?.message ?? 'Shift not found' }
@@ -72,12 +78,20 @@ export function createSupabaseStockRepository(db: SupabaseClient): StockDataRepo
       // ── 2. Products for this station ─────────────────────────────────────
       const { data: products } = await db
         .from('products')
-        .select('id, sell_price')
+        .select('id')
         .eq('station_id', shift.station_id)
         .eq('is_active', true)
       if (!products?.length) return { error: 'No active products configured for this station' }
 
-      // ── 3. Closing counts for this shift ──────────────────────────────────
+      // ── 3. Versioned prices at shift.started_at ───────────────────────────
+      const productIds = products.map((p: { id: string }) => p.id)
+      const { data: priceRows } = await db
+        .from('product_prices')
+        .select('product_id, station_id, cost_price, sell_price, valid_from, valid_to')
+        .eq('station_id', shift.station_id)
+        .in('product_id', productIds)
+
+      // ── 4. Closing counts for this shift ──────────────────────────────────
       const { data: closingCounts } = await db
         .from('stock_readings')
         .select('product_id, closing_count')
@@ -131,8 +145,9 @@ export function createSupabaseStockRepository(db: SupabaseClient): StockDataRepo
         : []
 
       return {
-        shift,
-        products:         (products ?? []) as { id: string; sell_price: number }[],
+        shift:            shift as { id: string; station_id: string; started_at: string },
+        products:         (products ?? []) as { id: string }[],
+        priceRows:        (priceRows ?? []) as ProductPriceRow[],
         openingCounts,
         closingCounts:    (closingCounts ?? []) as { product_id: string; closing_count: number }[],
         deliveries:       (deliveries ?? []) as { product_id: string; quantity: number }[],

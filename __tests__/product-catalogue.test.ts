@@ -1,154 +1,144 @@
-import { describe, it, expect } from 'vitest'
-import type { ProductCatalogueRepository, ProductInput } from '@/lib/product-catalogue'
+﻿import { describe, it, expect, vi } from 'vitest'
+import { createSupabaseProductCatalogueRepository } from '../lib/product-catalogue'
+import type { ProductPriceWriter } from '../lib/product-pricing'
 
-// ── In-memory fake ────────────────────────────────────────────────────────────
+// ── Mock helpers ──────────────────────────────────────────────────────────────
 
-type StoredProduct = {
-  id: string
-  station_id: string
-  stock_code: string
-  description: string
-  cost_price: number
-  sell_price: number
-  is_active: boolean
-}
-
-function makeInMemoryRepo(): ProductCatalogueRepository & { _products: StoredProduct[] } {
-  const products: StoredProduct[] = []
-  let nextId = 1
-
+function makeMockWriter(): ProductPriceWriter & {
+  closeCurrentPrice: ReturnType<typeof vi.fn>
+  insertPrice: ReturnType<typeof vi.fn>
+} {
   return {
-    _products: products,
-
-    async getProducts(stationId) {
-      return products.filter(p => p.station_id === stationId && p.is_active)
-    },
-
-    async upsertProduct(stationId, input) {
-      const existing = products.find(p => p.id === input.id)
-      if (existing) {
-        Object.assign(existing, { ...input, station_id: stationId })
-        return {}
-      }
-      products.push({
-        id: input.id ?? String(nextId++),
-        station_id: stationId,
-        stock_code: input.stock_code,
-        description: input.description,
-        cost_price: input.cost_price,
-        sell_price: input.sell_price,
-        is_active: true,
-      })
-      return {}
-    },
-
-    async deactivateProduct(productId) {
-      const product = products.find(p => p.id === productId)
-      if (product) product.is_active = false
-      return {}
-    },
+    closeCurrentPrice: vi.fn().mockResolvedValue(undefined),
+    insertPrice:       vi.fn().mockResolvedValue(undefined),
   }
 }
 
-// ── getProducts ───────────────────────────────────────────────────────────────
+function makeMockDb(singleResult = { data: { id: 'new-prod-uuid' }, error: null }) {
+  const chain = {
+    select:  vi.fn(),
+    insert:  vi.fn(),
+    update:  vi.fn(),
+    upsert:  vi.fn(),
+    eq:      vi.fn(),
+    order:   vi.fn(),
+    single:  vi.fn().mockResolvedValue(singleResult),
+  }
+  const fluent = ['select', 'insert', 'update', 'upsert', 'eq', 'order'] as const
+  fluent.forEach(k => (chain[k] as ReturnType<typeof vi.fn>).mockReturnValue(chain))
+  const db = { from: vi.fn().mockReturnValue(chain) }
+  return { db, chain }
+}
 
-describe('getProducts', () => {
-  it('tracer bullet: returns active products for the station', async () => {
-    const repo = makeInMemoryRepo()
-    await repo.upsertProduct('station-1', { stock_code: 'COKE-500', description: 'Coke 500ml', cost_price: 8.5, sell_price: 14.0 })
-    await repo.upsertProduct('station-1', { stock_code: 'WATER-500', description: 'Water 500ml', cost_price: 5.0, sell_price: 9.0 })
+// ── createProduct ─────────────────────────────────────────────────────────────
 
-    const products = await repo.getProducts('station-1')
-    expect(products).toHaveLength(2)
+describe('createProduct — tracer bullet', () => {
+  it('inserts a product row and returns its id', async () => {
+    const { db } = makeMockDb({ data: { id: 'new-prod-uuid' }, error: null })
+    const repo = createSupabaseProductCatalogueRepository(db as never, makeMockWriter())
+
+    const result = await repo.createProduct('station-1', {
+      stock_code: 'CHIP001', description: 'Lays Chips',
+      cost_price: 8.50, sell_price: 12.00, initial_stock_count: 24,
+    })
+
+    expect('error' in result).toBe(false)
+    expect((result as { id: string }).id).toBe('new-prod-uuid')
   })
 
-  it('excludes deactivated products', async () => {
-    const repo = makeInMemoryRepo()
-    await repo.upsertProduct('station-1', { stock_code: 'COKE-500', description: 'Coke 500ml', cost_price: 8.5, sell_price: 14.0 })
-    const products = await repo.getProducts('station-1')
-    await repo.deactivateProduct(products[0].id)
+  it('seeds a price record via the writer using the new product id', async () => {
+    const { db } = makeMockDb({ data: { id: 'new-prod-uuid' }, error: null })
+    const writer = makeMockWriter()
+    const repo = createSupabaseProductCatalogueRepository(db as never, writer)
 
-    const active = await repo.getProducts('station-1')
-    expect(active).toHaveLength(0)
+    await repo.createProduct('station-1', {
+      stock_code: 'CHIP001', description: 'Lays Chips',
+      cost_price: 8.50, sell_price: 12.00, initial_stock_count: 24,
+    })
+
+    expect(writer.insertPrice).toHaveBeenCalledOnce()
+    expect(writer.insertPrice).toHaveBeenCalledWith(
+      'new-prod-uuid', 'station-1', 8.50, 12.00, expect.any(String),
+    )
   })
 
-  it('excludes products from other stations', async () => {
-    const repo = makeInMemoryRepo()
-    await repo.upsertProduct('station-1', { stock_code: 'COKE-500', description: 'Coke 500ml', cost_price: 8.5, sell_price: 14.0 })
-    await repo.upsertProduct('station-2', { stock_code: 'CHIPS-100', description: 'Chips 100g', cost_price: 6.0, sell_price: 11.0 })
+  it('upserts the opening stock baseline with correct station, product, and quantity', async () => {
+    const { db, chain } = makeMockDb({ data: { id: 'new-prod-uuid' }, error: null })
+    ;(chain.upsert as ReturnType<typeof vi.fn>).mockResolvedValue({ error: null })
+    const repo = createSupabaseProductCatalogueRepository(db as never, makeMockWriter())
 
-    const products = await repo.getProducts('station-1')
-    expect(products).toHaveLength(1)
-    expect(products[0].stock_code).toBe('COKE-500')
+    await repo.createProduct('station-1', {
+      stock_code: 'CHIP001', description: 'Lays Chips',
+      cost_price: 8.50, sell_price: 12.00, initial_stock_count: 24,
+    })
+
+    expect(chain.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ station_id: 'station-1', product_id: 'new-prod-uuid', quantity: 24 }),
+      expect.anything(),
+    )
   })
 
-  it('returns empty list when no products exist for station', async () => {
-    const repo = makeInMemoryRepo()
-    const products = await repo.getProducts('station-1')
-    expect(products).toHaveLength(0)
+  it('returns an error and does not call writer when product insert fails', async () => {
+    const { db } = makeMockDb({ data: null, error: { message: 'duplicate stock_code' } })
+    const writer = makeMockWriter()
+    const repo = createSupabaseProductCatalogueRepository(db as never, writer)
+
+    const result = await repo.createProduct('station-1', {
+      stock_code: 'CHIP001', description: 'Lays Chips',
+      cost_price: 8.50, sell_price: 12.00, initial_stock_count: 24,
+    })
+
+    expect((result as { error: string }).error).toBe('duplicate stock_code')
+    expect(writer.insertPrice).not.toHaveBeenCalled()
   })
 })
 
-// ── upsertProduct ─────────────────────────────────────────────────────────────
+// ── updateProductDetails ──────────────────────────────────────────────────────
 
-describe('upsertProduct', () => {
-  it('creates a new product', async () => {
-    const repo = makeInMemoryRepo()
-    await repo.upsertProduct('station-1', { stock_code: 'COKE-500', description: 'Coke 500ml', cost_price: 8.5, sell_price: 14.0 })
+describe('updateProductDetails', () => {
+  it('updates stock_code and description without touching the price writer', async () => {
+    const { db, chain } = makeMockDb()
+    ;(chain.eq as ReturnType<typeof vi.fn>).mockResolvedValue({ error: null })
+    const writer = makeMockWriter()
+    const repo = createSupabaseProductCatalogueRepository(db as never, writer)
 
-    const products = await repo.getProducts('station-1')
-    expect(products).toHaveLength(1)
-    expect(products[0]).toMatchObject({ stock_code: 'COKE-500', sell_price: 14.0 })
-  })
+    const result = await repo.updateProductDetails('prod-1', {
+      stock_code: 'CHIP002', description: 'Lays Chips BBQ',
+    })
 
-  it('updates an existing product when id is provided', async () => {
-    const repo = makeInMemoryRepo()
-    await repo.upsertProduct('station-1', { stock_code: 'COKE-500', description: 'Coke 500ml', cost_price: 8.5, sell_price: 14.0 })
-
-    const [product] = await repo.getProducts('station-1')
-    await repo.upsertProduct('station-1', { id: product.id, stock_code: 'COKE-500', description: 'Coke 500ml UPDATED', cost_price: 9.0, sell_price: 15.0 })
-
-    const updated = await repo.getProducts('station-1')
-    expect(updated).toHaveLength(1)
-    expect(updated[0].description).toBe('Coke 500ml UPDATED')
-    expect(updated[0].sell_price).toBe(15.0)
-  })
-
-  it('returns no error on success', async () => {
-    const repo = makeInMemoryRepo()
-    const result = await repo.upsertProduct('station-1', { stock_code: 'X', description: 'Y', cost_price: 1, sell_price: 2 })
     expect(result.error).toBeUndefined()
+    expect(chain.update).toHaveBeenCalledWith({ stock_code: 'CHIP002', description: 'Lays Chips BBQ' })
+    expect(writer.insertPrice).not.toHaveBeenCalled()
+    expect(writer.closeCurrentPrice).not.toHaveBeenCalled()
   })
 })
 
 // ── deactivateProduct ─────────────────────────────────────────────────────────
 
 describe('deactivateProduct', () => {
-  it('removes product from active list', async () => {
-    const repo = makeInMemoryRepo()
-    await repo.upsertProduct('station-1', { stock_code: 'COKE-500', description: 'Coke 500ml', cost_price: 8.5, sell_price: 14.0 })
-    const [product] = await repo.getProducts('station-1')
+  it('sets is_active to false', async () => {
+    const { db, chain } = makeMockDb()
+    ;(chain.eq as ReturnType<typeof vi.fn>).mockResolvedValue({ error: null })
+    const repo = createSupabaseProductCatalogueRepository(db as never, makeMockWriter())
 
-    await repo.deactivateProduct(product.id)
-    const active = await repo.getProducts('station-1')
-    expect(active).toHaveLength(0)
-  })
+    const result = await repo.deactivateProduct('prod-1')
 
-  it('does not affect other products', async () => {
-    const repo = makeInMemoryRepo()
-    await repo.upsertProduct('station-1', { stock_code: 'COKE-500', description: 'Coke', cost_price: 8.5, sell_price: 14.0 })
-    await repo.upsertProduct('station-1', { stock_code: 'WATER-500', description: 'Water', cost_price: 5.0, sell_price: 9.0 })
-
-    const products = await repo.getProducts('station-1')
-    await repo.deactivateProduct(products[0].id)
-
-    const active = await repo.getProducts('station-1')
-    expect(active).toHaveLength(1)
-  })
-
-  it('returns no error on success', async () => {
-    const repo = makeInMemoryRepo()
-    const result = await repo.deactivateProduct('nonexistent-id')
     expect(result.error).toBeUndefined()
+    expect(chain.update).toHaveBeenCalledWith({ is_active: false })
+  })
+})
+
+// ── reactivateProduct ─────────────────────────────────────────────────────────
+
+describe('reactivateProduct', () => {
+  it('sets is_active to true', async () => {
+    const { db, chain } = makeMockDb()
+    ;(chain.eq as ReturnType<typeof vi.fn>).mockResolvedValue({ error: null })
+    const repo = createSupabaseProductCatalogueRepository(db as never, makeMockWriter())
+
+    const result = await repo.reactivateProduct('prod-1')
+
+    expect(result.error).toBeUndefined()
+    expect(chain.update).toHaveBeenCalledWith({ is_active: true })
   })
 })

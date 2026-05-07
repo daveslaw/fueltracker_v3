@@ -22,6 +22,12 @@ export default async function ConfigPage() {
             Baselines
           </Link>
           <Link
+            href="/dashboard/config/products"
+            className="rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800"
+          >
+            Products
+          </Link>
+          <Link
             href="/dashboard/config/pricing"
             className="rounded border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800"
           >

@@ -5,7 +5,7 @@ import { submitCashierShift } from './actions'
 
 function CheckItem({ label, done }: { label: string; done: boolean }) {
   return (
-    <li className="flex items-center gap-3 py-3 border-b last:border-0">
+    <li className="flex items-center gap-3 px-4 py-3.5 border-b last:border-0">
       <span
         aria-hidden
         className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-bold
