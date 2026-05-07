@@ -45,8 +45,8 @@ export async function getDeliveryReport(
       delivered_at,
       station_id,
       stations ( id, name ),
-      tanks ( id, name, fuel_grades ( name ) ),
-      user_profiles ( full_name )
+      tanks ( id, label, fuel_grade_id ),
+      user_profiles ( email )
     `)
     .gte('delivered_at', `${fromDate}T00:00:00Z`)
     .lte('delivered_at', `${toDate}T23:59:59.999Z`)
@@ -66,12 +66,12 @@ export async function getDeliveryReport(
     deliveredAt: r.delivered_at,
     stationId: r.station_id,
     stationName: r.stations?.name ?? '',
-    tankLabel: r.tanks?.name ?? '',
-    fuelGrade: r.tanks?.fuel_grades?.name ?? '',
+    tankLabel: r.tanks?.label ?? '',
+    fuelGrade: r.tanks?.fuel_grade_id ?? '',
     litresReceived: Number(r.litres_received),
     deliveryNoteNumber: r.delivery_note_number,
     driverName: r.driver_name ?? '—',
-    recordedByName: r.user_profiles?.full_name ?? '',
+    recordedByName: r.user_profiles?.email ?? '',
     deliveryNoteUrl: r.delivery_note_url ?? null,
   }))
 

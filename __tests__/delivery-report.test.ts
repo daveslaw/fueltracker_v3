@@ -19,8 +19,8 @@ const row = (overrides: Partial<RawRow> = {}): RawRow => ({
   delivered_at: '2026-05-01T08:00:00Z',
   station_id: 'station-1',
   stations: { id: 'station-1', name: 'Elegant Amaglug' },
-  tanks: { id: 'tank-1', name: 'Tank 1', fuel_grades: { name: '95' } },
-  user_profiles: { full_name: 'Jane Supervisor' },
+  tanks: { id: 'tank-1', label: 'Tank 1', fuel_grade_id: '95' },
+  user_profiles: { email: 'jane@example.com' },
   ...overrides,
 })
 
@@ -33,8 +33,8 @@ type RawRow = {
   delivered_at: string
   station_id: string
   stations: { id: string; name: string }
-  tanks: { id: string; name: string; fuel_grades: { name: string } }
-  user_profiles: { full_name: string }
+  tanks: { id: string; label: string; fuel_grade_id: string }
+  user_profiles: { email: string }
 }
 
 const params = {
@@ -58,7 +58,7 @@ describe('getDeliveryReport', () => {
     expect(result.rows[0].litresReceived).toBe(5000)
     expect(result.rows[0].deliveryNoteNumber).toBe('DN-001')
     expect(result.rows[0].driverName).toBe('John Smith')
-    expect(result.rows[0].recordedByName).toBe('Jane Supervisor')
+    expect(result.rows[0].recordedByName).toBe('jane@example.com')
     expect(result.rows[0].deliveryNoteUrl).toBe('https://storage.example.com/note.jpg')
   })
 
