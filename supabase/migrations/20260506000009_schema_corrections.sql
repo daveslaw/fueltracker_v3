@@ -7,7 +7,7 @@
 -- ── 1. Products per-station ───────────────────────────────────────────────────
 
 -- Remove the catalogue link from stations first (FK must go before table drop).
-alter table stations drop column if exists catalogue_id;
+alter table stations drop column if exists catalogue_id cascade;
 
 -- Attach station_id directly to products.
 alter table products add column station_id uuid references stations(id) on delete cascade;
@@ -22,7 +22,7 @@ drop table if exists product_catalogues;
 -- Replace RLS: owner full CRUD scoped to any station; station staff read-only.
 drop policy if exists "owner_products_all"          on products;
 drop policy if exists "station_user_products_select" on products;
-drop policy if exists "owner_catalogues_all"          on product_catalogues; -- already dropped
+-- policy "owner_catalogues_all" dropped via cascade above
 
 create policy "owner_products_all" on products
   for all to authenticated
@@ -97,7 +97,7 @@ alter table pos_dry_stock_lines
 
 -- Existing rows have no dry_stock_pos_submissions; make nullable initially, then
 -- drop old column. (No prod data in migrations; safe.)
-alter table pos_dry_stock_lines drop column pos_submission_id;
+alter table pos_dry_stock_lines drop column pos_submission_id cascade;
 
 alter table pos_dry_stock_lines
   alter column dry_stock_pos_submission_id set not null;
