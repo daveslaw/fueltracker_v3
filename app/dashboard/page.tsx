@@ -158,7 +158,7 @@ export default async function DashboardPage() {
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Date</label>
-            <input type="date" name="shift_date" defaultValue={today} required
+            <input type="date" name="shift_date" defaultValue={today} required lang="en-ZA"
               className="rounded border px-3 py-1.5 text-sm" />
           </div>
           <button type="submit"

@@ -145,11 +145,11 @@ export default async function TankTrendsPage({ searchParams }: Props) {
             <input type="hidden" name="preset" value="custom" />
             <div className="flex flex-col gap-1">
               <label className="text-xs text-muted-foreground">From</label>
-              <input type="date" name="from" defaultValue={fromDate} max={today} className="border rounded px-2 py-1.5 text-sm" />
+              <input type="date" name="from" defaultValue={fromDate} max={today} lang="en-ZA" className="border rounded px-2 py-1.5 text-sm" />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs text-muted-foreground">To</label>
-              <input type="date" name="to" defaultValue={toDate} max={today} className="border rounded px-2 py-1.5 text-sm" />
+              <input type="date" name="to" defaultValue={toDate} max={today} lang="en-ZA" className="border rounded px-2 py-1.5 text-sm" />
             </div>
             <button type="submit" className="rounded bg-black px-3 py-1.5 text-sm text-white">Apply</button>
           </form>

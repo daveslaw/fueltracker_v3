@@ -135,7 +135,7 @@ export default async function DailyReportPage({ searchParams }: Props) {
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs text-muted-foreground">Date</label>
-          <input type="date" name="date" defaultValue={selectedDate} max={today} className="border rounded px-2 py-1.5 text-sm" />
+          <input type="date" name="date" defaultValue={selectedDate} max={today} lang="en-ZA" className="border rounded px-2 py-1.5 text-sm" />
         </div>
         <button type="submit" className="rounded bg-black px-4 py-1.5 text-sm text-white">View</button>
         <a

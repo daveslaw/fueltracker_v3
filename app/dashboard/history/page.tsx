@@ -95,11 +95,11 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
       <form method="GET" action="/dashboard/history" className="flex flex-wrap gap-3 items-end">
         <div className="flex flex-col gap-1">
           <label className="text-xs text-muted-foreground">From</label>
-          <input type="date" name="from" defaultValue={fromDate} max={today} className="border rounded px-2 py-1.5 text-sm" />
+          <input type="date" name="from" defaultValue={fromDate} max={today} lang="en-ZA" className="border rounded px-2 py-1.5 text-sm" />
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs text-muted-foreground">To</label>
-          <input type="date" name="to" defaultValue={toDate} max={today} className="border rounded px-2 py-1.5 text-sm" />
+          <input type="date" name="to" defaultValue={toDate} max={today} lang="en-ZA" className="border rounded px-2 py-1.5 text-sm" />
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs text-muted-foreground">Station</label>

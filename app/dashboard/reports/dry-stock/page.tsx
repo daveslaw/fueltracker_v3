@@ -98,12 +98,12 @@ export default async function DryStockReportPage({ searchParams }: Props) {
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">From</label>
-          <input type="date" name="from" defaultValue={selectedFrom}
+          <input type="date" name="from" defaultValue={selectedFrom} lang="en-ZA"
             className="rounded border px-3 py-1.5 text-sm" />
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">To</label>
-          <input type="date" name="to" defaultValue={selectedTo}
+          <input type="date" name="to" defaultValue={selectedTo} lang="en-ZA"
             className="rounded border px-3 py-1.5 text-sm" />
         </div>
         <button type="submit"
