@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
-import { notFound } from 'next/navigation'
+import { notFound }     from 'next/navigation'
 import { getCashierProgress, canCashierSubmit } from '@/lib/cashier-progress'
+import { submitCashierShift } from './actions'
 
 function CheckItem({ label, done }: { label: string; done: boolean }) {
   return (
@@ -140,13 +141,16 @@ export default async function CashierHubPage({
           Submitted {new Date(shift.cashier_submitted_at).toLocaleString('en-ZA')}
         </p>
       ) : (
-        <button
-          disabled={!canSubmit}
-          className="w-full rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white
-            disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          Submit shift
-        </button>
+        <form action={async () => { 'use server'; await submitCashierShift(shiftId) }}>
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="w-full rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white
+              disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Submit shift
+          </button>
+        </form>
       )}
     </main>
   )

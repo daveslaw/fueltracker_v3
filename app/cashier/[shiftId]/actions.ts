@@ -1,7 +1,11 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { redirect }       from 'next/navigation'
+import { createClient }   from '@/lib/supabase/server'
+import { canCashierSubmit }            from '@/lib/cashier-progress'
+import { getCashierSubmissionState }   from '@/lib/cashier-submission'
+import { runStockReconciliation }      from '@/lib/dry-stock-runner'
 
 type ActionResult = { error: string } | { success: true }
 
@@ -147,4 +151,43 @@ export async function deleteCashierStockDelivery(
 
   revalidatePath(`/cashier/${shiftId}/stock-count`)
   return { success: true }
+}
+
+// ── submitCashierShift ────────────────────────────────────────────────────────
+
+export async function submitCashierShift(shiftId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('station_id')
+    .eq('user_id', user.id)
+    .single()
+  if (!profile) return { error: 'Profile not found' }
+
+  const { data: shiftCheck } = await supabase
+    .from('shifts').select('id').eq('id', shiftId).eq('station_id', profile.station_id).single()
+  if (!shiftCheck) return { error: 'Shift not found' }
+
+  const state = await getCashierSubmissionState(shiftId)
+  if (state.submitted) return { error: 'Shift already submitted' }
+  if (!canCashierSubmit(state.progress)) {
+    return { error: 'All three sections must be complete before submitting.' }
+  }
+
+  const { error: stampErr } = await supabase
+    .from('shifts')
+    .update({ cashier_submitted_at: new Date().toISOString() })
+    .eq('id', shiftId)
+  if (stampErr) return { error: stampErr.message }
+
+  const { error: reconErr } = await runStockReconciliation(shiftId)
+  if (reconErr) {
+    console.error('[submitCashierShift] dry stock reconciliation failed:', reconErr)
+  }
+
+  redirect(`/cashier/${shiftId}/summary`)
 }

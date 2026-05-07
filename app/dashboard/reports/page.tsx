@@ -114,6 +114,11 @@ export default async function DailyReportPage({ searchParams }: Props) {
         <div>
           <Link href="/dashboard" className="text-xs text-muted-foreground hover:underline">← Dashboard</Link>
           <h1 className="text-xl font-semibold mt-1">Daily Report</h1>
+          <div className="flex gap-3 mt-1">
+            <Link href="/dashboard/reports/weekly" className="text-xs text-blue-600 hover:underline">Weekly</Link>
+            <Link href="/dashboard/reports/monthly" className="text-xs text-blue-600 hover:underline">Monthly</Link>
+            <Link href="/dashboard/reports/dry-stock" className="text-xs text-blue-600 hover:underline">Dry Stock</Link>
+          </div>
           <p className="text-sm text-muted-foreground">{activeStation?.name}</p>
         </div>
       </div>

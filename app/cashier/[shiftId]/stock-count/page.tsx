@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
+import { getCashierSubmissionState } from '@/lib/cashier-submission'
 import { resolveOpeningCount } from '@/lib/stock-baselines'
 import { StockCountForm } from './StockCountForm'
 
@@ -19,15 +20,17 @@ export default async function CashierStockCountPage({ params }: Props) {
 
   const stationId = profile?.station_id ?? ''
 
-  const { data: shift } = await supabase
-    .from('shifts')
-    .select('id, period, shift_date, status, cashier_submitted_at')
-    .eq('id', shiftId)
-    .eq('station_id', stationId)
-    .single()
+  const [state, { data: shift }] = await Promise.all([
+    getCashierSubmissionState(shiftId),
+    supabase.from('shifts')
+      .select('id, period, shift_date, status')
+      .eq('id', shiftId)
+      .eq('station_id', stationId)
+      .single(),
+  ])
 
   if (!shift) notFound()
-  if (shift.cashier_submitted_at) redirect(`/cashier/${shiftId}`)
+  if (state.submitted) redirect(`/cashier/${shiftId}`)
 
   // Find prior closed shift for this station to resolve opening counts
   const { data: priorShiftData } = await supabase

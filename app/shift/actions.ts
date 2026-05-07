@@ -8,6 +8,7 @@ import { getCloseProgress, canSubmit } from '@/lib/shift-close'
 import { runReconciliation } from '@/lib/reconciliation-runner'
 import { canFlag, canOverride, validateFlagComment, validateOverride } from '@/lib/supervisor-review'
 import { createDelivery, deleteDelivery as dbDeleteDelivery, validateDeliveryInput } from '@/lib/deliveries'
+import { getCashierSubmissionState } from '@/lib/cashier-submission'
 import type { ShiftRow, ShiftPeriod, ShiftStatus } from '@/lib/shift-open'
 
 type ActionResult = { error: string } | { success: true }
@@ -161,51 +162,39 @@ export async function savePosSubmission(
 export async function submitShift(shiftId: string): Promise<ActionResult> {
   const supabase = await createClient()
 
-  const { data: shift } = await supabase
-    .from('shifts').select('station_id, status').eq('id', shiftId).single()
+  const [cashierState, { data: shift }] = await Promise.all([
+    getCashierSubmissionState(shiftId),
+    supabase.from('shifts').select('station_id, status').eq('id', shiftId).single(),
+  ])
   if (!shift) return { error: 'Shift not found' }
-  // Validate all close readings present
+
+  if (!cashierState.submitted)
+    return { error: 'Shift cannot be submitted: cashier must submit their shift first.' }
+
+  if (!canSubmit(shift.status as ShiftStatus, true, true))
+    return { error: 'Shift cannot be submitted in its current state.' }
+
+  // Validate supervisor pump + dip close readings present
   const [
     { data: pumps }, { data: closePumpReadings },
     { data: tanks }, { data: closeDipReadings },
-    { data: posSubmission },
   ] = await Promise.all([
     supabase.from('pumps').select('id').eq('station_id', shift.station_id),
     supabase.from('pump_readings').select('pump_id').eq('shift_id', shiftId).eq('type', 'close'),
     supabase.from('tanks').select('id').eq('station_id', shift.station_id),
     supabase.from('dip_readings').select('tank_id').eq('shift_id', shiftId).eq('type', 'close'),
-    supabase.from('pos_submissions').select('id').eq('shift_id', shiftId).maybeSingle(),
   ])
-
-  const hasCashierPos = !!posSubmission
-
-  // Dry stock complete = all active products for this station's catalogue have a closing count
-  const { data: stationRow } = await supabase
-    .from('stations').select('catalogue_id').eq('id', shift.station_id).single()
-  let hasDryStock = true
-  if (stationRow?.catalogue_id) {
-    const [{ data: activeProducts }, { data: stockReadings }] = await Promise.all([
-      supabase.from('products').select('id').eq('catalogue_id', stationRow.catalogue_id).eq('is_active', true),
-      supabase.from('stock_readings').select('product_id').eq('shift_id', shiftId),
-    ])
-    const productIds = (activeProducts ?? []).map((p) => p.id)
-    const readIds = new Set((stockReadings ?? []).map((r) => r.product_id))
-    hasDryStock = productIds.every((id) => readIds.has(id))
-  }
-
-  if (!canSubmit(shift.status as ShiftStatus, hasCashierPos, hasDryStock))
-    return { error: 'Shift cannot be submitted: check shift status and that cashier POS and dry stock tracks are complete.' }
 
   const progress = getCloseProgress(
     (pumps ?? []).map((p) => p.id),
     (closePumpReadings ?? []).map((r) => r.pump_id),
     (tanks ?? []).map((t) => t.id),
     (closeDipReadings ?? []).map((r) => r.tank_id),
-    hasCashierPos,
-    hasDryStock,
+    true,
+    true,
   )
 
-  if (!progress.isComplete) return { error: 'All close readings, cashier POS, and dry stock count are required before submitting.' }
+  if (!progress.isComplete) return { error: 'All close readings, cashier submission, and dry stock count are required before submitting.' }
 
   const submittedAt = new Date().toISOString()
   const { error } = await supabase

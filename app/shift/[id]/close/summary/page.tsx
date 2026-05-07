@@ -21,7 +21,7 @@ export default async function CloseSummaryPage({ params }: Props) {
 
   const { data: shift } = await supabase
     .from('shifts')
-    .select('id, station_id, period, shift_date, status, is_flagged, flag_comment')
+    .select('id, station_id, period, shift_date, status, is_flagged, flag_comment, cashier_submitted_at')
     .eq('id', shiftId)
     .single()
   if (!shift) notFound()
@@ -32,11 +32,10 @@ export default async function CloseSummaryPage({ params }: Props) {
     { data: station },
     { data: pumps }, { data: closePumpReadings },
     { data: tanks }, { data: closeDipReadings },
-    { data: posSubmission },
     shiftDeliveries,
     { data: rec },
   ] = await Promise.all([
-    supabase.from('stations').select('name, catalogue_id').eq('id', shift.station_id).single(),
+    supabase.from('stations').select('name').eq('id', shift.station_id).single(),
     supabase.from('pumps').select('id, label').eq('station_id', shift.station_id).order('label'),
     supabase.from('pump_readings')
       .select('id, pump_id, meter_reading, pumps(label)')
@@ -45,7 +44,6 @@ export default async function CloseSummaryPage({ params }: Props) {
     supabase.from('dip_readings')
       .select('id, tank_id, litres, tanks(label)')
       .eq('shift_id', shiftId).eq('type', 'close'),
-    supabase.from('pos_submissions').select('id').eq('shift_id', shiftId).maybeSingle(),
     getShiftDeliveries(supabase, {
       stationId: shift.station_id,
       shiftDate: shift.shift_date,
@@ -57,24 +55,21 @@ export default async function CloseSummaryPage({ params }: Props) {
       .maybeSingle(),
   ])
 
-  // Dry stock complete = all active products for this station's catalogue have a closing count
-  let hasDryStock = true
-  if (station?.catalogue_id) {
-    const [{ data: activeProducts }, { data: stockReadings }] = await Promise.all([
-      supabase.from('products').select('id').eq('catalogue_id', station.catalogue_id).eq('is_active', true),
-      supabase.from('stock_readings').select('product_id').eq('shift_id', shiftId),
-    ])
-    const productIds = (activeProducts ?? []).map(p => p.id)
-    const readIds = new Set((stockReadings ?? []).map(r => r.product_id))
-    hasDryStock = productIds.every(id => readIds.has(id))
-  }
+  // Dry stock complete = all active products for this station have a closing count
+  const [{ data: activeProducts }, { data: stockReadings }] = await Promise.all([
+    supabase.from('products').select('id').eq('station_id', shift.station_id).eq('is_active', true),
+    supabase.from('stock_readings').select('product_id').eq('shift_id', shiftId),
+  ])
+  const productIds = (activeProducts ?? []).map(p => p.id)
+  const readIds    = new Set((stockReadings ?? []).map(r => r.product_id))
+  const hasDryStock = productIds.every(id => readIds.has(id))
 
   const progress = getCloseProgress(
     (pumps ?? []).map(p => p.id),
     (closePumpReadings ?? []).map(r => r.pump_id),
     (tanks ?? []).map(t => t.id),
     (closeDipReadings ?? []).map(r => r.tank_id),
-    !!posSubmission,
+    !!shift.cashier_submitted_at,
     hasDryStock,
   )
 
@@ -108,12 +103,22 @@ export default async function CloseSummaryPage({ params }: Props) {
             total={progress.tanks.total}
             href={`/shift/${shiftId}/close/dips`}
           />
-          <ProgressRow
-            label="POS Z-report"
-            done={progress.pos ? 1 : 0}
-            total={1}
-            href={`/shift/${shiftId}/close/pos`}
-          />
+          {/* Cashier status — read-only, not a supervisor step */}
+          <div className="flex items-center justify-between rounded-lg border px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className={`text-lg ${shift.cashier_submitted_at ? 'text-green-600' : 'text-gray-300'}`}>
+                {shift.cashier_submitted_at ? '✓' : '○'}
+              </span>
+              <span className={shift.cashier_submitted_at ? 'text-gray-800' : 'text-gray-500'}>
+                Cashier
+              </span>
+            </div>
+            <span className="text-xs font-medium">
+              {shift.cashier_submitted_at
+                ? <span className="text-green-700">Submitted</span>
+                : <span className="text-gray-400">Pending</span>}
+            </span>
+          </div>
           <div className="flex items-center justify-between rounded-lg border px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="text-lg text-gray-300">○</span>
@@ -150,7 +155,10 @@ export default async function CloseSummaryPage({ params }: Props) {
 
   // ── Closed view: reconciliation results + flag + overrides + audit trail ──
 
-  // ── Batch B: keyed on rec.id / posSubmission.id (both known after Batch A) ─
+  // ── Batch B: reconciliation lines + POS corrections + audit trail ──────────
+  const { data: posSubmission } = await supabase
+    .from('pos_submissions').select('id').eq('shift_id', shiftId).maybeSingle()
+
   const [{ data: tankLines }, { data: gradeLines }, { data: posLines }, { data: overrides }] =
     await Promise.all([
       rec
@@ -199,9 +207,18 @@ export default async function CloseSummaryPage({ params }: Props) {
       <div>
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold">Shift Closed</h1>
-          {shift.is_flagged && (
-            <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded font-medium">Flagged</span>
-          )}
+          <div className="flex items-center gap-2">
+            <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+              shift.cashier_submitted_at
+                ? 'bg-green-100 text-green-700'
+                : 'bg-yellow-100 text-yellow-700'
+            }`}>
+              Cashier: {shift.cashier_submitted_at ? 'Submitted' : 'Pending'}
+            </span>
+            {shift.is_flagged && (
+              <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded font-medium">Flagged</span>
+            )}
+          </div>
         </div>
         <p className="text-sm text-gray-500 capitalize mt-0.5">
           {station?.name} · {shift.period} · {shift.shift_date}

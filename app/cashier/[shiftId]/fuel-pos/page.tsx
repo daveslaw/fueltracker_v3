@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
+import { getCashierSubmissionState } from '@/lib/cashier-submission'
 import { FuelPosForm } from './FuelPosForm'
 
 type Props = { params: Promise<{ shiftId: string }> }
@@ -16,15 +17,17 @@ export default async function CashierFuelPosPage({ params }: Props) {
     .eq('user_id', user!.id)
     .single()
 
-  const { data: shift } = await supabase
-    .from('shifts')
-    .select('id, period, shift_date, status, cashier_submitted_at')
-    .eq('id', shiftId)
-    .eq('station_id', profile?.station_id ?? '')
-    .single()
+  const [state, { data: shift }] = await Promise.all([
+    getCashierSubmissionState(shiftId),
+    supabase.from('shifts')
+      .select('id, period, shift_date, status')
+      .eq('id', shiftId)
+      .eq('station_id', profile?.station_id ?? '')
+      .single(),
+  ])
 
   if (!shift) notFound()
-  if (shift.cashier_submitted_at) redirect(`/cashier/${shiftId}`)
+  if (state.submitted) redirect(`/cashier/${shiftId}`)
 
   const [{ data: fuelGrades }, { data: posSubmission }, { data: posLines }] = await Promise.all([
     supabase.from('fuel_grades').select('id, label').order('label'),
