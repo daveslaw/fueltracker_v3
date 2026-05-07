@@ -1,3 +1,5 @@
+import type { DeliveryReportRow } from './delivery-report'
+
 /** Generates a CSV-safe filename: `{station_slug}_{type}_{dateRange}.csv` */
 export function buildCsvFilename(
   reportType: string,
@@ -22,4 +24,24 @@ export function reportRowsToCsv(
   }
   const lines = [headers, ...rows].map(row => row.map(escape).join(','))
   return lines.join('\n')
+}
+
+/** Serialises delivery report rows to RFC 4180 CSV. */
+export function formatDeliveriesCSV(rows: DeliveryReportRow[]): string {
+  const headers = [
+    'Date & Time', 'Station', 'Tank', 'Grade', 'Litres Received',
+    'Delivery Note #', 'Driver', 'Recorded By', 'Photo URL',
+  ]
+  const data = rows.map(r => [
+    r.deliveredAt,
+    r.stationName,
+    r.tankLabel,
+    r.fuelGrade,
+    r.litresReceived,
+    r.deliveryNoteNumber,
+    r.driverName,
+    r.recordedByName,
+    r.deliveryNoteUrl ?? '',
+  ] as (string | number)[])
+  return reportRowsToCsv(headers, data)
 }
