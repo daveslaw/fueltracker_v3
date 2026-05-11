@@ -13,7 +13,7 @@ export default withSentryConfig(nextConfig, {
 
   org: "ysw-c6",
 
-  project: "javascript-nextjs",
+  project: "falkfuel-sandbox",
 
   // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
