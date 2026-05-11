@@ -45,3 +45,6 @@ next-env.d.ts
 
 # Scratch working directory
 /temp/
+
+# Sentry Config File
+.env.sentry-build-plugin
