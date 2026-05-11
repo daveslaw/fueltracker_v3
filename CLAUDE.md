@@ -52,17 +52,24 @@ fueltracker_v3/
 │   │
 │   ├── shift/                      # Supervisor shift workflow
 │   │   ├── page.tsx                # Shift list — auto-redirects to current period or lists pending/closed
+│   │   ├── layout.tsx
 │   │   ├── actions.ts              # createShift, saveClosePumpReading, saveCloseDipReading,
 │   │   │                           #   savePosSubmission, submitShift, flagShift, unflagShift,
 │   │   │                           #   createOverride, saveDelivery, deleteDelivery
 │   │   ├── new/page.tsx            # Period selector (station auto-filled from profile)
 │   │   └── [id]/close/
 │   │       ├── pumps/              # Close: pump meter capture + OCR
+│   │       │   ├── page.tsx
+│   │       │   ├── ClosePumpCaptureForm.tsx
+│   │       │   └── PumpCarousel.tsx
 │   │       ├── dips/               # Close: tank dip entry
-│   │       ├── pos/                # POS Z-report photo + OCR confirm
+│   │       │   ├── page.tsx
+│   │       │   └── CloseDipForm.tsx
 │   │       ├── deliveries/         # Fuel deliveries capture (per shift)
+│   │       │   ├── page.tsx
+│   │       │   └── AddDeliveryForm.tsx
 │   │       └── summary/            # Progress (pending) or reconciliation results (closed)
-│   │                               #   Includes flag/unflag and correction forms
+│   │           └── page.tsx        #   Includes flag/unflag and correction forms
 │   │
 │   ├── cashier/                    # Cashier shift workflow
 │   │   ├── page.tsx                # Cashier shift list / redirect
@@ -80,11 +87,20 @@ fueltracker_v3/
 │   ├── dashboard/                  # Owner reports & config
 │   │   ├── page.tsx                # Cross-station status, pending counts, flagged alerts,
 │   │   │                           #   create shift slot form
+│   │   ├── layout.tsx
 │   │   ├── actions.ts              # createShiftSlot server action
+│   │   ├── _components/
+│   │   │   ├── DashboardNav.tsx    # Owner navigation
+│   │   │   └── DashboardPoller.tsx # Polls for new pending shifts / alerts
 │   │   ├── config/                 # Station / tank / pump / pricing / baselines / products CRUD
 │   │   │   ├── page.tsx            # Station tree + links to Baselines, Fuel pricing, Products
 │   │   │   ├── stations/
+│   │   │   │   ├── new/page.tsx
+│   │   │   │   └── [id]/page.tsx
 │   │   │   ├── pricing/
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── actions.ts
+│   │   │   │   └── SetPriceForm.tsx
 │   │   │   ├── baselines/          # Opening baseline meter/dip values per station
 │   │   │   │   ├── page.tsx
 │   │   │   │   ├── actions.ts      # savePumpBaseline, saveTankBaseline
@@ -109,8 +125,16 @@ fueltracker_v3/
 │   │   │   │   └── export/route.ts        # CSV export
 │   │   │   └── export/route.ts     # Daily/weekly/monthly CSV export
 │   │   ├── tank-trends/            # Tank level chart (Recharts)
+│   │   │   ├── page.tsx
+│   │   │   └── _components/TankTrendChart.tsx
 │   │   ├── history/                # Shift audit trail browser
+│   │   │   ├── page.tsx
+│   │   │   └── [id]/page.tsx       # Per-shift detail view
 │   │   └── users/                  # User invite / role assign / deactivate
+│   │       ├── page.tsx
+│   │       ├── actions.ts
+│   │       ├── InviteForm.tsx
+│   │       └── UserRow.tsx
 │   │
 │   ├── layout.tsx                  # Root layout (auth, offline queue, toaster)
 │   └── page.tsx                    # Landing / role-based redirect
@@ -121,7 +145,9 @@ fueltracker_v3/
 │   ├── FailedSyncBanner.tsx        # Failed sync notification
 │   ├── PendingBadge.tsx            # Pending items count
 │   ├── Spinner.tsx                 # Loading spinner
-│   └── Toaster.tsx                 # Toast notifications
+│   ├── Toaster.tsx                 # Toast notifications
+│   ├── ThemeProvider.tsx           # Dark/light theme context
+│   └── ThemeToggle.tsx             # Theme switcher button
 │
 ├── lib/                            # Business logic (no React)
 │   ├── supabase/
@@ -129,8 +155,14 @@ fueltracker_v3/
 │   │   ├── server.ts               # Server Supabase client (SSR cookies)
 │   │   └── admin.ts                # Service role client (bypasses RLS)
 │   ├── ocr/
-│   │   ├── ocr-service.ts          # Pump meter + POS extraction logic
-│   │   ├── vision-client.ts        # Google Cloud Vision API wrapper
+│   │   ├── index.ts                # Public entry point — re-exports recogniser factory
+│   │   ├── image-recogniser.ts     # IImageRecogniser interface (strategy pattern)
+│   │   ├── anthropic-recogniser.ts # Anthropic Vision implementation (pump meters)
+│   │   ├── fake-recogniser.ts      # Stub implementation for tests
+│   │   ├── vision-client.ts        # Google Cloud Vision API wrapper (POS Z-reports)
+│   │   ├── parse-meter.ts          # Extracts numeric meter reading from OCR text
+│   │   ├── parse-pos.ts            # Extracts grade/litres/revenue lines from OCR text
+│   │   ├── ocr-service.ts          # Orchestrates pump meter + POS OCR flow
 │   │   └── dry-stock-ocr.ts        # Dry stock Z-report OCR extraction
 │   ├── middleware-utils.ts         # Auth guard helpers
 │   ├── station-config.ts           # Station/tank/pump/grade CRUD
@@ -196,6 +228,12 @@ fueltracker_v3/
 │   ├── ocr-service.test.ts
 │   ├── ocr-service-pos.test.ts     # POS Z-report OCR extraction
 │   ├── dry-stock-ocr.test.ts       # Dry stock OCR extraction
+│   ├── parse-meter.test.ts         # Meter reading parser unit tests
+│   ├── parse-pos.test.ts           # POS line parser unit tests
+│   ├── upload-pump-photo.test.ts   # pump-photo API route
+│   ├── upload-pos-photo.test.ts    # pos-photo API route
+│   ├── upload-dry-stock-photo.test.ts # dry-stock-photo API route
+│   ├── PumpCarousel.test.tsx       # PumpCarousel component
 │   ├── aggregate-reports.test.ts   # Cross-station aggregation
 │   ├── csv-export.test.ts          # CSV formatting + formatDeliveriesCSV
 │   ├── deliveries.test.ts          # Delivery CRUD + validation
@@ -234,7 +272,14 @@ fueltracker_v3/
 │                                   #   Required after applying migration 000013
 ├── middleware.ts                   # Auth guard + role-based routing
 ├── PRD.md                          # Full product requirements
-└── .issues/                        # Development slices/epics
+├── skills-lock.json                # Pinned agent skill versions (commit this)
+├── .agents/skills/                 # Project-scoped Claude Code agent skills
+├── .issues/                        # Feature PRDs and development slices
+└── docs/                           # Reference documentation
+    ├── DATA_MODEL.md               # Full database schema reference
+    ├── pump_tank_configuration.md  # Per-station pump & tank config
+    ├── PRD_FalkFuel.md             # Original client pitch PRD
+    └── client-prd-data-model-expansion.md  # Client-facing feature proposal
 ```
 
 ## Architecture
@@ -287,9 +332,13 @@ pending → closed
 
 ### OCR Pipeline
 1. Photo uploaded via `app/api/upload/pump-photo/route.ts`, `pos-photo/route.ts`, or `dry-stock-photo/route.ts`
-2. `lib/ocr/vision-client.ts` — Anthropic Vision for pump meters; Google Cloud Vision for POS Z-reports
-3. `lib/ocr/ocr-service.ts` / `dry-stock-ocr.ts` extract values
-4. UI presents extracted value for confirmation or override
+2. `lib/ocr/image-recogniser.ts` defines `IImageRecogniser` — the strategy interface
+   - `anthropic-recogniser.ts` implements it using Anthropic Vision (pump meters)
+   - `vision-client.ts` wraps Google Cloud Vision (POS Z-reports)
+   - `fake-recogniser.ts` is the test stub — inject this in tests, never call real APIs
+3. `lib/ocr/parse-meter.ts` / `parse-pos.ts` — pure text parsers (extract numeric values from raw OCR output)
+4. `lib/ocr/ocr-service.ts` orchestrates the pump meter flow; `dry-stock-ocr.ts` handles dry stock Z-reports
+5. UI presents extracted value for confirmation or override
 
 ## Database Tables
 
