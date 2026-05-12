@@ -44,16 +44,6 @@ Lookup table — seeded once, not modified at runtime.
 
 **RLS:** All authenticated users can read.
 
-#### `product_catalogues`
-Named product lists shared across stations that use the same supplier.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | uuid PK | |
-| `name` | text not null | e.g. `'Total'`, `'Elegant'` |
-
-**RLS:** Owners have full CRUD. Cashiers and supervisors can read.
-
 #### `stations`
 
 | Column | Type | Notes |
@@ -61,7 +51,6 @@ Named product lists shared across stations that use the same supplier.
 | `id` | uuid PK | |
 | `name` | text | |
 | `address` | text | Nullable |
-| `catalogue_id` | uuid → product_catalogues | Nullable; which product catalogue this station uses |
 | `created_at` | timestamptz | |
 
 **RLS:** Owners have full CRUD. Supervisors/cashiers can read their own station.
@@ -92,20 +81,18 @@ Named product lists shared across stations that use the same supplier.
 **RLS:** Owners have full CRUD. Staff can read pumps at their station.
 
 #### `products`
-Dry stock items belonging to a product catalogue.
+Dry stock items scoped directly to a station.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid PK | |
-| `catalogue_id` | uuid → product_catalogues not null | |
+| `station_id` | uuid → stations not null | |
 | `stock_code` | text | Nullable; supplier stock code |
 | `description` | text not null | |
-| `cost_price` | numeric(10,4) not null | ZAR; purchase price per unit |
-| `sell_price` | numeric(10,4) not null | ZAR; selling price per unit |
 | `is_active` | boolean not null | Default true; false hides from cashier forms |
 | `created_at` | timestamptz | |
 
-**RLS:** Owners have full CRUD. Cashiers and supervisors can read active products for their station's catalogue.
+**RLS:** Owners have full CRUD. Cashiers and supervisors can read active products for their station.
 
 ---
 
@@ -132,6 +119,25 @@ Per-station, per-grade versioned price log with date ranges. Each row covers one
 
 **RLS:** Owners have full CRUD. All authenticated users can read.
 
+#### `product_prices`
+Per-product, per-station versioned cost/sell price log. Mirrors the `fuel_prices` versioning pattern.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `product_id` | uuid → products not null | |
+| `station_id` | uuid → stations not null | |
+| `cost_price` | numeric(10,2) not null | ZAR; must be ≥ 0 |
+| `sell_price` | numeric(10,2) not null | ZAR; must be ≥ 0 |
+| `valid_from` | timestamptz not null | |
+| `valid_to` | timestamptz | Nullable; open-ended if null |
+| `set_by` | uuid → auth.users | Nullable |
+| `created_at` | timestamptz | |
+
+**Index:** `(product_id, station_id, valid_from desc)` for active price lookup.
+
+**RLS:** Owners have full CRUD. Cashiers and supervisors can read for their station.
+
 ---
 
 ### 4. Shifts
@@ -146,17 +152,18 @@ One row per shift. Supports splitting for price changes via `part` and `shift_ty
 | `supervisor_id` | uuid → user_profiles | Nullable; set when supervisor closes the shift |
 | `cashier_id` | uuid → user_profiles | Nullable; cashier assigned to this shift |
 | `period` | text | `'morning'` \| `'evening'` |
-| `part` | smallint not null | `0` = no split; `1` = first of a split pair; `2` = second of a split pair. Default `0` |
+| `part` | smallint not null | `0` = no split; `1` = first of a split pair; `2` = second. Default `0` |
 | `shift_type` | text not null | `'standard'` \| `'price_change'`. Default `'standard'` |
 | `shift_date` | date | |
 | `started_at` | timestamptz not null | Set at shift creation; used for price lookups |
 | `status` | text | `'pending'` \| `'closed'`; default `'pending'` |
-| `is_flagged` | boolean | Default false; set by supervisor to flag a discrepancy |
+| `is_flagged` | boolean | Default false |
 | `flag_comment` | text | Nullable; required when `is_flagged = true` |
-| `submitted_at` | timestamptz | Nullable; set at close time |
+| `submitted_at` | timestamptz | Nullable; set when supervisor closes |
+| `cashier_submitted_at` | timestamptz | Nullable; set when cashier submits their side |
 | `created_at` | timestamptz | |
 
-**Unique constraint:** `(station_id, shift_date, period, part)` — allows multiple shifts per period when split.
+**Unique constraint:** `(station_id, shift_date, period, part)`
 
 **Display label:** Computed from `(period, part)` — not stored.
 - `part = 0` → `"Morning"` / `"Evening"`
@@ -178,7 +185,6 @@ pending → closed
 ### 5. Shift Close Readings
 
 #### `pump_readings`
-One row per pump per shift per type (open or close). Currently only close readings are captured.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -186,7 +192,7 @@ One row per pump per shift per type (open or close). Currently only close readin
 | `shift_id` | uuid → shifts | Cascades on delete |
 | `pump_id` | uuid → pumps | |
 | `type` | text | `'open'` \| `'close'` |
-| `photo_url` | text | Nullable; Supabase Storage URL |
+| `photo_url` | text | Nullable |
 | `meter_reading` | numeric(12,2) | Nullable; cumulative meter value in litres |
 | `ocr_status` | text | `'auto'` \| `'needs_review'` \| `'manual_override'` \| `'unreadable'` |
 | `created_at` | timestamptz | |
@@ -196,7 +202,6 @@ One row per pump per shift per type (open or close). Currently only close readin
 **RLS:** Supervisors have full CRUD on readings for their station's shifts. Owners can read all.
 
 #### `dip_readings`
-Tank dip level per tank per shift per type.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -213,16 +218,16 @@ Tank dip level per tank per shift per type.
 
 ---
 
-### 6. POS Z-Report
+### 6. POS Z-Report (Fuel)
 
 #### `pos_submissions`
-One per shift. Holds the Z-report photo and raw OCR output.
+One per shift. Holds the fuel Z-report photo and raw OCR output.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid PK | |
 | `shift_id` | uuid → shifts | Unique; cascades on delete |
-| `photo_url` | text | Nullable; Supabase Storage URL |
+| `photo_url` | text | Nullable |
 | `raw_ocr` | jsonb | Nullable; full Vision API response stored for audit |
 | `created_at` | timestamptz | |
 
@@ -245,25 +250,42 @@ One row per fuel grade confirmed by the cashier or supervisor.
 
 **RLS:** Same pattern as `pos_submissions`.
 
-#### `pos_dry_stock_lines`
-OCR-extracted product sales from the dry stock section of the Z-report.
+---
+
+### 7. POS Z-Report (Dry Stock)
+
+#### `dry_stock_pos_submissions`
+One per shift. Holds the dry stock Z-report photo and OCR status. Separate from the fuel `pos_submissions`.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid PK | |
-| `pos_submission_id` | uuid → pos_submissions | Cascades on delete |
+| `shift_id` | uuid → shifts | Unique; cascades on delete |
+| `photo_url` | text | Nullable |
+| `ocr_status` | text | `'pending'` \| `'extracted'` \| `'confirmed'` \| `'manual'` \| `'failed'` |
+| `created_at` | timestamptz | |
+
+**RLS:** Cashiers can insert/update for their station's shifts. All station staff can read.
+
+#### `pos_dry_stock_lines`
+OCR-extracted product sales from the dry stock Z-report.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `dry_stock_pos_submission_id` | uuid → dry_stock_pos_submissions | Cascades on delete |
 | `product_id` | uuid → products | |
 | `units_sold` | numeric(10,2) | |
 | `revenue_zar` | numeric(14,2) | |
 | `ocr_status` | text | `'auto'` \| `'manual_override'` \| `'unreadable'` |
 
-**Unique constraint:** `(pos_submission_id, product_id)`
+**Unique constraint:** `(dry_stock_pos_submission_id, product_id)`
 
-**RLS:** Cashiers and supervisors can manage for their station. Owners can read all.
+**RLS:** Cashiers can insert for their station. All station staff and owners can read.
 
 ---
 
-### 7. Deliveries
+### 8. Deliveries
 
 #### `deliveries`
 Fuel tanker deliveries recorded by supervisors. Used in reconciliation Formula 1.
@@ -276,13 +298,13 @@ Fuel tanker deliveries recorded by supervisors. Used in reconciliation Formula 1
 | `litres_received` | numeric(10,2) | Must be > 0 |
 | `delivery_note_number` | text not null | Cross-reference to supplier documentation |
 | `driver_name` | text | Nullable |
-| `delivery_note_url` | text | Nullable; Supabase Storage URL for delivery note photo |
+| `delivery_note_url` | text | Nullable; Supabase Storage URL |
 | `delivered_at` | timestamptz | Actual delivery time; determines which shift period it belongs to |
 | `recorded_by` | uuid → user_profiles | Nullable |
 | `created_at` | timestamptz | |
 | `updated_at` | timestamptz | |
 
-**Unique constraint:** `(station_id, delivery_note_number)` — prevents double-capture.
+**Unique constraint:** `(station_id, delivery_note_number)`
 
 **Indexes:** `(station_id, delivered_at desc)`, `(tank_id, delivered_at desc)`
 
@@ -298,14 +320,14 @@ Dry stock (product) deliveries received by the cashier during a shift.
 | `station_id` | uuid → stations | |
 | `product_id` | uuid → products | |
 | `quantity` | numeric(10,2) not null | Units received |
-| `recorded_by` | uuid → user_profiles | Nullable |
+| `recorded_by` | uuid → auth.users | Nullable |
 | `created_at` | timestamptz | |
 
-**RLS:** Cashiers can insert for their station's open shift. Supervisors and owners can read.
+**RLS:** Cashiers can insert/delete for their station. All station staff can read.
 
 ---
 
-### 8. Dry Stock Readings
+### 9. Dry Stock Readings
 
 #### `stock_readings`
 Cashier's closing count per product per shift.
@@ -324,12 +346,11 @@ Cashier's closing count per product per shift.
 
 ---
 
-### 9. Reconciliation
+### 10. Reconciliation
 
 Computed automatically when a shift is closed. Re-runs if an override or delivery is saved after close.
 
 #### `reconciliations`
-Financial summary per shift.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -352,11 +373,11 @@ Formula 1 result per tank.
 | `reconciliation_id` | uuid → reconciliations | Cascades on delete |
 | `tank_id` | uuid → tanks | |
 | `opening_dip` | numeric(10,2) | From prior closed shift or baseline |
-| `deliveries_received` | numeric(10,2) | Sum of deliveries to this tank during the shift period |
+| `deliveries_received` | numeric(10,2) | Sum of deliveries to this tank during the shift |
 | `pos_litres_sold` | numeric(10,2) | From `pos_submission_lines` for this tank's grade |
 | `expected_closing_dip` | numeric(10,2) | `opening_dip + deliveries_received − pos_litres_sold` |
 | `actual_closing_dip` | numeric(10,2) | Measured dip reading |
-| `variance_litres` | numeric(10,2) | `expected − actual`; positive = loss |
+| `variance_litres` | numeric(10,2) | `actual − expected`; negative = loss |
 
 **Unique constraint:** `(reconciliation_id, tank_id)`
 
@@ -383,23 +404,22 @@ Dry stock variance per product per shift.
 | `reconciliation_id` | uuid → reconciliations | Cascades on delete |
 | `product_id` | uuid → products | |
 | `opening_count` | numeric(10,2) | From prior shift closing count or stock baseline |
-| `deliveries_received` | numeric(10,2) | Sum of `stock_deliveries.quantity` for this product during the shift |
+| `deliveries_received` | numeric(10,2) | Sum of `stock_deliveries.quantity` for this product |
 | `pos_units_sold` | numeric(10,2) | From `pos_dry_stock_lines` |
 | `expected_closing_count` | numeric(10,2) | `opening_count + deliveries_received − pos_units_sold` |
 | `actual_closing_count` | numeric(10,2) | From `stock_readings.closing_count` |
-| `variance_units` | numeric(10,2) | `actual_closing_count − expected_closing_count`; negative = loss |
-| `variance_zar` | numeric(14,2) | `variance_units × sell_price` (at product's current sell price) |
+| `variance_units` | numeric(10,2) | `actual − expected`; negative = loss |
+| `variance_zar` | numeric(14,2) | `variance_units × sell_price` |
 
 **Unique constraint:** `(reconciliation_id, product_id)`
 
-**RLS (all reconciliation tables):** Written exclusively by the **service role** (server-side, bypasses RLS). Supervisors can read their station's records. Owners can read all.
+**RLS (all reconciliation tables):** Written exclusively by the **service role**. Supervisors can read their station's records. Owners can read all.
 
 ---
 
-### 10. Audit & Corrections
+### 11. Audit & Corrections
 
 #### `ocr_overrides`
-Audit trail for post-close value corrections by supervisors.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -409,20 +429,18 @@ Audit trail for post-close value corrections by supervisors.
 | `reading_type` | text | `'pump'` \| `'pos_line'` |
 | `original_value` | numeric(14,2) | Value before override |
 | `override_value` | numeric(14,2) | Corrected value |
-| `reason` | text | Required; supervisor explains the correction |
+| `reason` | text | Required |
 | `overridden_by` | uuid → user_profiles | |
 | `created_at` | timestamptz | |
-
-**Index:** `shift_id`
 
 **RLS:** Supervisors can insert overrides for their station's shifts. Owners can insert and read all.
 
 ---
 
-### 11. Baselines
+### 12. Baselines
 
 #### `shift_baselines`
-Owner-set initial readings used as the opening values for the very first shift at a station (when no prior closed shift exists to roll forward from).
+Owner-set initial readings used as the opening values for the very first shift at a station.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -435,14 +453,14 @@ Owner-set initial readings used as the opening values for the very first shift a
 | `set_at` | timestamptz | |
 | `set_by` | uuid → user_profiles | Nullable |
 
-**Constraint:** Either `pump_id` is set (and `reading_type = 'meter'`) or `tank_id` is set (and `reading_type = 'dip'`). Never both.
+**Constraint:** Either `pump_id` (meter) or `tank_id` (dip) is set — never both.
 
 **Unique indexes:** One baseline per `(station_id, pump_id)` and one per `(station_id, tank_id)`.
 
 **RLS:** Owners have full CRUD. Supervisors can read baselines for their station.
 
 #### `stock_baselines`
-Owner-set initial stock count per product per station, used when no prior closed shift exists.
+Owner-set initial stock count per product per station.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -459,30 +477,23 @@ Owner-set initial stock count per product per station, used when no prior closed
 
 ---
 
-### 12. Archive
-
-#### `shifts_archive`
-A snapshot of all shifts that existed before the shift redesign migration. Not used at runtime.
-
----
-
 ## Relationships Diagram
 
 ```
 auth.users
   └─ user_profiles (role, station_id)
 
-product_catalogues
-  └─ products (cost_price, sell_price, is_active)
-
-stations (catalogue_id → product_catalogues)
+stations
   ├─ tanks (fuel_grade_id → fuel_grades)
   │    └─ pumps
+  ├─ products (is_active)
+  │    └─ product_prices (cost_price, sell_price, valid_from, valid_to)
   ├─ shifts (supervisor_id, cashier_id → user_profiles; part, shift_type, started_at)
   │    ├─ pump_readings (pump_id → pumps)
   │    ├─ dip_readings (tank_id → tanks)
   │    ├─ pos_submissions
-  │    │    ├─ pos_submission_lines (fuel_grade_id → fuel_grades)
+  │    │    └─ pos_submission_lines (fuel_grade_id → fuel_grades)
+  │    ├─ dry_stock_pos_submissions
   │    │    └─ pos_dry_stock_lines (product_id → products)
   │    ├─ stock_readings (product_id → products)
   │    ├─ stock_deliveries (product_id → products)
@@ -511,16 +522,17 @@ fuel_prices (station_id → stations, fuel_grade_id → fuel_grades, set_by → 
 | `pumps` | Read own station | Read own station | Full CRUD |
 | `fuel_grades` | Read | Read | Read |
 | `fuel_prices` | Read | Read | Full CRUD |
-| `product_catalogues` | Read | Read | Full CRUD |
 | `products` | Read own station | Read own station | Full CRUD |
+| `product_prices` | Read own station | Read own station | Full CRUD |
 | `shifts` | Read own station | Full CRUD own station | Read all |
 | `pump_readings` | — | Full CRUD own station | Read all |
 | `dip_readings` | — | Full CRUD own station | Read all |
 | `pos_submissions` | Full CRUD own station | Full CRUD own station | Read all |
 | `pos_submission_lines` | Full CRUD own station | Full CRUD own station | Read all |
-| `pos_dry_stock_lines` | Full CRUD own station | Read own station | Read all |
+| `dry_stock_pos_submissions` | Insert/Update own station | Read own station | Read all |
+| `pos_dry_stock_lines` | Insert own station | Read own station | Read all |
 | `stock_readings` | Full CRUD own station | Read own station | Read all |
-| `stock_deliveries` | Full CRUD own station | Read own station | Read all |
+| `stock_deliveries` | Insert/Delete own station | Read own station | Read all |
 | `deliveries` | — | Full CRUD own station | Full CRUD all |
 | `reconciliations` | — | Read own station | Read all |
 | `reconciliation_tank_lines` | — | Read own station | Read all |
