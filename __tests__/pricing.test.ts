@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { selectActivePriceAt, hasPriceRangeOverlap } from '../lib/pricing'
+import { selectActivePriceAt, hasPriceRangeOverlap, hasPriceChangeDuringWindow } from '../lib/pricing'
 import type { PriceRow } from '../lib/pricing'
 
 const makeRow = (overrides: Partial<PriceRow> = {}): PriceRow => ({
@@ -92,5 +92,52 @@ describe('hasPriceRangeOverlap', () => {
     const existing = [makeRow({ valid_from: '2026-01-01T00:00:00Z', valid_to: null })]
     const newRow   = makeRow({ valid_from: '2026-03-01T00:00:00Z', valid_to: null })
     expect(hasPriceRangeOverlap(existing, newRow)).toBe(true)
+  })
+})
+
+// ── hasPriceChangeDuringWindow ─────────────────────────────────────────────────
+
+describe('hasPriceChangeDuringWindow', () => {
+  const startedAt   = '2026-05-07T18:00:00Z' // 18:00 shift start
+  const submittedAt = '2026-05-08T06:00:00Z' // 06:00 shift end
+  const midnightRow = makeRow({ valid_from: '2026-05-08T00:00:00Z' }) // price change at midnight
+
+  it('tracer bullet: price change strictly within window returns true', () => {
+    expect(hasPriceChangeDuringWindow([midnightRow], startedAt, submittedAt)).toBe(true)
+  })
+
+  it('empty prices list returns false', () => {
+    expect(hasPriceChangeDuringWindow([], startedAt, submittedAt)).toBe(false)
+  })
+
+  it('valid_from exactly at startedAt (shift opened at price change) returns false', () => {
+    const atStart = makeRow({ valid_from: startedAt })
+    expect(hasPriceChangeDuringWindow([atStart], startedAt, submittedAt)).toBe(false)
+  })
+
+  it('valid_from before startedAt returns false', () => {
+    const before = makeRow({ valid_from: '2026-05-07T12:00:00Z' })
+    expect(hasPriceChangeDuringWindow([before], startedAt, submittedAt)).toBe(false)
+  })
+
+  it('valid_from exactly at submittedAt (price changed at submission moment) returns false', () => {
+    const atSubmit = makeRow({ valid_from: submittedAt })
+    expect(hasPriceChangeDuringWindow([atSubmit], startedAt, submittedAt)).toBe(false)
+  })
+
+  it('valid_from after submittedAt returns false', () => {
+    const after = makeRow({ valid_from: '2026-05-08T10:00:00Z' })
+    expect(hasPriceChangeDuringWindow([after], startedAt, submittedAt)).toBe(false)
+  })
+
+  it('multiple rows: one within window returns true', () => {
+    const outside = makeRow({ valid_from: '2026-05-07T12:00:00Z' })
+    expect(hasPriceChangeDuringWindow([outside, midnightRow], startedAt, submittedAt)).toBe(true)
+  })
+
+  it('multiple rows: none within window returns false', () => {
+    const before = makeRow({ valid_from: '2026-05-07T12:00:00Z' })
+    const after  = makeRow({ valid_from: '2026-05-08T10:00:00Z', fuel_grade_id: '93' })
+    expect(hasPriceChangeDuringWindow([before, after], startedAt, submittedAt)).toBe(false)
   })
 })

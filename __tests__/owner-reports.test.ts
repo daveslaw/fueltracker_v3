@@ -5,34 +5,46 @@ import {
   isReportPartial,
   countPendingShiftsPerStation,
 } from '../lib/owner-reports'
+import type { ShiftStatus } from '../lib/owner-reports'
 
 // --- fixtures ---
-const shift = (period: 'morning' | 'evening', status: string) => ({ period, status }) as { period: 'morning' | 'evening'; status: import('../lib/owner-reports').ShiftStatus }
+const shift = (period: 'morning' | 'evening', status: string, part = 0) =>
+  ({ period, status, part }) as { period: 'morning' | 'evening'; status: ShiftStatus; part: 0 | 1 | 2 }
 const posLine = (fuel_grade_id: string, litres_sold: number, revenue_zar: number) => ({ fuel_grade_id, litres_sold, revenue_zar })
 const price = (fuel_grade_id: string, sell_price_per_litre: number) => ({ fuel_grade_id, sell_price_per_litre })
 
 // ── buildStationDayStatus ──────────────────────────────────────────────────
 
 describe('buildStationDayStatus', () => {
-  it('returns not_started for both periods when no shifts exist', () => {
+  it('returns not_started for morning and a single not_started evening entry when no shifts exist', () => {
     const result = buildStationDayStatus([])
     expect(result.morning).toBe('not_started')
-    expect(result.evening).toBe('not_started')
+    expect(result.evening).toHaveLength(1)
+    expect(result.evening[0]).toEqual({ part: 0, status: 'not_started', label: 'Evening' })
   })
 
-  it('reflects the status of the matching period shift', () => {
+  it('tracer bullet: standard evening shift returns a single evening entry labelled Evening', () => {
+    const result = buildStationDayStatus([shift('evening', 'closed')])
+    expect(result.evening).toHaveLength(1)
+    expect(result.evening[0]).toEqual({ part: 0, status: 'closed', label: 'Evening' })
+  })
+
+  it('morning status is unaffected by evening shift', () => {
     const result = buildStationDayStatus([shift('morning', 'submitted')])
     expect(result.morning).toBe('submitted')
-    expect(result.evening).toBe('not_started')
+    expect(result.evening[0].status).toBe('not_started')
   })
 
-  it('handles both periods present', () => {
+  it('split night: Part 1 closed and Part 2 pending produce two evening entries with correct labels', () => {
     const result = buildStationDayStatus([
-      shift('morning', 'approved'),
-      shift('evening', 'flagged'),
+      shift('morning', 'closed'),
+      shift('evening', 'closed', 1),
+      shift('evening', 'pending', 2),
     ])
-    expect(result.morning).toBe('approved')
-    expect(result.evening).toBe('flagged')
+    expect(result.morning).toBe('closed')
+    expect(result.evening).toHaveLength(2)
+    expect(result.evening[0]).toEqual({ part: 1, status: 'closed',  label: 'Evening Part 1' })
+    expect(result.evening[1]).toEqual({ part: 2, status: 'pending', label: 'Evening Part 2' })
   })
 })
 

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { getFuelControlMonth, buildFuelControlRows, buildDaySubtotals } from '@/lib/fuel-control-report'
-import type { FuelControlShiftRow, FuelControlDaySubtotal } from '@/lib/fuel-control-report'
+import { getFuelControlMonth, buildFuelControlReportRows, buildDaySubtotals } from '@/lib/fuel-control-report'
+import type { FuelControlShiftRow, FuelControlDaySubtotal, FuelControlReportRow } from '@/lib/fuel-control-report'
 
 interface Props {
   searchParams: Promise<{ station?: string; month?: string }>
@@ -73,6 +73,22 @@ function ShiftRow({ row, stationId }: { row: FuelControlShiftRow; stationId: str
   )
 }
 
+function PriceChangeImpactRow({ row }: { row: Extract<FuelControlReportRow, { type: 'price_change_impact' }> }) {
+  const cls = row.impact_zar >= 0 ? 'text-green-700' : 'text-destructive'
+  return (
+    <tr className="bg-amber-50 text-xs divide-x italic">
+      <td className="px-3 py-1.5 text-amber-800" colSpan={5}>
+        Price change impact — {fmtL(row.closing_dip_litres)} closing dip
+        &nbsp;· old cost {fmtR(row.old_cost)}/L → new cost {fmtR(row.new_cost)}/L
+      </td>
+      <td className="px-3 py-1.5" colSpan={3} />
+      <td className={`px-3 py-1.5 text-right font-semibold tabular-nums ${cls}`}>
+        {row.impact_zar > 0 ? '+' : ''}{fmtR(row.impact_zar)}
+      </td>
+    </tr>
+  )
+}
+
 function SubtotalRow({ sub }: { sub: FuelControlDaySubtotal }) {
   return (
     <tr className="bg-muted/40 font-medium text-sm divide-x">
@@ -106,8 +122,9 @@ export default async function FuelControlReportPage({ searchParams }: Props) {
   const activeStation = (stations ?? []).find(s => s.id === activeStationId)
 
   const { inputs, grades, prices } = await getFuelControlMonth(supabase, activeStationId, year, month)
-  const rows      = buildFuelControlRows(inputs, prices)
-  const subtotals = buildDaySubtotals(rows)
+  const reportRows = buildFuelControlReportRows(inputs, prices)
+  const shiftRows  = reportRows.filter((r): r is Extract<FuelControlReportRow, { type: 'shift' }> => r.type === 'shift').map(r => r.data)
+  const subtotals  = buildDaySubtotals(shiftRows)
 
   const prevMonth = adjacentMonth(selectedMonth, -1)
   const nextMonth = adjacentMonth(selectedMonth,  1)
@@ -161,18 +178,22 @@ export default async function FuelControlReportPage({ searchParams }: Props) {
         </div>
       </div>
 
-      {rows.length === 0 && (
+      {reportRows.length === 0 && (
         <div className="rounded-md border px-4 py-8 text-center text-sm text-muted-foreground">
           No shifts found for {activeStation?.name} in {selectedMonth}.
         </div>
       )}
 
       {grades.map(grade => {
-        const gradeRows     = rows.filter(r => r.fuel_grade_id === grade)
-        const gradeSubs     = subtotals.filter(s => s.fuel_grade_id === grade)
-        const dates         = [...new Set(gradeRows.map(r => r.shift_date))].sort()
+        const gradeReportRows = reportRows.filter(r =>
+          r.type === 'shift' ? r.data.fuel_grade_id === grade : r.fuel_grade_id === grade
+        )
+        const gradeSubs = subtotals.filter(s => s.fuel_grade_id === grade)
+        const dates     = [...new Set(
+          gradeReportRows.filter(r => r.type === 'shift').map(r => r.data.shift_date)
+        )].sort()
 
-        if (gradeRows.length === 0) return null
+        if (gradeReportRows.length === 0) return null
 
         return (
           <section key={grade} className="space-y-1">
@@ -194,13 +215,17 @@ export default async function FuelControlReportPage({ searchParams }: Props) {
                 </thead>
                 <tbody className="divide-y">
                   {dates.map(date => {
-                    const dayRows = gradeRows.filter(r => r.shift_date === date)
-                    const sub     = gradeSubs.find(s => s.shift_date === date)
+                    const dayReportRows = gradeReportRows.filter(r =>
+                      r.type === 'shift' ? r.data.shift_date === date : r.shift_date === date
+                    )
+                    const sub = gradeSubs.find(s => s.shift_date === date)
                     return (
                       <>
-                        {dayRows.map(row => (
-                          <ShiftRow key={row.shift_id} row={row} stationId={activeStationId} />
-                        ))}
+                        {dayReportRows.map((row, i) =>
+                          row.type === 'shift'
+                            ? <ShiftRow key={row.data.shift_id} row={row.data} stationId={activeStationId} />
+                            : <PriceChangeImpactRow key={`impact-${date}-${i}`} row={row} />
+                        )}
                         {sub && <SubtotalRow key={`sub-${date}`} sub={sub} />}
                       </>
                     )

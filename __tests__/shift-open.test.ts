@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { canStartShift, getShiftProgress, resolveShiftStatus, computeShiftLabel, markFirstPartSplit } from '@/lib/shift-open'
+import { canStartShift, canSplitShift, getShiftProgress, resolveShiftStatus, computeShiftLabel, markFirstPartSplit } from '@/lib/shift-open'
 import type { ShiftRow } from '@/lib/shift-open'
 
 // ── canStartShift ─────────────────────────────────────────────────────────────
@@ -55,6 +55,26 @@ describe('canStartShift', () => {
   it('part-1 pending exists → can still start part-2', () => {
     const part1Pending: ShiftRow = { ...pending, part: 1 }
     expect(canStartShift([part1Pending], station, 'morning', today, 2)).toBe(true)
+  })
+})
+
+// ── canSplitShift ─────────────────────────────────────────────────────────────
+
+describe('canSplitShift', () => {
+  it('tracer bullet: pending part-0 shift → can split', () => {
+    expect(canSplitShift({ status: 'pending', part: 0 })).toBe(true)
+  })
+
+  it('closed part-0 → cannot split (wrong status)', () => {
+    expect(canSplitShift({ status: 'closed', part: 0 })).toBe(false)
+  })
+
+  it('pending part-1 → cannot split (already a split part)', () => {
+    expect(canSplitShift({ status: 'pending', part: 1 })).toBe(false)
+  })
+
+  it('pending part-2 → cannot split', () => {
+    expect(canSplitShift({ status: 'pending', part: 2 })).toBe(false)
   })
 })
 
@@ -165,5 +185,59 @@ describe('computeShiftLabel', () => {
 
   it('evening part 2 → "Evening Part 2"', () => {
     expect(computeShiftLabel('evening', 2)).toBe('Evening Part 2')
+  })
+})
+
+// ── buildSplitNotice ───────────────────────────────────────────────────────────
+
+import { buildSplitNotice } from '@/lib/shift-open'
+
+describe('buildSplitNotice', () => {
+  it('tracer bullet: standard shift returns null', () => {
+    expect(buildSplitNotice(
+      { id: 'a', period: 'evening', part: 0, shift_type: 'standard' },
+      []
+    )).toBeNull()
+  })
+
+  it('price_change part 1 with part 2 sibling → forward link', () => {
+    const result = buildSplitNotice(
+      { id: 'p1', period: 'evening', part: 1, shift_type: 'price_change' },
+      [{ id: 'p2', part: 2 }]
+    )
+    expect(result).toEqual({
+      currentLabel: 'Evening Part 1',
+      siblings: [{ id: 'p2', label: 'Evening Part 2', direction: '→' }],
+    })
+  })
+
+  it('morning period: labels use computeShiftLabel correctly', () => {
+    const result = buildSplitNotice(
+      { id: 'm1', period: 'morning', part: 1, shift_type: 'price_change' },
+      [{ id: 'm2', part: 2 }]
+    )
+    expect(result).toEqual({
+      currentLabel: 'Morning Part 1',
+      siblings: [{ id: 'm2', label: 'Morning Part 2', direction: '→' }],
+    })
+  })
+
+  it('price_change with no siblings → notice with empty siblings array', () => {
+    const result = buildSplitNotice(
+      { id: 'p1', period: 'evening', part: 1, shift_type: 'price_change' },
+      []
+    )
+    expect(result).toEqual({ currentLabel: 'Evening Part 1', siblings: [] })
+  })
+
+  it('price_change part 2 with part 1 sibling → back link', () => {
+    const result = buildSplitNotice(
+      { id: 'p2', period: 'evening', part: 2, shift_type: 'price_change' },
+      [{ id: 'p1', part: 1 }]
+    )
+    expect(result).toEqual({
+      currentLabel: 'Evening Part 2',
+      siblings: [{ id: 'p1', label: 'Evening Part 1', direction: '←' }],
+    })
   })
 })

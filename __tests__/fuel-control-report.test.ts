@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildFuelControlRows, buildDaySubtotals } from '../lib/fuel-control-report'
+import { buildFuelControlRows, buildDaySubtotals, buildFuelControlReportRows } from '../lib/fuel-control-report'
 import type { FuelControlRowInput } from '../lib/fuel-control-report'
 import type { PriceRow } from '../lib/pricing'
 
@@ -8,6 +8,8 @@ function makeInput(overrides: Partial<FuelControlRowInput> = {}): FuelControlRow
     shift_id:          'shift-1',
     shift_date:        '2026-05-01',
     period:            'morning',
+    part:              0,
+    shift_type:        'standard',
     status:            'closed',
     is_flagged:        false,
     fuel_grade_id:     '95',
@@ -263,5 +265,96 @@ describe('buildDaySubtotals — GP aggregation', () => {
     const rows = buildFuelControlRows(inputs, prices)
     const subs = buildDaySubtotals(rows)
     expect(subs[0].total_gp).toBeCloseTo(4500, 2)
+  })
+})
+
+// ── split shift variance accumulation ─────────────────────────────────────────
+
+describe('buildFuelControlRows — split shift variance accumulation', () => {
+  it('Part 1 variance carries into Part 2 accumulated variance', () => {
+    const inputs: FuelControlRowInput[] = [
+      makeInput({ shift_id: 's-p1', shift_type: 'price_change', part: 1, period: 'evening',
+        opening_dip: 50000, closing_dip: 48000, pos_litres: 1800 }),
+      // dip_calc = 2000, variance = -200
+      makeInput({ shift_id: 's-p2', shift_type: 'price_change', part: 2, period: 'evening',
+        opening_dip: 48000, closing_dip: 47000, pos_litres: 900 }),
+      // dip_calc = 1000, variance = -100
+    ]
+    const rows = buildFuelControlRows(inputs)
+    expect(rows[0].accumulated_variance).toBe(-200)
+    expect(rows[1].accumulated_variance).toBe(-300)
+  })
+})
+
+// ── buildFuelControlReportRows ────────────────────────────────────────────────
+
+describe('buildFuelControlReportRows', () => {
+  it('tracer bullet: standard shift is wrapped as type:shift', () => {
+    const result = buildFuelControlReportRows([makeInput()])
+    expect(result).toHaveLength(1)
+    expect(result[0].type).toBe('shift')
+  })
+
+  it('no impact row inserted for standard (unsplit) shifts', () => {
+    const result = buildFuelControlReportRows([
+      makeInput({ shift_id: 's1', period: 'morning' }),
+      makeInput({ shift_id: 's2', period: 'evening' }),
+    ])
+    expect(result.every(r => r.type === 'shift')).toBe(true)
+  })
+
+  it('inserts price_change_impact row between Part 1 and Part 2 with correct impact_zar', () => {
+    // Old price: cost 14.00 valid until midnight; new price: cost 15.00 from midnight
+    const prices: PriceRow[] = [
+      makePrice({ cost_per_litre: 14.00, valid_from: '2026-05-07T00:00:00Z', valid_to: '2026-05-08T00:00:00Z' }),
+      makePrice({ cost_per_litre: 15.00, valid_from: '2026-05-08T00:00:00Z', valid_to: null }),
+    ]
+    const inputs: FuelControlRowInput[] = [
+      makeInput({ shift_id: 's-p1', shift_type: 'price_change', part: 1, period: 'evening',
+        shift_date: '2026-05-07', started_at: '2026-05-07T18:00:00Z',
+        opening_dip: 50000, closing_dip: 48000, pos_litres: 1800 }),
+      makeInput({ shift_id: 's-p2', shift_type: 'price_change', part: 2, period: 'evening',
+        shift_date: '2026-05-07', started_at: '2026-05-08T00:00:00Z',
+        opening_dip: 48000, closing_dip: 47000, pos_litres: 900 }),
+    ]
+    const result = buildFuelControlReportRows(inputs, prices)
+
+    expect(result).toHaveLength(3)
+    expect(result[0].type).toBe('shift')
+    expect(result[1].type).toBe('price_change_impact')
+    expect(result[2].type).toBe('shift')
+
+    const impact = result[1] as Extract<typeof result[1], { type: 'price_change_impact' }>
+    expect(impact.fuel_grade_id).toBe('95')
+    expect(impact.closing_dip_litres).toBe(48000)
+    expect(impact.old_cost).toBe(14.00)
+    expect(impact.new_cost).toBe(15.00)
+    // 48000 × (15.00 - 14.00) = 48000
+    expect(impact.impact_zar).toBeCloseTo(48000, 2)
+  })
+
+  it('impact row appears between the correct grades when multiple grades are present', () => {
+    const prices: PriceRow[] = [
+      makePrice({ fuel_grade_id: '95',  cost_per_litre: 14.00, valid_from: '2026-05-07T00:00:00Z', valid_to: '2026-05-08T00:00:00Z' }),
+      makePrice({ fuel_grade_id: '95',  cost_per_litre: 15.00, valid_from: '2026-05-08T00:00:00Z', valid_to: null }),
+      makePrice({ fuel_grade_id: 'D50', cost_per_litre: 16.00, valid_from: '2026-05-07T00:00:00Z', valid_to: '2026-05-08T00:00:00Z' }),
+      makePrice({ fuel_grade_id: 'D50', cost_per_litre: 17.00, valid_from: '2026-05-08T00:00:00Z', valid_to: null }),
+    ]
+    const base = { shift_type: 'price_change' as const, period: 'evening' as const, shift_date: '2026-05-07' }
+    const inputs: FuelControlRowInput[] = [
+      makeInput({ ...base, shift_id: 's-p1', part: 1, fuel_grade_id: '95',  started_at: '2026-05-07T18:00:00Z', opening_dip: 50000, closing_dip: 48000, pos_litres: 1800 }),
+      makeInput({ ...base, shift_id: 's-p1', part: 1, fuel_grade_id: 'D50', started_at: '2026-05-07T18:00:00Z', opening_dip: 20000, closing_dip: 19000, pos_litres: 900 }),
+      makeInput({ ...base, shift_id: 's-p2', part: 2, fuel_grade_id: '95',  started_at: '2026-05-08T00:00:00Z', opening_dip: 48000, closing_dip: 47000, pos_litres: 900 }),
+      makeInput({ ...base, shift_id: 's-p2', part: 2, fuel_grade_id: 'D50', started_at: '2026-05-08T00:00:00Z', opening_dip: 19000, closing_dip: 18500, pos_litres: 450 }),
+    ]
+    const result = buildFuelControlReportRows(inputs, prices)
+
+    expect(result).toHaveLength(6) // 4 shift rows + 2 impact rows
+    const types = result.map(r => `${r.type}:${r.type === 'shift' ? r.data.fuel_grade_id : r.fuel_grade_id}`)
+    expect(types).toEqual([
+      'shift:95', 'price_change_impact:95',
+      'shift:D50', 'price_change_impact:D50',
+      'shift:95', 'shift:D50',
+    ])
   })
 })

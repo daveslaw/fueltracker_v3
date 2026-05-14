@@ -31,6 +31,23 @@ export function selectActivePriceAt(
 }
 
 /**
+ * Pure function. Returns true if any price row has a valid_from strictly
+ * between startedAt (exclusive) and submittedAt (exclusive).
+ */
+export function hasPriceChangeDuringWindow(
+  prices: Pick<PriceRow, 'valid_from'>[],
+  startedAt: string,
+  submittedAt: string,
+): boolean {
+  const startMs  = new Date(startedAt).getTime()
+  const submitMs = new Date(submittedAt).getTime()
+  return prices.some(p => {
+    const fromMs = new Date(p.valid_from).getTime()
+    return fromMs > startMs && fromMs < submitMs
+  })
+}
+
+/**
  * Pure function. Returns true if `newRow` overlaps any row in `existing`.
  *
  * Two ranges overlap when one starts before the other ends.

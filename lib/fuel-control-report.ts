@@ -7,6 +7,8 @@ export interface FuelControlRowInput {
   shift_id:          string
   shift_date:        string
   period:            'morning' | 'evening'
+  part:              number
+  shift_type:        'standard' | 'price_change'
   status:            string
   is_flagged:        boolean
   fuel_grade_id:     string
@@ -38,6 +40,61 @@ export interface FuelControlShiftRow {
   sell_price:           number | null
   cost_price:           number | null
   gp_zar:               number | null
+}
+
+export type FuelControlReportRow =
+  | { type: 'shift'; data: FuelControlShiftRow }
+  | { type: 'price_change_impact'; shift_date: string; fuel_grade_id: string; closing_dip_litres: number; old_cost: number; new_cost: number; impact_zar: number }
+
+export function buildFuelControlReportRows(
+  inputs: FuelControlRowInput[],
+  prices?: PriceRow[],
+): FuelControlReportRow[] {
+  const shiftRows = buildFuelControlRows(inputs, prices)
+
+  // For each price_change Part 1, find the matching Part 2 (same grade + shift_date)
+  // and record that an impact row should be inserted after the Part 1 index.
+  const impactAfterIdx = new Map<number, FuelControlReportRow>()
+
+  for (let i = 0; i < inputs.length; i++) {
+    const input = inputs[i]
+    const row   = shiftRows[i]
+    if (input.shift_type !== 'price_change' || input.part !== 1) continue
+    if (row.closing_dip === null || !prices) continue
+
+    const part2Idx = inputs.findIndex((inp, j) =>
+      j > i &&
+      inp.shift_type === 'price_change' &&
+      inp.part === 2 &&
+      inp.fuel_grade_id === input.fuel_grade_id &&
+      inp.shift_date === input.shift_date,
+    )
+    if (part2Idx === -1) continue
+
+    const part2Input  = inputs[part2Idx]
+    const gradeRows   = prices.filter(p => p.fuel_grade_id === input.fuel_grade_id)
+    const oldPrice    = selectActivePriceAt(gradeRows, input.started_at)
+    const newPrice    = selectActivePriceAt(gradeRows, part2Input.started_at)
+    if (!oldPrice || !newPrice) continue
+
+    impactAfterIdx.set(i, {
+      type:               'price_change_impact',
+      shift_date:         input.shift_date,
+      fuel_grade_id:      input.fuel_grade_id,
+      closing_dip_litres: row.closing_dip,
+      old_cost:           oldPrice.cost_per_litre,
+      new_cost:           newPrice.cost_per_litre,
+      impact_zar:         Math.round(row.closing_dip * (newPrice.cost_per_litre - oldPrice.cost_per_litre) * 100) / 100,
+    })
+  }
+
+  const result: FuelControlReportRow[] = []
+  for (let i = 0; i < shiftRows.length; i++) {
+    result.push({ type: 'shift', data: shiftRows[i] })
+    const impact = impactAfterIdx.get(i)
+    if (impact) result.push(impact)
+  }
+  return result
 }
 
 export interface FuelControlDaySubtotal {
@@ -163,7 +220,7 @@ export async function getFuelControlMonth(
     { data: allPrices },
   ] = await Promise.all([
     db.from('shifts')
-      .select('id, shift_date, period, part, status, is_flagged, started_at')
+      .select('id, shift_date, period, part, shift_type, status, is_flagged, started_at')
       .eq('station_id', stationId)
       .gte('shift_date', firstDay)
       .lte('shift_date', lastDay)
@@ -316,6 +373,8 @@ export async function getFuelControlMonth(
         shift_id:          shift.id as string,
         shift_date:        shift.shift_date as string,
         period:            shift.period as 'morning' | 'evening',
+        part:              (shift.part as number) ?? 0,
+        shift_type:        (shift.shift_type as 'standard' | 'price_change') ?? 'standard',
         status:            shift.status as string,
         is_flagged:        shift.is_flagged as boolean ?? false,
         fuel_grade_id:     grade,

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   assemblePureInputs,
   runReconciliationWith,
+  selectBestPriorShift,
 } from '../lib/reconciliation-runner'
 import type {
   ShiftDataBundle,
@@ -18,6 +19,7 @@ function makeBundle(overrides: Partial<ShiftDataBundle> = {}): ShiftDataBundle {
       station_id:   'station-1',
       period:       'morning',
       shift_date:   '2026-03-20',
+      shift_type:   'standard',
       started_at:   '2026-03-20T06:00:00Z',
       submitted_at: '2026-03-20T08:00:00Z',
     },
@@ -70,7 +72,7 @@ describe('assemblePureInputs — delivery period filtering', () => {
   it('includes only pre-12:00 UTC deliveries for a morning shift', () => {
     const { inputs } = assemblePureInputs(makeBundle({
       shift: {
-        id: 'shift-1', station_id: 'station-1', period: 'morning',
+        id: 'shift-1', station_id: 'station-1', period: 'morning', shift_type: 'standard',
         shift_date: '2026-03-20', started_at: '2026-03-20T06:00:00Z', submitted_at: '2026-03-20T08:00:00Z',
       },
       deliveries: [
@@ -85,7 +87,7 @@ describe('assemblePureInputs — delivery period filtering', () => {
   it('includes only 12:00+ UTC deliveries for an evening shift', () => {
     const { inputs } = assemblePureInputs(makeBundle({
       shift: {
-        id: 'shift-1', station_id: 'station-1', period: 'evening',
+        id: 'shift-1', station_id: 'station-1', period: 'evening', shift_type: 'standard',
         shift_date: '2026-03-20', started_at: '2026-03-20T12:00:00Z', submitted_at: '2026-03-20T20:00:00Z',
       },
       deliveries: [
@@ -95,6 +97,54 @@ describe('assemblePureInputs — delivery period filtering', () => {
     }))
     expect(inputs.deliveries).toHaveLength(1)
     expect(inputs.deliveries[0].litres_received).toBe(3000)
+  })
+})
+
+// ── assemblePureInputs — price_change delivery filtering ──────────────────────
+
+describe('assemblePureInputs — price_change delivery filtering', () => {
+  const part1Shift = {
+    id: 'shift-p1', station_id: 'station-1', period: 'evening' as const, shift_type: 'price_change' as const,
+    shift_date: '2026-05-07', started_at: '2026-05-07T18:00:00Z', submitted_at: '2026-05-08T00:00:00Z',
+  }
+  const part2Shift = {
+    id: 'shift-p2', station_id: 'station-1', period: 'evening' as const, shift_type: 'price_change' as const,
+    shift_date: '2026-05-07', started_at: '2026-05-08T00:00:00Z', submitted_at: '2026-05-08T06:00:00Z',
+  }
+  const beforeSplit  = { tank_id: 'T1', litres_received: 5000, delivered_at: '2026-05-07T21:00:00Z' }
+  const afterSplit   = { tank_id: 'T1', litres_received: 2000, delivered_at: '2026-05-08T02:00:00Z' }
+  const atSplit      = { tank_id: 'T1', litres_received: 3000, delivered_at: '2026-05-08T00:00:00Z' }
+
+  it('tracer bullet: delivery before split timestamp goes to Part 1 only', () => {
+    const { inputs } = assemblePureInputs(makeBundle({
+      shift: part1Shift,
+      deliveries: [beforeSplit, afterSplit],
+    }))
+    expect(inputs.deliveries).toHaveLength(1)
+    expect(inputs.deliveries[0].litres_received).toBe(5000)
+  })
+
+  it('delivery after split timestamp goes to Part 2 only', () => {
+    const { inputs } = assemblePureInputs(makeBundle({
+      shift: part2Shift,
+      deliveries: [beforeSplit, afterSplit],
+    }))
+    expect(inputs.deliveries).toHaveLength(1)
+    expect(inputs.deliveries[0].litres_received).toBe(2000)
+  })
+
+  it('delivery exactly at split timestamp goes to Part 2, not Part 1', () => {
+    const { inputs: part1Inputs } = assemblePureInputs(makeBundle({
+      shift: part1Shift,
+      deliveries: [atSplit],
+    }))
+    expect(part1Inputs.deliveries).toHaveLength(0)
+
+    const { inputs: part2Inputs } = assemblePureInputs(makeBundle({
+      shift: part2Shift,
+      deliveries: [atSplit],
+    }))
+    expect(part2Inputs.deliveries).toHaveLength(1)
   })
 })
 
@@ -159,6 +209,38 @@ describe('assemblePureInputs — repository warnings pass-through', () => {
     // repositoryWarnings not set — should not cause errors or extra warnings
     const { warnings } = assemblePureInputs(bundle)
     expect(warnings.filter(w => w.code === 'NO_PRIOR_SHIFT_BASELINE')).toHaveLength(0)
+  })
+})
+
+// ── selectBestPriorShift — baseline candidate selection ───────────────────────
+
+describe('selectBestPriorShift', () => {
+  it('returns null for an empty candidate list', () => {
+    expect(selectBestPriorShift([])).toBeNull()
+  })
+
+  it('returns the only candidate when there is one', () => {
+    const candidate = { id: 'shift-1', shift_date: '2026-03-20', period: 'evening', part: 0 }
+    expect(selectBestPriorShift([candidate])?.id).toBe('shift-1')
+  })
+
+  it('prefers Part 2 over Part 1 when shift_date and period match', () => {
+    const part1 = { id: 'shift-p1', shift_date: '2026-03-20', period: 'evening', part: 1 }
+    const part2 = { id: 'shift-p2', shift_date: '2026-03-20', period: 'evening', part: 2 }
+    expect(selectBestPriorShift([part1, part2])?.id).toBe('shift-p2')
+    expect(selectBestPriorShift([part2, part1])?.id).toBe('shift-p2')
+  })
+
+  it('prefers a later shift_date over an earlier one regardless of period and part', () => {
+    const older  = { id: 'older',  shift_date: '2026-03-19', period: 'evening', part: 2 }
+    const newer  = { id: 'newer',  shift_date: '2026-03-20', period: 'morning', part: 0 }
+    expect(selectBestPriorShift([older, newer])?.id).toBe('newer')
+  })
+
+  it('prefers evening over morning on the same date when parts are equal', () => {
+    const morning = { id: 'morning', shift_date: '2026-03-20', period: 'morning', part: 0 }
+    const evening = { id: 'evening', shift_date: '2026-03-20', period: 'evening', part: 0 }
+    expect(selectBestPriorShift([morning, evening])?.id).toBe('evening')
   })
 })
 

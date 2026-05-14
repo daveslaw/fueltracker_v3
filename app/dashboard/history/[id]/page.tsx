@@ -5,6 +5,8 @@ import { buildFinancialLines } from '@/lib/owner-reports'
 import { selectActivePriceAt } from '@/lib/pricing'
 import { canFlag, canOverride } from '@/lib/supervisor-review'
 import { flagShift, unflagShift, createOverride } from '@/app/shift/actions'
+import { computeShiftLabel, buildSplitNotice } from '@/lib/shift-open'
+import type { ShiftPeriod, ShiftPart } from '@/lib/shift-open'
 
 interface Props { params: Promise<{ id: string }> }
 
@@ -38,7 +40,7 @@ export default async function ShiftAuditPage({ params }: Props) {
     .from('shifts')
     .select(`
       id, period, shift_date, status, submitted_at, is_flagged, flag_comment,
-      station_id,
+      station_id, shift_type, part,
       stations ( name ),
       user_profiles!supervisor_id ( email )
     `)
@@ -55,6 +57,7 @@ export default async function ShiftAuditPage({ params }: Props) {
     { data: rec },
     { data: overrides },
     { data: allPrices },
+    { data: siblingShifts },
   ] = await Promise.all([
     supabase.from('pumps').select('id, label, tank_id').eq('station_id', shift.station_id).order('label'),
     supabase.from('tanks').select('id, label, fuel_grade_id').eq('station_id', shift.station_id).order('label'),
@@ -66,6 +69,14 @@ export default async function ShiftAuditPage({ params }: Props) {
       .eq('shift_id', shiftId).maybeSingle(),
     supabase.from('ocr_overrides').select('id, reading_id, reading_type, original_value, override_value, reason, created_at, user_profiles!overridden_by(full_name)').eq('shift_id', shiftId),
     supabase.from('fuel_prices').select('station_id, fuel_grade_id, sell_price_per_litre, cost_per_litre, valid_from, valid_to').order('valid_from'),
+    (shift as any).shift_type === 'price_change'
+      ? supabase.from('shifts').select('id, part')
+          .eq('station_id', shift.station_id)
+          .eq('shift_date', shift.shift_date)
+          .eq('period', shift.period)
+          .eq('shift_type', 'price_change')
+          .neq('id', shiftId)
+      : Promise.resolve({ data: [] }),
   ])
 
   const posLines = posSubmission
@@ -107,6 +118,12 @@ export default async function ShiftAuditPage({ params }: Props) {
   }
 
   const ss = shift as any
+  const shiftPart  = (ss.part  ?? 0) as ShiftPart
+  const shiftType  = (ss.shift_type ?? 'standard') as 'standard' | 'price_change'
+  const splitNotice = buildSplitNotice(
+    { id: shiftId, period: shift.period as ShiftPeriod, part: shiftPart, shift_type: shiftType },
+    (siblingShifts ?? []) as Array<{ id: string; part: ShiftPart }>
+  )
 
   return (
     <main className="max-w-2xl mx-auto p-4 space-y-6">
@@ -114,7 +131,7 @@ export default async function ShiftAuditPage({ params }: Props) {
       <div className="flex items-start justify-between">
         <div>
           <Link href="/dashboard/history" className="text-xs text-muted-foreground hover:underline">← Shift history</Link>
-          <h1 className="text-xl font-semibold mt-1 capitalize">{shift.period} shift · {shift.shift_date}</h1>
+          <h1 className="text-xl font-semibold mt-1">{computeShiftLabel(shift.period as ShiftPeriod, shiftPart)} shift · {shift.shift_date}</h1>
           <p className="text-sm text-muted-foreground">
             {ss.stations?.name} · {ss.user_profiles?.email ?? '—'}
           </p>
@@ -130,6 +147,20 @@ export default async function ShiftAuditPage({ params }: Props) {
           'bg-blue-100 text-blue-800'
         }`}>{shift.status}</span>
       </div>
+
+      {splitNotice && (
+        <div className="border border-blue-200 bg-blue-50 rounded px-4 py-3 text-sm text-blue-800">
+          This is <span className="font-medium">{splitNotice.currentLabel}</span> of a price change split.
+          {splitNotice.siblings.map(s => (
+            <span key={s.id}>
+              {' '}
+              <Link href={`/dashboard/history/${s.id}`} className="underline font-medium">
+                {s.direction === '→' ? `View ${s.label} →` : `← View ${s.label}`}
+              </Link>
+            </span>
+          ))}
+        </div>
+      )}
 
       {shift.flag_comment && (
         <div className="border border-red-200 bg-red-50 rounded px-4 py-3 text-sm text-red-700">

@@ -33,6 +33,7 @@ export interface ShiftDataBundle {
     station_id:   string
     period:       'morning' | 'evening'
     shift_date:   string        // YYYY-MM-DD
+    shift_type:   'standard' | 'price_change'
     started_at:   string | null // ISO timestamp; used for price lookup
     submitted_at: string | null // ISO timestamp; null if shift not yet submitted
   }
@@ -66,6 +67,28 @@ export interface ReconciliationWriter {
   persist(shiftId: string, result: ReconciliationOutput): Promise<{ error?: string }>
 }
 
+// ── Prior shift candidate selection (pure, exported for unit tests) ───────────
+
+export interface PriorShiftCandidate {
+  id:         string
+  shift_date: string
+  period:     string
+  part:       number
+}
+
+const PERIOD_RANK: Record<string, number> = { evening: 1, morning: 0 }
+
+export function selectBestPriorShift(candidates: PriorShiftCandidate[]): PriorShiftCandidate | null {
+  if (!candidates.length) return null
+  return [...candidates].sort((a, b) => {
+    if (a.shift_date !== b.shift_date) return a.shift_date > b.shift_date ? -1 : 1
+    const aRank = PERIOD_RANK[a.period] ?? 0
+    const bRank = PERIOD_RANK[b.period] ?? 0
+    if (aRank !== bRank) return bRank - aRank
+    return b.part - a.part
+  })[0]
+}
+
 // ── Pure assembly (exported for unit tests) ───────────────────────────────────
 
 export function assemblePureInputs(
@@ -89,10 +112,19 @@ export function assemblePureInputs(
     return [{ pump_id: o.pump_id, opening_reading: o.meter_reading, closing_reading: c.meter_reading }]
   })
 
-  // Filter deliveries to this shift's period using the canonical shared function.
-  // Replaces the inline `hour < 12` duplication that existed in the previous version.
+  // Filter deliveries to this shift's window.
+  // price_change shifts use the shift's own started_at/submitted_at timestamps.
+  // Standard shifts use the period-based UTC hour cutoff via getShiftPeriod().
   const deliveries = bundle.deliveries
-    .filter(d => getShiftPeriod(d.delivered_at) === bundle.shift.period)
+    .filter(d => {
+      if (bundle.shift.shift_type === 'price_change') {
+        const deliveredMs  = new Date(d.delivered_at).getTime()
+        const startMs      = bundle.shift.started_at  ? new Date(bundle.shift.started_at).getTime()  : 0
+        const submitMs     = bundle.shift.submitted_at ? new Date(bundle.shift.submitted_at).getTime() : Infinity
+        return deliveredMs >= startMs && deliveredMs < submitMs
+      }
+      return getShiftPeriod(d.delivered_at) === bundle.shift.period
+    })
     .map(d => ({ tank_id: d.tank_id, litres_received: d.litres_received }))
 
   // Price snapshot at started_at.
@@ -158,7 +190,7 @@ export function createSupabaseRepository(db: SupabaseClient): ShiftDataRepositor
       // ── 1. Shift ──────────────────────────────────────────────────────────
       const { data: shift, error: shiftErr } = await db
         .from('shifts')
-        .select('id, station_id, period, shift_date, status, started_at, submitted_at')
+        .select('id, station_id, period, shift_date, shift_type, status, started_at, submitted_at')
         .eq('id', shiftId)
         .single()
       if (shiftErr || !shift) return { error: shiftErr?.message ?? 'Shift not found' }
@@ -189,16 +221,18 @@ export function createSupabaseRepository(db: SupabaseClient): ShiftDataRepositor
       // Rolling model: the previous shift's close readings are this shift's open.
       const repositoryWarnings: AssemblyWarning[] = []
 
-      const { data: prevShift } = await db
+      const { data: prevShiftCandidates } = await db
         .from('shifts')
-        .select('id')
+        .select('id, shift_date, period, part')
         .eq('station_id', shift.station_id)
         .eq('status', 'closed')
         .lt('shift_date', shift.shift_date)
         .order('shift_date', { ascending: false })
-        .order('period',     { ascending: false }) // evening > morning within same date
-        .limit(1)
-        .maybeSingle()
+        .order('period',     { ascending: false })
+        .order('part',       { ascending: false })
+        .limit(3)
+
+      const prevShift = selectBestPriorShift(prevShiftCandidates ?? [])
 
       let openDips:         { tank_id: string; litres: number }[] = []
       let openPumpReadings: { pump_id: string; meter_reading: number; type: 'open' | 'close' }[] = []

@@ -1,19 +1,38 @@
-import type { ShiftStatus, ShiftPeriod } from '@/lib/shift-open'
+import type { ShiftStatus, ShiftPeriod, ShiftPart } from '@/lib/shift-open'
+import { computeShiftLabel } from '@/lib/shift-open'
 export type { ShiftStatus, ShiftPeriod }
 
 // ── buildStationDayStatus ─────────────────────────────────────────────────
 
+export interface EveningEntry {
+  part:   ShiftPart
+  status: ShiftStatus | 'not_started'
+  label:  string
+}
+
 export interface StationDayStatus {
   morning: ShiftStatus | 'not_started'
-  evening: ShiftStatus | 'not_started'
+  evening: EveningEntry[]
 }
 
 export function buildStationDayStatus(
-  shifts: Array<{ period: ShiftPeriod; status: ShiftStatus }>,
+  shifts: Array<{ period: ShiftPeriod; status: ShiftStatus; part: ShiftPart }>,
 ): StationDayStatus {
-  const find = (period: ShiftPeriod) =>
-    shifts.find(s => s.period === period)?.status ?? 'not_started'
-  return { morning: find('morning'), evening: find('evening') }
+  const morning = shifts.find(s => s.period === 'morning')?.status ?? 'not_started'
+
+  const eveningShifts = shifts
+    .filter(s => s.period === 'evening')
+    .sort((a, b) => a.part - b.part)
+
+  const evening: EveningEntry[] = eveningShifts.length
+    ? eveningShifts.map(s => ({
+        part:   s.part,
+        status: s.status,
+        label:  computeShiftLabel('evening', s.part),
+      }))
+    : [{ part: 0, status: 'not_started', label: 'Evening' }]
+
+  return { morning, evening }
 }
 
 // ── buildFinancialLines ───────────────────────────────────────────────────

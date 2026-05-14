@@ -3,10 +3,11 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { canStartShift } from '@/lib/shift-open'
+import { canStartShift, canSplitShift } from '@/lib/shift-open'
 import { getCloseProgress, canSubmit } from '@/lib/shift-close'
 import { runReconciliation } from '@/lib/reconciliation-runner'
 import { canFlag, canOverride, validateFlagComment, validateOverride } from '@/lib/supervisor-review'
+import { hasPriceChangeDuringWindow } from '@/lib/pricing'
 import { createDelivery, deleteDelivery as dbDeleteDelivery, validateDeliveryInput } from '@/lib/deliveries'
 import { getCashierSubmissionState } from '@/lib/cashier-submission'
 import type { ShiftRow, ShiftPeriod, ShiftStatus } from '@/lib/shift-open'
@@ -164,7 +165,7 @@ export async function submitShift(shiftId: string): Promise<ActionResult> {
 
   const [cashierState, { data: shift }] = await Promise.all([
     getCashierSubmissionState(shiftId),
-    supabase.from('shifts').select('station_id, status').eq('id', shiftId).single(),
+    supabase.from('shifts').select('station_id, status, part, started_at').eq('id', shiftId).single(),
   ])
   if (!shift) return { error: 'Shift not found' }
 
@@ -197,14 +198,77 @@ export async function submitShift(shiftId: string): Promise<ActionResult> {
   if (!progress.isComplete) return { error: 'All close readings, cashier submission, and dry stock count are required before submitting.' }
 
   const submittedAt = new Date().toISOString()
+
+  let autoFlag: { is_flagged: boolean; flag_comment: string } | null = null
+  if (shift.part === 0) {
+    const { data: prices } = await supabase
+      .from('fuel_prices')
+      .select('valid_from')
+      .eq('station_id', shift.station_id)
+    if (prices && hasPriceChangeDuringWindow(prices, shift.started_at, submittedAt)) {
+      autoFlag = {
+        is_flagged: true,
+        flag_comment: 'Price change detected during shift window — consider splitting.',
+      }
+    }
+  }
+
   const { error } = await supabase
-    .from('shifts').update({ status: 'closed', submitted_at: submittedAt }).eq('id', shiftId)
+    .from('shifts')
+    .update({ status: 'closed', submitted_at: submittedAt, ...autoFlag })
+    .eq('id', shiftId)
   if (error) return { error: error.message }
 
   // Run reconciliation server-side immediately after close
   await runReconciliation(shiftId)
 
   redirect(`/shift/${shiftId}/close/summary`)
+}
+
+// ── splitShift ────────────────────────────────────────────────────────────────
+
+export async function splitShift(
+  shiftId: string
+): Promise<{ error: string } | { part2ShiftId: string }> {
+  const supabase = await createClient()
+
+  const { data: shift } = await supabase
+    .from('shifts')
+    .select('id, station_id, period, shift_date, supervisor_id, status, part')
+    .eq('id', shiftId)
+    .single()
+  if (!shift) return { error: 'Shift not found' }
+
+  if (!canSplitShift(shift)) return { error: 'Shift cannot be split in its current state' }
+
+  const now = new Date().toISOString()
+
+  const { error: closeErr } = await supabase
+    .from('shifts')
+    .update({ part: 1, shift_type: 'price_change', status: 'closed', submitted_at: now })
+    .eq('id', shiftId)
+  if (closeErr) return { error: closeErr.message }
+
+  await runReconciliation(shiftId)
+
+  const { data: part2, error: createErr } = await supabase
+    .from('shifts')
+    .insert({
+      station_id:   shift.station_id,
+      period:       shift.period,
+      shift_date:   shift.shift_date,
+      supervisor_id: shift.supervisor_id,
+      part:         2,
+      shift_type:   'price_change',
+      status:       'pending',
+      started_at:   now,
+    })
+    .select('id')
+    .single()
+  if (createErr) return { error: createErr.message }
+
+  revalidatePath(`/shift/${shiftId}/close/summary`)
+  return { part2ShiftId: part2.id }
 }
 
 // ── flagShift ─────────────────────────────────────────────────────────────────

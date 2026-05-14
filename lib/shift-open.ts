@@ -38,6 +38,12 @@ export function canStartShift(
   )
 }
 
+// ── canSplitShift ─────────────────────────────────────────────────────────────
+
+export function canSplitShift(shift: { status: string; part: number }): boolean {
+  return shift.status === 'pending' && shift.part === 0
+}
+
 // ── markFirstPartSplit ────────────────────────────────────────────────────────
 
 export function markFirstPartSplit(
@@ -93,4 +99,29 @@ const PERIOD_LABEL: Record<ShiftPeriod, string> = {
 export function computeShiftLabel(period: ShiftPeriod, part: ShiftPart): string {
   const base = PERIOD_LABEL[period]
   return part === 0 ? base : `${base} Part ${part}`
+}
+
+// ── buildSplitNotice ──────────────────────────────────────────────────────────
+
+export type SplitSibling = { id: string; label: string; direction: '→' | '←' }
+
+export type SplitNotice = {
+  currentLabel: string
+  siblings: SplitSibling[]
+}
+
+export function buildSplitNotice(
+  current: { id: string; period: ShiftPeriod; part: ShiftPart; shift_type: 'standard' | 'price_change' },
+  siblings: Array<{ id: string; part: ShiftPart }>
+): SplitNotice | null {
+  if (current.shift_type !== 'price_change') return null
+
+  return {
+    currentLabel: computeShiftLabel(current.period, current.part),
+    siblings: siblings.map(s => ({
+      id:        s.id,
+      label:     computeShiftLabel(current.period, s.part),
+      direction: s.part > current.part ? '→' : '←',
+    })),
+  }
 }
