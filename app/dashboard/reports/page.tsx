@@ -1,122 +1,126 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { buildFinancialLines, isReportPartial } from '@/lib/owner-reports'
-import { selectActivePriceAt } from '@/lib/pricing'
+import { getFuelControlMonth, buildFuelControlRows, buildDaySubtotals } from '@/lib/fuel-control-report'
+import type { FuelControlShiftRow, FuelControlDaySubtotal } from '@/lib/fuel-control-report'
 
 interface Props {
-  searchParams: Promise<{ station?: string; date?: string }>
+  searchParams: Promise<{ station?: string; month?: string }>
 }
 
-function VarianceCell({ v, unit }: { v: number; unit: 'L' | 'R' }) {
-  const cls =
-    v > 0 ? 'text-destructive' :
-    v < 0 ? 'text-amber-600' :
-    'text-green-600'
+function currentMonth(): string {
+  return new Date().toISOString().slice(0, 7)
+}
+
+function adjacentMonth(month: string, delta: number): string {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function fmtL(n: number | null): string {
+  if (n === null) return '—'
+  return n.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' L'
+}
+
+function fmtR(n: number | null): string {
+  if (n === null) return '—'
+  return 'R ' + n.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function VarCell({ v }: { v: number | null }) {
+  if (v === null) return <span className="text-muted-foreground">—</span>
+  const cls = v < 0 ? 'text-destructive' : v > 0 ? 'text-amber-600' : 'text-green-600'
   const sign = v > 0 ? '+' : ''
-  const fmt = (n: number) => Math.abs(n).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  return <span className={`font-semibold ${cls}`}>{sign}{unit === 'R' ? 'R ' : ''}{fmt(v)}{unit === 'L' ? ' L' : ''}</span>
+  return (
+    <span className={`font-semibold ${cls}`}>
+      {sign}{v.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} L
+    </span>
+  )
 }
 
-function fmtL(n: number) { return n.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' L' }
-function fmtR(n: number) { return 'R ' + Math.abs(n).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+function ShiftRow({ row, stationId }: { row: FuelControlShiftRow; stationId: string }) {
+  const isPending = row.status === 'pending'
+  const label = row.period === 'morning' ? 'AM' : 'PM'
 
-export default async function DailyReportPage({ searchParams }: Props) {
-  const { station: stationId, date } = await searchParams
+  const dateCell = isPending
+    ? <span className="text-muted-foreground">{row.shift_date} {label}</span>
+    : <Link href={`/dashboard/history/${row.shift_id}`} className="underline text-primary">{row.shift_date} {label}</Link>
+
+  return (
+    <tr className="divide-x">
+      <td className="px-3 py-2 whitespace-nowrap">
+        {dateCell}
+        {isPending && <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded">pending</span>}
+        {row.is_flagged && <span className="ml-2 text-xs bg-red-100 text-red-800 px-1.5 py-0.5 rounded">flagged</span>}
+      </td>
+      <td className="px-3 py-2 text-right tabular-nums">{fmtL(row.opening_dip)}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{fmtL(row.closing_dip)}</td>
+      <td className="px-3 py-2">
+        {row.deliveries_litres > 0 ? (
+          <div>
+            <span className="tabular-nums">{fmtL(row.deliveries_litres)}</span>
+            {row.delivery_note && <span className="block text-xs text-muted-foreground">{row.delivery_note}</span>}
+            {row.driver_name   && <span className="block text-xs text-muted-foreground">{row.driver_name}</span>}
+          </div>
+        ) : <span className="text-muted-foreground">—</span>}
+      </td>
+      <td className="px-3 py-2 text-right tabular-nums">{fmtL(row.pos_litres)}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{fmtL(row.dip_calc_litres)}</td>
+      <td className="px-3 py-2 text-right"><VarCell v={row.variance_litres} /></td>
+      <td className="px-3 py-2 text-right"><VarCell v={row.accumulated_variance} /></td>
+      <td className="px-3 py-2 text-right tabular-nums">{fmtR(row.gp_zar)}</td>
+    </tr>
+  )
+}
+
+function SubtotalRow({ sub }: { sub: FuelControlDaySubtotal }) {
+  return (
+    <tr className="bg-muted/40 font-medium text-sm divide-x">
+      <td className="px-3 py-1.5 text-muted-foreground" colSpan={3}>Day total — {sub.shift_date}</td>
+      <td className="px-3 py-1.5 text-right tabular-nums">{fmtL(sub.total_deliveries > 0 ? sub.total_deliveries : null)}</td>
+      <td className="px-3 py-1.5 text-right tabular-nums">{fmtL(sub.total_pos_litres)}</td>
+      <td className="px-3 py-1.5 text-right tabular-nums">{fmtL(sub.total_dip_calc)}</td>
+      <td className="px-3 py-1.5 text-right"><VarCell v={sub.total_variance} /></td>
+      <td className="px-3 py-1.5 text-right text-muted-foreground">—</td>
+      <td className="px-3 py-1.5 text-right tabular-nums">{fmtR(sub.total_gp)}</td>
+    </tr>
+  )
+}
+
+export default async function FuelControlReportPage({ searchParams }: Props) {
+  const { station: stationParam, month: monthParam } = await searchParams
 
   const supabase = await createClient()
-  const today = new Date().toISOString().slice(0, 10)
-  const selectedDate = date ?? today
+  const selectedMonth = monthParam ?? currentMonth()
+  const [year, month] = selectedMonth.split('-').map(Number)
 
   const { data: stations } = await supabase.from('stations').select('id, name').order('name')
-
-  // Default to first station if none selected
-  const activeStationId = stationId ?? stations?.[0]?.id
+  const activeStationId = stationParam ?? stations?.[0]?.id
   if (!activeStationId) {
-    return <main className="max-w-3xl mx-auto p-4"><p className="text-muted-foreground text-sm">No stations configured.</p></main>
+    return (
+      <main className="max-w-5xl mx-auto p-4">
+        <p className="text-muted-foreground text-sm">No stations configured.</p>
+      </main>
+    )
   }
   const activeStation = (stations ?? []).find(s => s.id === activeStationId)
 
-  // Load shifts for this station + date
-  const { data: shifts } = await supabase
-    .from('shifts')
-    .select('id, period, status, submitted_at, station_id, started_at')
-    .eq('station_id', activeStationId)
-    .eq('shift_date', selectedDate)
+  const { inputs, grades, prices } = await getFuelControlMonth(supabase, activeStationId, year, month)
+  const rows      = buildFuelControlRows(inputs, prices)
+  const subtotals = buildDaySubtotals(rows)
 
-  const shiftIds = (shifts ?? []).map(s => s.id)
-
-  // Load all related data in parallel
-  const [
-    { data: tanks },
-    recsResult,
-    posSubsResult,
-    { data: allPrices },
-  ] = await Promise.all([
-    supabase.from('tanks').select('id, label, fuel_grade_id').eq('station_id', activeStationId).order('label'),
-    shiftIds.length > 0
-      ? supabase.from('reconciliations')
-          .select('shift_id, reconciliation_tank_lines(*), reconciliation_grade_lines(*)')
-          .in('shift_id', shiftIds)
-      : Promise.resolve({ data: [] as any[] }),
-    shiftIds.length > 0
-      ? supabase.from('pos_submissions').select('id, shift_id').in('shift_id', shiftIds)
-      : Promise.resolve({ data: [] as any[] }),
-    supabase.from('fuel_prices').select('station_id, fuel_grade_id, sell_price_per_litre, cost_per_litre, valid_from, valid_to').order('valid_from'),
-  ])
-
-  const recs = recsResult.data ?? []
-  const posSubs = posSubsResult.data ?? []
-
-  const posSubIds = posSubs.map((ps: any) => ps.id)
-  const { data: allPosLines } = posSubIds.length > 0
-    ? await supabase.from('pos_submission_lines')
-        .select('pos_submission_id, fuel_grade_id, litres_sold, revenue_zar')
-        .in('pos_submission_id', posSubIds)
-    : { data: [] as any[] }
-
-  const tankLabel = (id: string) => (tanks ?? []).find(t => t.id === id)?.label ?? id
-
-  const periods = ['morning', 'evening'] as const
-  const sections = periods.map(period => {
-    const s = (shifts ?? []).find(sh => sh.period === period)
-    const status = (s?.status ?? 'not_started') as string
-    const partial = isReportPartial(status as any)
-
-    if (!s || !recs) return { period, status, partial, rec: null, financial: null }
-
-    const rec = recs.find((r: any) => r.shift_id === s.id) ?? null
-    if (!rec) return { period, status, partial, rec: null, financial: null }
-
-    const posSub = posSubs.find((ps: any) => ps.shift_id === s.id)
-    const posLines = posSub
-      ? (allPosLines ?? []).filter((pl: any) => pl.pos_submission_id === posSub.id)
-      : []
-
-    const gradeIds = [...new Set(posLines.map((l: any) => l.fuel_grade_id as string))]
-    const prices = gradeIds.map(gid => {
-      const rows = (allPrices ?? []).filter(
-        (p: any) => p.fuel_grade_id === gid && p.station_id === s.station_id,
-      )
-      const active = selectActivePriceAt(rows, s.started_at ?? s.submitted_at ?? selectedDate)
-      return {
-        fuel_grade_id:        gid,
-        sell_price_per_litre: active?.sell_price_per_litre ?? 0,
-      }
-    })
-
-    const financial = buildFinancialLines(posLines, prices)
-    return { period, status, partial, rec, financial }
-  })
+  const prevMonth = adjacentMonth(selectedMonth, -1)
+  const nextMonth = adjacentMonth(selectedMonth,  1)
 
   return (
-    <main className="max-w-3xl mx-auto p-4 space-y-6">
+    <main className="max-w-6xl mx-auto p-4 space-y-6">
       <div className="flex items-start justify-between">
         <div>
           <Link href="/dashboard" className="text-xs text-muted-foreground hover:underline">← Dashboard</Link>
-          <h1 className="text-xl font-semibold mt-1">Daily Report</h1>
+          <h1 className="text-xl font-semibold mt-1">Fuel Control Report</h1>
           <div className="flex gap-3 mt-1">
-            <Link href="/dashboard/reports/weekly" className="text-xs text-blue-600 hover:underline">Weekly</Link>
-            <Link href="/dashboard/reports/monthly" className="text-xs text-blue-600 hover:underline">Monthly</Link>
+            <Link href="/dashboard/reports/weekly"    className="text-xs text-blue-600 hover:underline">Weekly</Link>
+            <Link href="/dashboard/reports/monthly"   className="text-xs text-blue-600 hover:underline">Monthly</Link>
             <Link href="/dashboard/reports/dry-stock" className="text-xs text-blue-600 hover:underline">Dry Stock</Link>
             <Link href="/dashboard/reports/deliveries" className="text-xs text-blue-600 hover:underline">Deliveries</Link>
           </div>
@@ -124,146 +128,89 @@ export default async function DailyReportPage({ searchParams }: Props) {
         </div>
       </div>
 
-      {/* Picker form */}
-      <form method="GET" action="/dashboard/reports" className="flex flex-wrap gap-3 items-end">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-muted-foreground">Station</label>
-          <select name="station" defaultValue={activeStationId} className="border rounded px-2 py-1.5 text-sm">
-            {(stations ?? []).map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-muted-foreground">Date</label>
-          <input type="date" name="date" defaultValue={selectedDate} max={today} lang="en-ZA" className="border rounded px-2 py-1.5 text-sm" />
-        </div>
-        <button type="submit" className="rounded bg-black px-4 py-1.5 text-sm text-white">View</button>
-        <a
-          href={`/dashboard/reports/export?type=daily&station=${activeStationId}&date=${selectedDate}`}
-          className="rounded border px-4 py-1.5 text-sm"
-        >
-          Export CSV
-        </a>
-      </form>
-
-      {sections.map(({ period, status, partial, rec, financial }) => (
-        <section key={period} className="space-y-3">
-          <div className="flex items-center gap-3">
-            <h2 className="text-base font-semibold capitalize">{period} shift</h2>
-            <span className={`text-xs px-2 py-0.5 rounded capitalize ${
-              status === 'approved'    ? 'bg-green-100 text-green-800' :
-              status === 'flagged'     ? 'bg-red-100 text-red-800' :
-              status === 'submitted'   ? 'bg-blue-100 text-blue-800' :
-              status === 'not_started' ? 'bg-gray-100 text-gray-500' :
-                                         'bg-yellow-100 text-yellow-800'
-            }`}>{status.replace(/_/g, ' ')}</span>
+      {/* Controls */}
+      <div className="flex flex-wrap gap-4 items-center">
+        <form method="GET" action="/dashboard/reports" className="flex gap-2 items-end">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Station</label>
+            <select name="station" defaultValue={activeStationId} className="border rounded px-2 py-1.5 text-sm">
+              {(stations ?? []).map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
           </div>
+          <input type="hidden" name="month" value={selectedMonth} />
+          <button type="submit" className="rounded bg-black px-4 py-1.5 text-sm text-white">View</button>
+        </form>
 
-          {partial && (
-            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-              Partial data — shift not yet submitted.
-            </div>
-          )}
+        {/* Month navigation */}
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/dashboard/reports?station=${activeStationId}&month=${prevMonth}`}
+            className="rounded border px-3 py-1.5 text-sm hover:bg-muted"
+          >
+            ←
+          </Link>
+          <span className="text-sm font-medium w-24 text-center">{selectedMonth}</span>
+          <Link
+            href={`/dashboard/reports?station=${activeStationId}&month=${nextMonth}`}
+            className="rounded border px-3 py-1.5 text-sm hover:bg-muted"
+          >
+            →
+          </Link>
+        </div>
+      </div>
 
-          {!rec && !partial && (
-            <p className="text-sm text-muted-foreground">No reconciliation data.</p>
-          )}
+      {rows.length === 0 && (
+        <div className="rounded-md border px-4 py-8 text-center text-sm text-muted-foreground">
+          No shifts found for {activeStation?.name} in {selectedMonth}.
+        </div>
+      )}
 
-          {rec && (
-            <>
-              {/* Formula 1: Tank inventory */}
-              <div className="space-y-1">
-                <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Formula 1 — Tank Inventory</h3>
-                <div className="border rounded-md divide-y text-sm">
-                  {((rec as any).reconciliation_tank_lines ?? []).map((line: any) => (
-                    <div key={line.id} className="px-4 py-3">
-                      <div className="font-medium mb-1">{tankLabel(line.tank_id)}</div>
-                      <div className="grid grid-cols-2 gap-x-4 text-muted-foreground">
-                        <span>Opening dip</span><span className="text-right">{fmtL(line.opening_dip)}</span>
-                        <span>Deliveries</span><span className="text-right">+{fmtL(line.deliveries_received)}</span>
-                        <span>Meter delta</span><span className="text-right">−{fmtL(line.meter_delta)}</span>
-                        <span>Expected closing</span><span className="text-right">{fmtL(line.expected_closing_dip)}</span>
-                        <span>Actual closing</span><span className="text-right">{fmtL(line.actual_closing_dip)}</span>
-                      </div>
-                      <div className="flex justify-between border-t mt-1 pt-1">
-                        <span className="text-muted-foreground">Variance</span>
-                        <VarianceCell v={line.variance_litres} unit="L" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+      {grades.map(grade => {
+        const gradeRows     = rows.filter(r => r.fuel_grade_id === grade)
+        const gradeSubs     = subtotals.filter(s => s.fuel_grade_id === grade)
+        const dates         = [...new Set(gradeRows.map(r => r.shift_date))].sort()
 
-              {/* Formula 2: Pump meter vs POS */}
-              <div className="space-y-1">
-                <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Formula 2 — Pump Meter vs POS</h3>
-                <div className="border rounded-md text-sm overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="border-b">
-                      <tr className="text-muted-foreground text-xs">
-                        <th className="text-left px-3 py-2">Grade</th>
-                        <th className="text-right px-3 py-2">Meter delta</th>
-                        <th className="text-right px-3 py-2">POS sold</th>
-                        <th className="text-right px-3 py-2">Variance</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {((rec as any).reconciliation_grade_lines ?? []).map((line: any) => (
-                        <tr key={line.id}>
-                          <td className="px-3 py-2 font-medium">{line.fuel_grade_id}</td>
-                          <td className="px-3 py-2 text-right">{fmtL(line.meter_delta)}</td>
-                          <td className="px-3 py-2 text-right">{fmtL(line.pos_litres_sold)}</td>
-                          <td className="px-3 py-2 text-right"><VarianceCell v={line.variance_litres} unit="L" /></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+        if (gradeRows.length === 0) return null
 
-              {/* Financial */}
-              {financial && (
-                <div className="space-y-1">
-                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Financial</h3>
-                  <div className="border rounded-md text-sm overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="border-b">
-                        <tr className="text-muted-foreground text-xs">
-                          <th className="text-left px-3 py-2">Grade</th>
-                          <th className="text-right px-3 py-2">Litres sold</th>
-                          <th className="text-right px-3 py-2">Price/L</th>
-                          <th className="text-right px-3 py-2">Expected (ZAR)</th>
-                          <th className="text-right px-3 py-2">POS (ZAR)</th>
-                          <th className="text-right px-3 py-2">Variance</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {financial.lines.map(line => (
-                          <tr key={line.fuel_grade_id}>
-                            <td className="px-3 py-2 font-medium">{line.fuel_grade_id}</td>
-                            <td className="px-3 py-2 text-right">{fmtL(line.litres_sold)}</td>
-                            <td className="px-3 py-2 text-right">R {line.sell_price_per_litre.toFixed(2)}</td>
-                            <td className="px-3 py-2 text-right">{fmtR(line.expected_revenue_zar)}</td>
-                            <td className="px-3 py-2 text-right">{fmtR(line.pos_revenue_zar)}</td>
-                            <td className="px-3 py-2 text-right"><VarianceCell v={line.variance_zar} unit="R" /></td>
-                          </tr>
+        return (
+          <section key={grade} className="space-y-1">
+            <h2 className="text-base font-semibold">{grade}</h2>
+            <div className="border rounded-md text-sm overflow-x-auto">
+              <table className="w-full divide-y">
+                <thead className="bg-muted/30">
+                  <tr className="text-xs text-muted-foreground divide-x">
+                    <th className="text-left px-3 py-2">Shift</th>
+                    <th className="text-right px-3 py-2">Opening dip</th>
+                    <th className="text-right px-3 py-2">Closing dip</th>
+                    <th className="text-left px-3 py-2">Deliveries</th>
+                    <th className="text-right px-3 py-2">POS litres</th>
+                    <th className="text-right px-3 py-2">Dip-calc litres</th>
+                    <th className="text-right px-3 py-2">Variance</th>
+                    <th className="text-right px-3 py-2">Acc. variance</th>
+                    <th className="text-right px-3 py-2">GP (ZAR)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {dates.map(date => {
+                    const dayRows = gradeRows.filter(r => r.shift_date === date)
+                    const sub     = gradeSubs.find(s => s.shift_date === date)
+                    return (
+                      <>
+                        {dayRows.map(row => (
+                          <ShiftRow key={row.shift_id} row={row} stationId={activeStationId} />
                         ))}
-                        <tr className="border-t-2 font-semibold bg-muted/30">
-                          <td className="px-3 py-2" colSpan={3}>Total</td>
-                          <td className="px-3 py-2 text-right">{fmtR(financial.totals.expected_revenue_zar)}</td>
-                          <td className="px-3 py-2 text-right">{fmtR(financial.totals.pos_revenue_zar)}</td>
-                          <td className="px-3 py-2 text-right"><VarianceCell v={financial.totals.variance_zar} unit="R" /></td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </section>
-      ))}
+                        {sub && <SubtotalRow key={`sub-${date}`} sub={sub} />}
+                      </>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )
+      })}
     </main>
   )
 }
