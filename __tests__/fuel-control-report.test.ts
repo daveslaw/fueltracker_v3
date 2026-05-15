@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildFuelControlRows, buildDaySubtotals, buildFuelControlReportRows } from '../lib/fuel-control-report'
-import type { FuelControlRowInput } from '../lib/fuel-control-report'
+import { buildFuelControlRows, buildDaySubtotals, buildFuelControlReportRows, trailingMonths, buildDayEntries } from '../lib/fuel-control-report'
+import type { FuelControlRowInput, FuelControlDaySubtotal, FuelControlReportRow } from '../lib/fuel-control-report'
 import type { PriceRow } from '../lib/pricing'
 
 function makeInput(overrides: Partial<FuelControlRowInput> = {}): FuelControlRowInput {
@@ -356,5 +356,124 @@ describe('buildFuelControlReportRows', () => {
       'shift:D50', 'price_change_impact:D50',
       'shift:95', 'shift:D50',
     ])
+  })
+})
+
+// ── trailingMonths ────────────────────────────────────────────────────────────
+describe('trailingMonths', () => {
+  it('returns count + 1 entries (current month plus N trailing)', () => {
+    const result = trailingMonths('2026-05', 3)
+    expect(result).toHaveLength(4)
+  })
+
+  it('lists months in descending order, most recent first', () => {
+    const result = trailingMonths('2026-05', 3)
+    expect(result).toEqual(['2026-05', '2026-04', '2026-03', '2026-02'])
+  })
+
+  it('wraps correctly across a year boundary', () => {
+    const result = trailingMonths('2026-02', 3)
+    expect(result).toEqual(['2026-02', '2026-01', '2025-12', '2025-11'])
+  })
+
+  it('pads single-digit months', () => {
+    const result = trailingMonths('2026-03', 2)
+    expect(result).toEqual(['2026-03', '2026-02', '2026-01'])
+  })
+})
+
+// ── buildDayEntries ───────────────────────────────────────────────────────────
+describe('buildDayEntries', () => {
+  function makeShiftRow(overrides: Partial<FuelControlRowInput> = {}): FuelControlReportRow {
+    const input = makeInput(overrides)
+    const prices = [makePrice({ fuel_grade_id: input.fuel_grade_id })]
+    const rows = buildFuelControlRows([input], prices)
+    return { type: 'shift', data: rows[0] }
+  }
+
+  function makeSub(overrides: Partial<FuelControlDaySubtotal> = {}): FuelControlDaySubtotal {
+    return {
+      shift_date:       '2026-05-01',
+      fuel_grade_id:    '95',
+      total_deliveries: 0,
+      total_pos_litres: 1500,
+      total_dip_calc:   1500,
+      total_variance:   0,
+      total_gp:         4500,
+      ...overrides,
+    }
+  }
+
+  it('returns one DayEntry per unique date', () => {
+    const rows: FuelControlReportRow[] = [
+      makeShiftRow({ shift_date: '2026-05-01' }),
+      makeShiftRow({ shift_date: '2026-05-02' }),
+    ]
+    const subs = [
+      makeSub({ shift_date: '2026-05-01' }),
+      makeSub({ shift_date: '2026-05-02' }),
+    ]
+    const entries = buildDayEntries(rows, ['95'], subs)
+    expect(entries.map(e => e.date)).toEqual(['2026-05-01', '2026-05-02'])
+  })
+
+  it('each gradeGroup contains only rows for that grade and date', () => {
+    const rows: FuelControlReportRow[] = [
+      makeShiftRow({ shift_date: '2026-05-01', fuel_grade_id: '95' }),
+      makeShiftRow({ shift_date: '2026-05-01', fuel_grade_id: 'D10' }),
+    ]
+    const subs = [
+      makeSub({ shift_date: '2026-05-01', fuel_grade_id: '95' }),
+      makeSub({ shift_date: '2026-05-01', fuel_grade_id: 'D10' }),
+    ]
+    const entries = buildDayEntries(rows, ['95', 'D10'], subs)
+    expect(entries).toHaveLength(1)
+    const [day] = entries
+    expect(day.gradeGroups).toHaveLength(2)
+    expect(day.gradeGroups[0].grade).toBe('95')
+    expect(day.gradeGroups[0].rows).toHaveLength(1)
+    expect(day.gradeGroups[1].grade).toBe('D10')
+    expect(day.gradeGroups[1].rows).toHaveLength(1)
+  })
+
+  it('allGradesSummary sums numeric fields across grade subtotals for the date', () => {
+    const rows: FuelControlReportRow[] = [
+      makeShiftRow({ shift_date: '2026-05-01', fuel_grade_id: '95' }),
+      makeShiftRow({ shift_date: '2026-05-01', fuel_grade_id: 'D10' }),
+    ]
+    const subs = [
+      makeSub({ shift_date: '2026-05-01', fuel_grade_id: '95',  total_pos_litres: 1000, total_variance: -10, total_gp: 3000 }),
+      makeSub({ shift_date: '2026-05-01', fuel_grade_id: 'D10', total_pos_litres: 2000, total_variance:   5, total_gp: 6000 }),
+    ]
+    const entries = buildDayEntries(rows, ['95', 'D10'], subs)
+    const { allGradesSummary: s } = entries[0]
+    expect(s.total_pos_litres).toBe(3000)
+    expect(s.total_variance).toBe(-5)
+    expect(s.total_gp).toBe(9000)
+  })
+
+  it('allGradesSummary treats null pos_litres as null when all grades are null', () => {
+    const rows: FuelControlReportRow[] = [
+      makeShiftRow({ shift_date: '2026-05-01', fuel_grade_id: '95', status: 'pending' }),
+    ]
+    const subs = [
+      makeSub({ shift_date: '2026-05-01', fuel_grade_id: '95', total_pos_litres: null }),
+    ]
+    const entries = buildDayEntries(rows, ['95'], subs)
+    expect(entries[0].allGradesSummary.total_pos_litres).toBeNull()
+  })
+
+  it('gradeGroups preserves price_change_impact rows for the grade', () => {
+    const part1 = makeInput({ shift_date: '2026-05-01', fuel_grade_id: '95', part: 1, shift_type: 'price_change', started_at: '2026-05-01T06:00:00Z' })
+    const part2 = makeInput({ shift_date: '2026-05-01', fuel_grade_id: '95', part: 2, shift_type: 'price_change', started_at: '2026-05-01T14:00:00Z' })
+    const prices = [
+      makePrice({ sell_price_per_litre: 17.00, cost_per_litre: 14.00, valid_from: '2026-04-01T00:00:00Z', valid_to: '2026-05-01T12:00:00Z' }),
+      makePrice({ sell_price_per_litre: 18.00, cost_per_litre: 15.00, valid_from: '2026-05-01T12:00:00Z', valid_to: null }),
+    ]
+    const reportRows = buildFuelControlReportRows([part1, part2], prices)
+    const subs = [makeSub({ shift_date: '2026-05-01' })]
+    const entries = buildDayEntries(reportRows, ['95'], subs)
+    const group = entries[0].gradeGroups[0]
+    expect(group.rows.some(r => r.type === 'price_change_impact')).toBe(true)
   })
 })

@@ -391,3 +391,67 @@ export async function getFuelControlMonth(
 
   return { inputs, grades, prices: allPriceRows }
 }
+
+export interface DaySummary {
+  total_deliveries: number
+  total_pos_litres: number | null
+  total_dip_calc:   number | null
+  total_variance:   number | null
+  total_gp:         number | null
+}
+
+export interface GradeGroup {
+  grade: string
+  rows:  FuelControlReportRow[]
+}
+
+export interface DayEntry {
+  date:             string
+  allGradesSummary: DaySummary
+  gradeGroups:      GradeGroup[]
+}
+
+export function buildDayEntries(
+  reportRows: FuelControlReportRow[],
+  grades: string[],
+  subtotals: FuelControlDaySubtotal[],
+): DayEntry[] {
+  const dates = [...new Set(
+    reportRows
+      .filter((r): r is Extract<FuelControlReportRow, { type: 'shift' }> => r.type === 'shift')
+      .map(r => r.data.shift_date)
+  )].sort()
+
+  return dates.map(date => {
+    const dateSubs = subtotals.filter(s => s.shift_date === date)
+
+    const allGradesSummary: DaySummary = {
+      total_deliveries: dateSubs.reduce((acc, s) => acc + s.total_deliveries, 0),
+      total_pos_litres: dateSubs.reduce<number | null>((acc, s) => sumNullable(acc, s.total_pos_litres), null),
+      total_dip_calc:   dateSubs.reduce<number | null>((acc, s) => sumNullable(acc, s.total_dip_calc),   null),
+      total_variance:   dateSubs.reduce<number | null>((acc, s) => sumNullable(acc, s.total_variance),   null),
+      total_gp:         dateSubs.reduce<number | null>((acc, s) => sumNullable(acc, s.total_gp),         null),
+    }
+
+    const gradeGroups: GradeGroup[] = grades.map(grade => ({
+      grade,
+      rows: reportRows.filter(r =>
+        r.type === 'shift'
+          ? r.data.fuel_grade_id === grade && r.data.shift_date === date
+          : r.fuel_grade_id === grade && r.shift_date === date
+      ),
+    }))
+
+    return { date, allGradesSummary, gradeGroups }
+  })
+}
+
+export function trailingMonths(current: string, count: number): string[] {
+  const [y, m] = current.split('-').map(Number)
+  const result: string[] = []
+  for (let i = 0; i <= count; i++) {
+    const d = new Date(y, m - 1 - i, 1)
+    result.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  return result
+}
