@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
     d.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() + 6) % 7) + (wk - 1) * 7)
     return d.toISOString().slice(0, 10)
   })()
-  const toDate = isMonthly ? `${month}-31` : (() => {
+  const toDate = isMonthly ? (() => { const [y, m] = month.split('-').map(Number); return new Date(y, m, 0).toISOString().slice(0, 10) })() : (() => {
     if (!fromDate) return ''
     const d = new Date(fromDate + 'T00:00:00Z')
     d.setUTCDate(d.getUTCDate() + 6)

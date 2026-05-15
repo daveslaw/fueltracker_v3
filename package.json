@@ -10,6 +10,9 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "overrides": {
+    "import-in-the-middle": "^3.0.1"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
     "@sentry/nextjs": "^10.52.0",

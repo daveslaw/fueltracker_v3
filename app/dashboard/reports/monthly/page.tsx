@@ -41,12 +41,16 @@ export default async function MonthlyReportPage({ searchParams }: Props) {
   }
   const activeStation = (stations ?? []).find(s => s.id === activeStationId)
 
+  const [y, m] = selectedMonth.split('-').map(Number)
+  const firstDay = `${selectedMonth}-01`
+  const lastDay  = new Date(y, m, 0).toISOString().slice(0, 10)
+
   const { data: shifts } = await supabase
     .from('shifts')
     .select('id, shift_date, period, status')
     .eq('station_id', activeStationId)
-    .gte('shift_date', `${selectedMonth}-01`)
-    .lte('shift_date', `${selectedMonth}-31`)
+    .gte('shift_date', firstDay)
+    .lte('shift_date', lastDay)
 
   const shiftIds = (shifts ?? []).map(s => s.id)
   const recsResult = shiftIds.length > 0

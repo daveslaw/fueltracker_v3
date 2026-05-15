@@ -98,6 +98,10 @@ export default async function ShiftAuditPage({ params }: Props) {
   })
   const financial = posLines.length > 0 ? buildFinancialLines(posLines as any, prices) : null
 
+  const sortedPumps = (pumps ?? []).slice().sort((a, b) =>
+    a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' })
+  )
+
   const tankLabel = (id: string) => (tanks ?? []).find(t => t.id === id)?.label ?? id
   const overriddenIds = new Set((overrides ?? []).map(o => o.reading_id))
 
@@ -172,7 +176,7 @@ export default async function ShiftAuditPage({ params }: Props) {
       <section className="space-y-2">
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Pump readings</h2>
         <div className="border rounded-md divide-y text-sm">
-          {(pumps ?? []).map(pump => {
+          {sortedPumps.map(pump => {
             const open  = (pumpReadings ?? []).find(r => r.pump_id === pump.id && r.type === 'open')
             const close = (pumpReadings ?? []).find(r => r.pump_id === pump.id && r.type === 'close')
             const isOverridden = (close && overriddenIds.has(close.id)) || (open && overriddenIds.has(open.id))

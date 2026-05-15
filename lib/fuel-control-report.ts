@@ -209,9 +209,9 @@ export async function getFuelControlMonth(
   year: number,
   month: number,
 ): Promise<{ inputs: FuelControlRowInput[]; grades: string[]; prices: PriceRow[] }> {
-  const mm      = String(month).padStart(2, '0')
+  const mm       = String(month).padStart(2, '0')
   const firstDay = `${year}-${mm}-01`
-  const lastDay  = `${year}-${mm}-31`
+  const lastDay  = new Date(year, month, 0).toISOString().slice(0, 10) // last day of month
 
   const [
     { data: shifts },
@@ -233,8 +233,8 @@ export async function getFuelControlMonth(
     db.from('deliveries')
       .select('delivered_at, delivery_note_number, driver_name, litres_received, tank_id')
       .eq('station_id', stationId)
-      .gte('delivered_at', `${year}-${mm}-01T00:00:00Z`)
-      .lte('delivered_at', `${year}-${mm}-31T23:59:59Z`),
+      .gte('delivered_at', `${firstDay}T00:00:00Z`)
+      .lte('delivered_at', `${lastDay}T23:59:59Z`),
     db.from('fuel_prices')
       .select('station_id, fuel_grade_id, sell_price_per_litre, cost_per_litre, valid_from, valid_to')
       .eq('station_id', stationId)
