@@ -31,14 +31,13 @@ function VarCell({ v }: { v: number | null }) {
   )
 }
 
-function ShiftCell({ row, showGrade }: { row: Extract<FuelControlReportRow, { type: 'shift' }>['data']; showGrade: boolean }) {
+function ShiftCell({ row }: { row: Extract<FuelControlReportRow, { type: 'shift' }>['data'] }) {
   const isPending = row.status === 'pending'
   const label     = row.period === 'morning' ? 'AM' : 'PM'
-  const text      = showGrade ? `${label} · ${row.fuel_grade_id}` : label
 
   const dateContent = isPending
-    ? <span className="text-muted-foreground">{text}</span>
-    : <Link href={`/dashboard/history/${row.shift_id}`} className="underline text-primary">{text}</Link>
+    ? <span className="text-muted-foreground">{label}</span>
+    : <Link href={`/dashboard/history/${row.shift_id}`} className="underline text-primary">{label}</Link>
 
   return (
     <>
@@ -49,10 +48,10 @@ function ShiftCell({ row, showGrade }: { row: Extract<FuelControlReportRow, { ty
   )
 }
 
-function ShiftRow({ row, showGrade }: { row: Extract<FuelControlReportRow, { type: 'shift' }>['data']; showGrade: boolean }) {
+function ShiftRow({ row }: { row: Extract<FuelControlReportRow, { type: 'shift' }>['data'] }) {
   return (
     <tr className="divide-x">
-      <td className="px-3 py-2 whitespace-nowrap"><ShiftCell row={row} showGrade={showGrade} /></td>
+      <td className="px-3 py-2 whitespace-nowrap"><ShiftCell row={row} /></td>
       <td className="px-3 py-2 text-right tabular-nums">{fmtL(row.opening_dip)}</td>
       <td className="px-3 py-2 text-right tabular-nums">{fmtL(row.closing_dip)}</td>
       <td className="px-3 py-2">
@@ -67,7 +66,7 @@ function ShiftRow({ row, showGrade }: { row: Extract<FuelControlReportRow, { typ
       <td className="px-3 py-2 text-right tabular-nums">{fmtL(row.pos_litres)}</td>
       <td className="px-3 py-2 text-right tabular-nums">{fmtL(row.dip_calc_litres)}</td>
       <td className="px-3 py-2 text-right"><VarCell v={row.variance_litres} /></td>
-      <td className="px-3 py-2 text-right"><VarCell v={row.accumulated_variance} /></td>
+      <td className="px-3 py-2 text-right"><span className="text-muted-foreground">—</span></td>
       <td className="px-3 py-2 text-right tabular-nums">{fmtR(row.gp_zar)}</td>
     </tr>
   )
@@ -89,11 +88,12 @@ function PriceChangeImpactRow({ row }: { row: Extract<FuelControlReportRow, { ty
   )
 }
 
-function DayCollapsedRow({ entry, summary, expanded, onToggle }: {
-  entry:    DayEntry
-  summary:  DaySummary
-  expanded: boolean
-  onToggle: () => void
+function DayCollapsedRow({ entry, summary, accVariance, expanded, onToggle }: {
+  entry:       DayEntry
+  summary:     DaySummary
+  accVariance: number | null
+  expanded:    boolean
+  onToggle:    () => void
 }) {
   return (
     <tr
@@ -112,8 +112,8 @@ function DayCollapsedRow({ entry, summary, expanded, onToggle }: {
       </td>
       <td className="px-3 py-1.5 text-right tabular-nums">{fmtL(summary.total_pos_litres)}</td>
       <td className="px-3 py-1.5 text-right tabular-nums">{fmtL(summary.total_dip_calc)}</td>
-      <td className="px-3 py-1.5 text-right"><VarCell v={summary.total_variance} /></td>
       <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">—</td>
+      <td className="px-3 py-1.5 text-right"><VarCell v={accVariance} /></td>
       <td className="px-3 py-1.5 text-right tabular-nums">{fmtR(summary.total_gp)}</td>
     </tr>
   )
@@ -121,7 +121,7 @@ function DayCollapsedRow({ entry, summary, expanded, onToggle }: {
 
 export function FuelControlTable({ entries, grades, stationId: _stationId }: Props) {
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set())
-  const [selectedGrade, setSelectedGrade]  = useState<string>('all')
+  const [selectedGrade, setSelectedGrade]  = useState<string>(grades[0] ?? '')
 
   function toggleDate(date: string) {
     setExpandedDates(prev => {
@@ -136,8 +136,6 @@ export function FuelControlTable({ entries, grades, stationId: _stationId }: Pro
     setExpandedDates(new Set())
   }
 
-  const showGradeLabel = selectedGrade === 'all' && grades.length > 1
-
   return (
     <div className="space-y-4">
       {/* Grade filter */}
@@ -150,7 +148,6 @@ export function FuelControlTable({ entries, grades, stationId: _stationId }: Pro
           onChange={e => handleGradeChange(e.target.value)}
           className="border rounded px-2 py-1.5 text-sm"
         >
-          <option value="all">All grades</option>
           {grades.map(g => <option key={g} value={g}>{g}</option>)}
         </select>
       </div>
@@ -175,29 +172,28 @@ export function FuelControlTable({ entries, grades, stationId: _stationId }: Pro
             {entries.map(entry => {
               const isExpanded = expandedDates.has(entry.date)
 
-              const summary: DaySummary = selectedGrade === 'all'
-                ? entry.allGradesSummary
-                : (() => {
-                    const group = entry.gradeGroups.find(g => g.grade === selectedGrade)
-                    const shiftRows = (group?.rows ?? [])
-                      .filter((r): r is Extract<FuelControlReportRow, { type: 'shift' }> => r.type === 'shift')
-                      .map(r => r.data)
-                    return {
-                      total_deliveries: shiftRows.reduce((a, r) => a + r.deliveries_litres, 0),
-                      total_pos_litres: shiftRows.every(r => r.pos_litres === null) ? null
-                        : shiftRows.reduce<number>((a, r) => a + (r.pos_litres ?? 0), 0),
-                      total_dip_calc: shiftRows.every(r => r.dip_calc_litres === null) ? null
-                        : shiftRows.reduce<number>((a, r) => a + (r.dip_calc_litres ?? 0), 0),
-                      total_variance: shiftRows.every(r => r.variance_litres === null) ? null
-                        : shiftRows.reduce<number>((a, r) => a + (r.variance_litres ?? 0), 0),
-                      total_gp: shiftRows.every(r => r.gp_zar === null) ? null
-                        : shiftRows.reduce<number>((a, r) => a + (r.gp_zar ?? 0), 0),
-                    }
-                  })()
+              const group = entry.gradeGroups.find(g => g.grade === selectedGrade)
+              const shiftRows = (group?.rows ?? [])
+                .filter((r): r is Extract<FuelControlReportRow, { type: 'shift' }> => r.type === 'shift')
+                .map(r => r.data)
 
-              const visibleGroups = selectedGrade === 'all'
-                ? entry.gradeGroups
-                : entry.gradeGroups.filter(g => g.grade === selectedGrade)
+              const summary: DaySummary = {
+                total_deliveries: shiftRows.reduce((a, r) => a + r.deliveries_litres, 0),
+                total_pos_litres: shiftRows.every(r => r.pos_litres === null) ? null
+                  : shiftRows.reduce<number>((a, r) => a + (r.pos_litres ?? 0), 0),
+                total_dip_calc: shiftRows.every(r => r.dip_calc_litres === null) ? null
+                  : shiftRows.reduce<number>((a, r) => a + (r.dip_calc_litres ?? 0), 0),
+                total_variance: shiftRows.every(r => r.variance_litres === null) ? null
+                  : shiftRows.reduce<number>((a, r) => a + (r.variance_litres ?? 0), 0),
+                total_gp: shiftRows.every(r => r.gp_zar === null) ? null
+                  : shiftRows.reduce<number>((a, r) => a + (r.gp_zar ?? 0), 0),
+              }
+
+              // Use last non-null accumulated_variance from the day's shifts as the running month total
+              const accVariance = [...shiftRows].reverse()
+                .find(r => r.accumulated_variance !== null)?.accumulated_variance ?? null
+
+              const visibleGroups = entry.gradeGroups.filter(g => g.grade === selectedGrade)
 
               return (
                 <>
@@ -205,13 +201,14 @@ export function FuelControlTable({ entries, grades, stationId: _stationId }: Pro
                     key={`day-${entry.date}`}
                     entry={entry}
                     summary={summary}
+                    accVariance={accVariance}
                     expanded={isExpanded}
                     onToggle={() => toggleDate(entry.date)}
                   />
                   {isExpanded && visibleGroups.flatMap(group =>
                     group.rows.map((row, i) =>
                       row.type === 'shift'
-                        ? <ShiftRow key={`${entry.date}-${group.grade}-${i}`} row={row.data} showGrade={showGradeLabel} />
+                        ? <ShiftRow key={`${entry.date}-${group.grade}-${i}`} row={row.data} />
                         : <PriceChangeImpactRow key={`impact-${entry.date}-${group.grade}-${i}`} row={row} />
                     )
                   )}
