@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createStation, updateStation } from './actions'
 
-type Station = { id: string; name: string; address: string | null }
+type Station = { id: string; name: string; address: string | null; stock_on_consignment: boolean }
 
 export function StationForm({ station }: { station?: Station }) {
   const router = useRouter()
@@ -35,6 +35,18 @@ export function StationForm({ station }: { station?: Station }) {
         <label className="block text-sm font-medium mb-1">Address <span className="text-gray-400">(optional)</span></label>
         <input name="address" defaultValue={station?.address ?? ''}
           className="w-full rounded border px-3 py-2 text-sm" />
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="stock_on_consignment"
+          name="stock_on_consignment"
+          defaultChecked={station?.stock_on_consignment ?? false}
+          className="h-4 w-4 rounded border-gray-300"
+        />
+        <label htmlFor="stock_on_consignment" className="text-sm font-medium">
+          Stock on Consignment (SOC)
+        </label>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button type="submit" disabled={pending}

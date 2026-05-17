@@ -58,6 +58,7 @@ export default async function ShiftAuditPage({ params }: Props) {
     { data: overrides },
     { data: allPrices },
     { data: siblingShifts },
+    { data: maintenancePumpReadings },
   ] = await Promise.all([
     supabase.from('pumps').select('id, label, tank_id').eq('station_id', shift.station_id).order('label'),
     supabase.from('tanks').select('id, label, fuel_grade_id').eq('station_id', shift.station_id).order('label'),
@@ -77,6 +78,7 @@ export default async function ShiftAuditPage({ params }: Props) {
           .eq('shift_type', 'price_change')
           .neq('id', shiftId)
       : Promise.resolve({ data: [] }),
+    supabase.from('pump_readings').select('pump_id').eq('shift_id', shiftId).eq('type', 'close').eq('maintenance_required', true),
   ])
 
   const posLines = posSubmission
@@ -104,6 +106,9 @@ export default async function ShiftAuditPage({ params }: Props) {
 
   const tankLabel = (id: string) => (tanks ?? []).find(t => t.id === id)?.label ?? id
   const overriddenIds = new Set((overrides ?? []).map(o => o.reading_id))
+
+  const maintenancePumpIds = new Set((maintenancePumpReadings ?? []).map(r => r.pump_id))
+  const pumpsRequiringMaintenance = (pumps ?? []).filter(p => maintenancePumpIds.has(p.id))
 
   const isFlaggable = canFlag(shift.status as any)
   const isOverridable = canOverride(shift.status as any)
@@ -226,6 +231,20 @@ export default async function ShiftAuditPage({ params }: Props) {
           })}
         </div>
       </section>
+
+      {/* Pumps requiring maintenance */}
+      {pumpsRequiringMaintenance.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Pumps requiring maintenance</h2>
+          <div className="border rounded-md divide-y text-sm">
+            {pumpsRequiringMaintenance.map(pump => (
+              <div key={pump.id} className="px-4 py-3 font-medium">
+                {pump.label}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Dip readings */}
       <section className="space-y-2">

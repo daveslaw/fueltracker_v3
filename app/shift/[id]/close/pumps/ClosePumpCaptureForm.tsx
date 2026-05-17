@@ -16,6 +16,7 @@ type OcrState =
 export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter, onSaved }: Props) {
   const [ocr, setOcr] = useState<OcrState>({ phase: 'idle' })
   const [overridden, setOverridden] = useState(false)
+  const [maintenanceRequired, setMaintenanceRequired] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [saved, setSaved] = useState(!!defaultMeter)
@@ -71,7 +72,7 @@ export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter, onSaved }:
 
     if (!navigator.onLine) {
       await addToQueue(
-        { type: 'pump_reading', shiftId, pumpId, readingType: 'close', meterReading: parseFloat(formData.get('meter_reading') as string), ocrStatus, photoBlob: photoBlobRef.current ?? undefined, photoName: `pump-close-${pumpId}.jpg` },
+        { type: 'pump_reading', shiftId, pumpId, readingType: 'close', meterReading: parseFloat(formData.get('meter_reading') as string), ocrStatus, maintenanceRequired, photoBlob: photoBlobRef.current ?? undefined, photoName: `pump-close-${pumpId}.jpg` },
         `pump_reading:${shiftId}:${pumpId}:close`,
       )
       setPending(false)
@@ -151,6 +152,20 @@ export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter, onSaved }:
           Mark photo as unreadable
         </button>
       )}
+
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id={`maintenance-${pumpId}`}
+          name="maintenance_required"
+          checked={maintenanceRequired}
+          onChange={(e) => setMaintenanceRequired(e.target.checked)}
+          className="h-4 w-4 rounded border-gray-300"
+        />
+        <label htmlFor={`maintenance-${pumpId}`} className="text-xs font-medium text-gray-700">
+          Maintenance Required
+        </label>
+      </div>
 
       {error && <p className="text-xs text-red-600">{error}</p>}
       <button

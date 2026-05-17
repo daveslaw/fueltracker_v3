@@ -1,15 +1,23 @@
 import { describe, it, expect } from 'vitest'
 import { buildStationTree, validateStation, validateTank, validatePump } from '@/lib/station-config'
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-const GRADE_IDS = ['95', '93', 'D10', 'D50'] as const
-
 // ── buildStationTree ─────────────────────────────────────────────────────────
 
 describe('buildStationTree', () => {
+  it('passes stock_on_consignment: true through to station node', () => {
+    const stations = [{ id: 's1', name: 'Alpha', address: null, stock_on_consignment: true }]
+    const tree = buildStationTree(stations, [], [])
+    expect(tree[0].stock_on_consignment).toBe(true)
+  })
+
+  it('passes stock_on_consignment: false through to station node', () => {
+    const stations = [{ id: 's1', name: 'Alpha', address: null, stock_on_consignment: false }]
+    const tree = buildStationTree(stations, [], [])
+    expect(tree[0].stock_on_consignment).toBe(false)
+  })
+
   it('tracer bullet: single station with one tank and one pump', () => {
-    const stations = [{ id: 's1', name: 'Alpha', address: null }]
+    const stations = [{ id: 's1', name: 'Alpha', address: null, stock_on_consignment: false }]
     const tanks = [{ id: 't1', station_id: 's1', label: 'Tank 1', fuel_grade_id: '95', capacity_litres: 10000 }]
     const pumps = [{ id: 'p1', station_id: 's1', tank_id: 't1', label: 'Pump 1' }]
 
@@ -23,20 +31,20 @@ describe('buildStationTree', () => {
   })
 
   it('station with no tanks returns empty tanks array', () => {
-    const stations = [{ id: 's1', name: 'Empty', address: null }]
+    const stations = [{ id: 's1', name: 'Empty', address: null, stock_on_consignment: false }]
     const tree = buildStationTree(stations, [], [])
     expect(tree[0].tanks).toEqual([])
   })
 
   it('tank with no pumps returns empty pumps array', () => {
-    const stations = [{ id: 's1', name: 'A', address: null }]
+    const stations = [{ id: 's1', name: 'A', address: null, stock_on_consignment: false }]
     const tanks = [{ id: 't1', station_id: 's1', label: 'T1', fuel_grade_id: 'D50', capacity_litres: 5000 }]
     const tree = buildStationTree(stations, tanks, [])
     expect(tree[0].tanks[0].pumps).toEqual([])
   })
 
   it('pumps are attached to the correct tank, not cross-contaminated', () => {
-    const stations = [{ id: 's1', name: 'A', address: null }]
+    const stations = [{ id: 's1', name: 'A', address: null, stock_on_consignment: false }]
     const tanks = [
       { id: 't1', station_id: 's1', label: 'T1', fuel_grade_id: '95',  capacity_litres: 10000 },
       { id: 't2', station_id: 's1', label: 'T2', fuel_grade_id: 'D10', capacity_litres: 10000 },
@@ -52,8 +60,8 @@ describe('buildStationTree', () => {
 
   it('multiple stations are independent', () => {
     const stations = [
-      { id: 's1', name: 'Alpha', address: null },
-      { id: 's2', name: 'Beta',  address: null },
+      { id: 's1', name: 'Alpha', address: null, stock_on_consignment: false },
+      { id: 's2', name: 'Beta',  address: null, stock_on_consignment: true },
     ]
     const tanks = [
       { id: 't1', station_id: 's1', label: 'T1', fuel_grade_id: '95', capacity_litres: 10000 },
@@ -80,6 +88,10 @@ describe('validateStation', () => {
 
   it('whitespace-only name returns error', () => {
     expect(validateStation({ name: '   ' })).toMatch(/name/)
+  })
+
+  it('is unaffected by stock_on_consignment — valid name still passes', () => {
+    expect(validateStation({ name: 'Speedway' })).toBeNull()
   })
 })
 

@@ -38,7 +38,7 @@ export default async function CloseSummaryPage({ params }: Props) {
     supabase.from('stations').select('name').eq('id', shift.station_id).single(),
     supabase.from('pumps').select('id, label').eq('station_id', shift.station_id).order('label'),
     supabase.from('pump_readings')
-      .select('id, pump_id, meter_reading, pumps(label)')
+      .select('id, pump_id, meter_reading, maintenance_required, pumps(label)')
       .eq('shift_id', shiftId).eq('type', 'close'),
     supabase.from('tanks').select('id, label, fuel_grade_id').eq('station_id', shift.station_id).order('label'),
     supabase.from('dip_readings')
@@ -311,6 +311,24 @@ export default async function CloseSummaryPage({ params }: Props) {
 
         <AddDeliveryForm shiftId={shiftId} tanks={tanks ?? []} />
       </section>
+
+      {/* Pumps Requiring Maintenance */}
+      {(() => {
+        const maintenancePumps = (closePumpReadings ?? []).filter(r => r.maintenance_required)
+        if (maintenancePumps.length === 0) return null
+        return (
+          <section className="space-y-2">
+            <h2 className="font-semibold text-xs uppercase tracking-wide text-gray-500">Pumps Requiring Maintenance</h2>
+            <div className="border border-amber-200 rounded-md divide-y divide-amber-100 text-sm bg-amber-50">
+              {maintenancePumps.map(r => (
+                <div key={r.pump_id} className="px-4 py-3 flex items-center gap-2 text-amber-800">
+                  <span className="font-medium">{(r.pumps as unknown as { label: string })?.label ?? r.pump_id}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )
+      })()}
 
       {/* Flag / unflag */}
       {isFlaggable && (

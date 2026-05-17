@@ -110,6 +110,55 @@ describe('getPendingCount', () => {
   })
 })
 
+// ── pump_reading payload ──────────────────────────────────────────────────
+
+describe('pump_reading action payload', () => {
+  it('preserves maintenanceRequired: true through enqueue and dequeue', () => {
+    const action: OfflineAction = {
+      type: 'pump_reading',
+      shiftId: 's1',
+      pumpId: 'p1',
+      readingType: 'close',
+      meterReading: 12345.67,
+      ocrStatus: 'auto',
+      maintenanceRequired: true,
+    }
+    const item: QueueItem = {
+      id: 'item-mr',
+      idempotencyKey: 'pump_reading:s1:p1:close',
+      action,
+      status: 'pending',
+      attemptCount: 0,
+      createdAt: Date.now(),
+    }
+    const q = enqueue([], item)
+    const next = getNextPending(q)
+    expect(next?.action).toMatchObject({ type: 'pump_reading', maintenanceRequired: true })
+  })
+
+  it('preserves maintenanceRequired: false when not flagged', () => {
+    const action: OfflineAction = {
+      type: 'pump_reading',
+      shiftId: 's1',
+      pumpId: 'p2',
+      readingType: 'close',
+      meterReading: 9999,
+      ocrStatus: 'manual_override',
+      maintenanceRequired: false,
+    }
+    const item: QueueItem = {
+      id: 'item-mr2',
+      idempotencyKey: 'pump_reading:s1:p2:close',
+      action,
+      status: 'pending',
+      attemptCount: 0,
+      createdAt: Date.now(),
+    }
+    const next = getNextPending(enqueue([], item))
+    expect(next?.action).toMatchObject({ type: 'pump_reading', maintenanceRequired: false })
+  })
+})
+
 // ── nextBackoffMs ─────────────────────────────────────────────────────────
 
 describe('nextBackoffMs', () => {

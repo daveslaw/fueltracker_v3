@@ -44,6 +44,7 @@ function ShiftCell({ row }: { row: Extract<FuelControlReportRow, { type: 'shift'
       {dateContent}
       {isPending && <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded">pending</span>}
       {row.is_flagged && <span className="ml-2 text-xs bg-red-100 text-red-800 px-1.5 py-0.5 rounded">flagged</span>}
+      {row.has_maintenance_flag && <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded" title="Pump maintenance required">M</span>}
     </>
   )
 }

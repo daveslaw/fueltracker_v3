@@ -4,21 +4,22 @@ import { selectActivePriceAt } from '@/lib/pricing'
 import type { PriceRow } from '@/lib/pricing'
 
 export interface FuelControlRowInput {
-  shift_id:          string
-  shift_date:        string
-  period:            'morning' | 'evening'
-  part:              number
-  shift_type:        'standard' | 'price_change'
-  status:            string
-  is_flagged:        boolean
-  fuel_grade_id:     string
-  started_at:        string
-  opening_dip:       number | null
-  closing_dip:       number | null
-  deliveries_litres: number
-  delivery_note:     string | null
-  driver_name:       string | null
-  pos_litres:        number | null
+  shift_id:             string
+  shift_date:           string
+  period:               'morning' | 'evening'
+  part:                 number
+  shift_type:           'standard' | 'price_change'
+  status:               string
+  is_flagged:           boolean
+  has_maintenance_flag: boolean
+  fuel_grade_id:        string
+  started_at:           string
+  opening_dip:          number | null
+  closing_dip:          number | null
+  deliveries_litres:    number
+  delivery_note:        string | null
+  driver_name:          string | null
+  pos_litres:           number | null
 }
 
 export interface FuelControlShiftRow {
@@ -27,6 +28,7 @@ export interface FuelControlShiftRow {
   period:               'morning' | 'evening'
   status:               string
   is_flagged:           boolean
+  has_maintenance_flag: boolean
   fuel_grade_id:        string
   opening_dip:          number | null
   closing_dip:          number | null
@@ -251,7 +253,22 @@ export async function getFuelControlMonth(
 
   const tankGrade = new Map<string, string>(allTanks.map(t => [t.id as string, t.fuel_grade_id as string]))
 
+  const allShiftIds    = allShifts.map(s => s.id as string)
   const closedShiftIds = allShifts.filter(s => s.status === 'closed').map(s => s.id as string)
+
+  // fetch shifts that have at least one close pump reading flagged for maintenance
+  const maintenanceFlaggedShiftIds = new Set<string>()
+  if (allShiftIds.length > 0) {
+    const { data: maintReadings } = await db
+      .from('pump_readings')
+      .select('shift_id')
+      .in('shift_id', allShiftIds)
+      .eq('type', 'close')
+      .eq('maintenance_required', true)
+    for (const r of maintReadings ?? []) {
+      maintenanceFlaggedShiftIds.add(r.shift_id as string)
+    }
+  }
 
   // fetch reconciliation tank lines for closed shifts
   const recTankLines: Array<{
@@ -370,14 +387,15 @@ export async function getFuelControlMonth(
       const del      = deliveryIndex.get(delKey)
 
       inputs.push({
-        shift_id:          shift.id as string,
-        shift_date:        shift.shift_date as string,
-        period:            shift.period as 'morning' | 'evening',
-        part:              (shift.part as number) ?? 0,
-        shift_type:        (shift.shift_type as 'standard' | 'price_change') ?? 'standard',
-        status:            shift.status as string,
-        is_flagged:        shift.is_flagged as boolean ?? false,
-        fuel_grade_id:     grade,
+        shift_id:             shift.id as string,
+        shift_date:           shift.shift_date as string,
+        period:               shift.period as 'morning' | 'evening',
+        part:                 (shift.part as number) ?? 0,
+        shift_type:           (shift.shift_type as 'standard' | 'price_change') ?? 'standard',
+        status:               shift.status as string,
+        is_flagged:           shift.is_flagged as boolean ?? false,
+        has_maintenance_flag: maintenanceFlaggedShiftIds.has(shift.id as string),
+        fuel_grade_id:        grade,
         started_at:        shift.started_at as string,
         opening_dip:       isClosed && rec ? rec.opening_dip  : null,
         closing_dip:       isClosed && rec ? rec.closing_dip  : null,

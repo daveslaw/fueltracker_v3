@@ -5,21 +5,22 @@ import type { PriceRow } from '../lib/pricing'
 
 function makeInput(overrides: Partial<FuelControlRowInput> = {}): FuelControlRowInput {
   return {
-    shift_id:          'shift-1',
-    shift_date:        '2026-05-01',
-    period:            'morning',
-    part:              0,
-    shift_type:        'standard',
-    status:            'closed',
-    is_flagged:        false,
-    fuel_grade_id:     '95',
-    started_at:        '2026-05-01T06:00:00Z',
-    opening_dip:       20000,
-    closing_dip:       18500,
-    deliveries_litres: 0,
-    delivery_note:     null,
-    driver_name:       null,
-    pos_litres:        1500,
+    shift_id:             'shift-1',
+    shift_date:           '2026-05-01',
+    period:               'morning',
+    part:                 0,
+    shift_type:           'standard',
+    status:               'closed',
+    is_flagged:           false,
+    has_maintenance_flag: false,
+    fuel_grade_id:        '95',
+    started_at:           '2026-05-01T06:00:00Z',
+    opening_dip:          20000,
+    closing_dip:          18500,
+    deliveries_litres:    0,
+    delivery_note:        null,
+    driver_name:          null,
+    pos_litres:           1500,
     ...overrides,
   }
 }
@@ -356,6 +357,42 @@ describe('buildFuelControlReportRows', () => {
       'shift:D50', 'price_change_impact:D50',
       'shift:95', 'shift:D50',
     ])
+  })
+})
+
+// ── has_maintenance_flag passthrough ──────────────────────────────────────────
+
+describe('buildFuelControlRows — has_maintenance_flag', () => {
+  it('has_maintenance_flag is true when input carries true', () => {
+    const rows = buildFuelControlRows([makeInput({ has_maintenance_flag: true })])
+    expect(rows[0].has_maintenance_flag).toBe(true)
+  })
+
+  it('has_maintenance_flag is false when no pumps are flagged', () => {
+    const rows = buildFuelControlRows([makeInput({ has_maintenance_flag: false })])
+    expect(rows[0].has_maintenance_flag).toBe(false)
+  })
+
+  it('has_maintenance_flag defaults to false in the fixture and passes through unchanged', () => {
+    const rows = buildFuelControlRows([makeInput()])
+    expect(rows[0].has_maintenance_flag).toBe(false)
+  })
+
+  it('has_maintenance_flag is preserved independently per row in a multi-row build', () => {
+    const inputs: FuelControlRowInput[] = [
+      makeInput({ shift_id: 's1', period: 'morning', has_maintenance_flag: true }),
+      makeInput({ shift_id: 's2', period: 'evening', has_maintenance_flag: false }),
+    ]
+    const rows = buildFuelControlRows(inputs)
+    expect(rows[0].has_maintenance_flag).toBe(true)
+    expect(rows[1].has_maintenance_flag).toBe(false)
+  })
+
+  it('has_maintenance_flag is true on a pending row when input carries true', () => {
+    const rows = buildFuelControlRows([
+      makeInput({ status: 'pending', opening_dip: null, closing_dip: null, pos_litres: null, has_maintenance_flag: true }),
+    ])
+    expect(rows[0].has_maintenance_flag).toBe(true)
   })
 })
 

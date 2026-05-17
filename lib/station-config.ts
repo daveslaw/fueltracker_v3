@@ -6,7 +6,7 @@ export type FuelGradeId = typeof FUEL_GRADE_IDS[number]
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export type StationRow = { id: string; name: string; address: string | null }
+export type StationRow = { id: string; name: string; address: string | null; stock_on_consignment: boolean }
 export type TankRow = { id: string; station_id: string; label: string; fuel_grade_id: string; capacity_litres: number }
 export type PumpRow = { id: string; station_id: string; tank_id: string; label: string }
 
@@ -40,7 +40,7 @@ export const getCachedStationTree = unstable_cache(
   async (): Promise<StationNode[]> => {
     const admin = createAdminClient()
     const [{ data: stations }, { data: tanks }, { data: pumps }] = await Promise.all([
-      admin.from('stations').select('id, name, address').order('name'),
+      admin.from('stations').select('id, name, address, stock_on_consignment').order('name'),
       admin.from('tanks').select('id, station_id, label, fuel_grade_id, capacity_litres').order('label'),
       admin.from('pumps').select('id, station_id, tank_id, label').order('label'),
     ])

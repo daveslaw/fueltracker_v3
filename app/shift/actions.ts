@@ -72,6 +72,7 @@ export async function saveClosePumpReading(
   const meter_reading = parseFloat(formData.get('meter_reading') as string)
   const photo_url = (formData.get('photo_url') as string) || null
   const ocr_status = (formData.get('ocr_status') as string) || 'manual_override'
+  const maintenance_required = formData.get('maintenance_required') === 'on'
 
   if (isNaN(meter_reading) || meter_reading < 0)
     return { error: 'Enter a valid meter reading' }
@@ -83,6 +84,7 @@ export async function saveClosePumpReading(
     meter_reading,
     photo_url,
     ocr_status,
+    maintenance_required,
   }, { onConflict: 'shift_id,pump_id,type' })
   if (error) return { error: error.message }
 

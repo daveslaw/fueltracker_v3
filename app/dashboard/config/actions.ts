@@ -11,12 +11,13 @@ type ActionResult = { error: string } | { success: true }
 export async function createStation(formData: FormData): Promise<ActionResult> {
   const name = (formData.get('name') as string) ?? ''
   const address = (formData.get('address') as string) || null
+  const stock_on_consignment = formData.get('stock_on_consignment') === 'on'
 
   const error = validateStation({ name })
   if (error) return { error }
 
   const supabase = await createClient()
-  const { error: dbError } = await supabase.from('stations').insert({ name: name.trim(), address })
+  const { error: dbError } = await supabase.from('stations').insert({ name: name.trim(), address, stock_on_consignment })
   if (dbError) return { error: dbError.message }
 
   revalidateStationConfig()
@@ -27,6 +28,7 @@ export async function createStation(formData: FormData): Promise<ActionResult> {
 export async function updateStation(id: string, formData: FormData): Promise<ActionResult> {
   const name = (formData.get('name') as string) ?? ''
   const address = (formData.get('address') as string) || null
+  const stock_on_consignment = formData.get('stock_on_consignment') === 'on'
 
   const error = validateStation({ name })
   if (error) return { error }
@@ -34,7 +36,7 @@ export async function updateStation(id: string, formData: FormData): Promise<Act
   const supabase = await createClient()
   const { error: dbError } = await supabase
     .from('stations')
-    .update({ name: name.trim(), address })
+    .update({ name: name.trim(), address, stock_on_consignment })
     .eq('id', id)
   if (dbError) return { error: dbError.message }
 
