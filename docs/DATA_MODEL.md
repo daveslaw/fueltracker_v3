@@ -24,6 +24,7 @@ Extends `auth.users` with application-level role and station assignment.
 | `id` | uuid PK | |
 | `user_id` | uuid → auth.users | Unique; cascades on delete |
 | `role` | text | `'cashier'` \| `'supervisor'` \| `'owner'` |
+| `email` | text | Nullable; denormalised from auth.users for display |
 | `station_id` | uuid → stations | Nullable; which station this user belongs to |
 | `is_active` | boolean | Default true; set false to deactivate |
 | `created_at` | timestamptz | |
@@ -51,6 +52,7 @@ Lookup table — seeded once, not modified at runtime.
 | `id` | uuid PK | |
 | `name` | text | |
 | `address` | text | Nullable |
+| `stock_on_consignment` | boolean | Default false; informational only |
 | `created_at` | timestamptz | |
 
 **RLS:** Owners have full CRUD. Supervisors/cashiers can read their own station.
@@ -87,7 +89,7 @@ Dry stock items scoped directly to a station.
 |---|---|---|
 | `id` | uuid PK | |
 | `station_id` | uuid → stations not null | |
-| `stock_code` | text | Nullable; supplier stock code |
+| `stock_code` | text | Supplier stock code |
 | `description` | text not null | |
 | `is_active` | boolean not null | Default true; false hides from cashier forms |
 | `created_at` | timestamptz | |
@@ -150,7 +152,7 @@ One row per shift. Supports splitting for price changes via `part` and `shift_ty
 | `id` | uuid PK | |
 | `station_id` | uuid → stations | |
 | `supervisor_id` | uuid → user_profiles | Nullable; set when supervisor closes the shift |
-| `cashier_id` | uuid → user_profiles | Nullable; cashier assigned to this shift |
+| `attendant_id` | uuid → user_profiles | Nullable; retained for schema hygiene, retired in shift redesign |
 | `period` | text | `'morning'` \| `'evening'` |
 | `part` | smallint not null | `0` = no split; `1` = first of a split pair; `2` = second. Default `0` |
 | `shift_type` | text not null | `'standard'` \| `'price_change'`. Default `'standard'` |
@@ -195,6 +197,7 @@ pending → closed
 | `photo_url` | text | Nullable |
 | `meter_reading` | numeric(12,2) | Nullable; cumulative meter value in litres |
 | `ocr_status` | text | `'auto'` \| `'needs_review'` \| `'manual_override'` \| `'unreadable'` |
+| `maintenance_required` | boolean | Default false; set on close readings when pump needs attention |
 | `created_at` | timestamptz | |
 
 **Unique constraint:** `(shift_id, pump_id, type)`
@@ -275,7 +278,7 @@ OCR-extracted product sales from the dry stock Z-report.
 | `id` | uuid PK | |
 | `dry_stock_pos_submission_id` | uuid → dry_stock_pos_submissions | Cascades on delete |
 | `product_id` | uuid → products | |
-| `units_sold` | numeric(10,2) | |
+| `units_sold` | numeric(10,3) | |
 | `revenue_zar` | numeric(14,2) | |
 | `ocr_status` | text | `'auto'` \| `'manual_override'` \| `'unreadable'` |
 
@@ -319,7 +322,7 @@ Dry stock (product) deliveries received by the cashier during a shift.
 | `shift_id` | uuid → shifts | Cascades on delete |
 | `station_id` | uuid → stations | |
 | `product_id` | uuid → products | |
-| `quantity` | numeric(10,2) not null | Units received |
+| `quantity` | numeric(10,3) not null | Units received |
 | `recorded_by` | uuid → auth.users | Nullable |
 | `created_at` | timestamptz | |
 
@@ -337,7 +340,8 @@ Cashier's closing count per product per shift.
 | `id` | uuid PK | |
 | `shift_id` | uuid → shifts | Cascades on delete |
 | `product_id` | uuid → products | |
-| `closing_count` | numeric(10,2) not null | Units counted at shift end |
+| `closing_count` | numeric(10,3) not null | Units counted at shift end |
+| `recorded_by` | uuid → auth.users | Nullable |
 | `created_at` | timestamptz | |
 
 **Unique constraint:** `(shift_id, product_id)`
@@ -356,9 +360,6 @@ Computed automatically when a shift is closed. Re-runs if an override or deliver
 |---|---|---|
 | `id` | uuid PK | |
 | `shift_id` | uuid → shifts | Unique; cascades on delete |
-| `expected_revenue` | numeric(14,2) | POS litres × price per grade, summed |
-| `pos_revenue` | numeric(14,2) | Revenue reported on Z-report |
-| `revenue_variance` | numeric(14,2) | `expected_revenue − pos_revenue` |
 | `created_at` | timestamptz | |
 | `updated_at` | timestamptz | Updated on re-run |
 
@@ -374,7 +375,7 @@ Formula 1 result per tank.
 | `tank_id` | uuid → tanks | |
 | `opening_dip` | numeric(10,2) | From prior closed shift or baseline |
 | `deliveries_received` | numeric(10,2) | Sum of deliveries to this tank during the shift |
-| `pos_litres_sold` | numeric(10,2) | From `pos_submission_lines` for this tank's grade |
+| `meter_delta` | numeric(10,2) | Sum of pump meter deltas for this tank's grade |
 | `expected_closing_dip` | numeric(10,2) | `opening_dip + deliveries_received − pos_litres_sold` |
 | `actual_closing_dip` | numeric(10,2) | Measured dip reading |
 | `variance_litres` | numeric(10,2) | `actual − expected`; negative = loss |
@@ -392,6 +393,10 @@ Formula 2 result per fuel grade.
 | `meter_delta` | numeric(10,2) | Sum of `(close − open)` meter readings across all pumps for this grade |
 | `pos_litres_sold` | numeric(10,2) | From `pos_submission_lines` |
 | `variance_litres` | numeric(10,2) | `meter_delta − pos_litres_sold` |
+| `sell_price_per_litre` | numeric(8,4) | Price at shift start |
+| `expected_revenue_zar` | numeric(14,2) | `meter_delta × sell_price_per_litre` |
+| `pos_revenue_zar` | numeric(14,2) | Revenue from POS Z-report |
+| `variance_zar` | numeric(14,2) | `expected_revenue_zar − pos_revenue_zar` |
 
 **Unique constraint:** `(reconciliation_id, fuel_grade_id)`
 
@@ -403,12 +408,12 @@ Dry stock variance per product per shift.
 | `id` | uuid PK | |
 | `reconciliation_id` | uuid → reconciliations | Cascades on delete |
 | `product_id` | uuid → products | |
-| `opening_count` | numeric(10,2) | From prior shift closing count or stock baseline |
-| `deliveries_received` | numeric(10,2) | Sum of `stock_deliveries.quantity` for this product |
-| `pos_units_sold` | numeric(10,2) | From `pos_dry_stock_lines` |
-| `expected_closing_count` | numeric(10,2) | `opening_count + deliveries_received − pos_units_sold` |
-| `actual_closing_count` | numeric(10,2) | From `stock_readings.closing_count` |
-| `variance_units` | numeric(10,2) | `actual − expected`; negative = loss |
+| `opening_count` | numeric(10,3) | From prior shift closing count or stock baseline |
+| `deliveries_received` | numeric(10,3) | Sum of `stock_deliveries.quantity` for this product |
+| `pos_units_sold` | numeric(10,3) | From `pos_dry_stock_lines` |
+| `expected_closing_count` | numeric(10,3) | `opening_count + deliveries_received − pos_units_sold` |
+| `actual_closing_count` | numeric(10,3) | From `stock_readings.closing_count` |
+| `variance_units` | numeric(10,3) | `actual − expected`; negative = loss |
 | `variance_zar` | numeric(14,2) | `variance_units × sell_price` |
 
 **Unique constraint:** `(reconciliation_id, product_id)`
@@ -426,7 +431,8 @@ Dry stock variance per product per shift.
 | `id` | uuid PK | |
 | `shift_id` | uuid → shifts | Cascades on delete |
 | `reading_id` | uuid | FK to `pump_readings.id` or `pos_submission_lines.id` |
-| `reading_type` | text | `'pump'` \| `'pos_line'` |
+| `reading_type` | text | `'pump'` \| `'dip'` \| `'pos_line'` |
+| `field_name` | text | Nullable; for `pos_line` overrides: `'litres_sold'` or `'revenue_zar'` |
 | `original_value` | numeric(14,2) | Value before override |
 | `override_value` | numeric(14,2) | Corrected value |
 | `reason` | text | Required |
@@ -467,7 +473,7 @@ Owner-set initial stock count per product per station.
 | `id` | uuid PK | |
 | `station_id` | uuid → stations | |
 | `product_id` | uuid → products | |
-| `quantity` | numeric(10,2) not null | Opening unit count |
+| `quantity` | numeric(10,3) not null | Opening unit count |
 | `set_at` | timestamptz | |
 | `set_by` | uuid → user_profiles | Nullable |
 
@@ -488,7 +494,7 @@ stations
   │    └─ pumps
   ├─ products (is_active)
   │    └─ product_prices (cost_price, sell_price, valid_from, valid_to)
-  ├─ shifts (supervisor_id, cashier_id → user_profiles; part, shift_type, started_at)
+  ├─ shifts (supervisor_id, attendant_id → user_profiles; part, shift_type, started_at)
   │    ├─ pump_readings (pump_id → pumps)
   │    ├─ dip_readings (tank_id → tanks)
   │    ├─ pos_submissions

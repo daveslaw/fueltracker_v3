@@ -105,7 +105,7 @@ pending → closed
 
 - `is_flagged` is a boolean on closed shifts — not a separate status
 - `canStartShift` blocks if a pending or closed shift already exists for the same station/period/date
-- Cashier shifts are a separate concept from supervisor shifts
+- Cashiers work on the same `shifts` record as the supervisor — the cashier workflow (fuel POS, dry stock POS, stock counts) captures data against an existing shift and sets `cashier_submitted_at` on completion. There is no separate cashier shift table or `cashier_id` FK.
 
 ### Fuel Reconciliation (runs on supervisor shift submit)
 
