@@ -33,13 +33,16 @@ GOOGLE_CLOUD_VISION_API_KEY
 ```
 app/
   (auth)/login/               # Login + server actions
+  (auth)/set-password/        # Set/reset password + server actions
+  auth/callback/              # OAuth callback route
   api/upload/                 # pump-photo, pos-photo, delivery-photo, dry-stock-photo routes
   shift/                      # Supervisor shift workflow
     actions.ts                # createShift, saveClosePumpReading, saveCloseDipReading,
-                              #   savePosSubmission, submitShift, flagShift, unflagShift,
-                              #   createOverride, saveDelivery, deleteDelivery
+                              #   savePosSubmission, submitShift, splitShift, flagShift,
+                              #   unflagShift, createOverride, saveDelivery, deleteDelivery
     new/page.tsx
     [id]/close/pumps|dips|deliveries|summary/
+    [id]/split/pumps|dips|pos|confirm/   # Split shift workflow (part 1 → part 2)
   cashier/                    # Cashier shift workflow
     [shiftId]/
       actions.ts              # saveCashierFuelPos, saveCashierDryStockPos,
@@ -47,20 +50,25 @@ app/
                               #   deleteCashierStockDelivery, submitCashierShift
       fuel-pos|stock-pos|stock-count|summary/
   dashboard/                  # Owner reports & config
+    _components/              # DashboardNav, DashboardPoller
     actions.ts                # createShiftSlot
     config/                   # stations, tanks, pumps, pricing, baselines, products CRUD
     reports/                  # page.tsx=daily, weekly/, monthly/, dry-stock/, deliveries/
+      export/route.ts         # CSV export endpoint
+      deliveries/export/route.ts
     tank-trends/
-    history/[id]/
+    history/                  # Shift history list
+    history/[id]/             # Shift history detail
     users/
 
-components/                   # ServiceWorkerRegistrar, OfflineQueueProvider, Toaster, ThemeProvider, etc.
+components/                   # ServiceWorkerRegistrar, OfflineQueueProvider, Toaster,
+                              #   ThemeProvider, SentryUserContext, fuel-control-table, etc.
 
 lib/
   supabase/client.ts|server.ts|admin.ts
   ocr/                        # IImageRecogniser interface + Anthropic/Vision/fake implementations
                               #   parse-meter.ts, parse-pos.ts, ocr-service.ts, dry-stock-ocr.ts
-  shift-open.ts               # canStartShift guard
+  shift-open.ts               # canStartShift, canSplitShift, markFirstPartSplit, computeShiftLabel
   shift-close.ts              # getCloseProgress, canSubmit
   shift-baselines.ts          # Rolling baseline: prior closed shift → shift_baselines fallback
   reconciliation.ts           # Core fuel formulas
@@ -77,12 +85,16 @@ lib/
   cashier-progress.ts|cashier-submission.ts
   products.ts|product-catalogue.ts|product-pricing.ts
   stock-baselines.ts|stock-readings.ts
+  station-config.ts           # Station/tank/pump/pricing config CRUD (use instead of raw Supabase)
+  tank-trends.ts              # Tank trend calculations
+  user-management.ts          # User CRUD utilities
+  middleware-utils.ts         # Role-based routing helpers (used by middleware.ts)
   csv-export.ts
   idb-queue.ts|offline-queue.ts
 
+middleware.ts                 # Auth guard + role-based routing
 supabase/migrations/          # Apply in order with: supabase db push
 scripts/backfill-reconciliation.ts  # npx tsx scripts/backfill-reconciliation.ts (post-migration 000013)
-middleware.ts                 # Auth guard + role-based routing
 docs/DATA_MODEL.md            # Full database schema reference
 docs/pump_tank_configuration.md
 ```
@@ -106,6 +118,10 @@ pending → closed
 - `is_flagged` is a boolean on closed shifts — not a separate status
 - `canStartShift` blocks if a pending or closed shift already exists for the same station/period/date
 - Cashiers work on the same `shifts` record as the supervisor — the cashier workflow (fuel POS, dry stock POS, stock counts) captures data against an existing shift and sets `cashier_submitted_at` on completion. There is no separate cashier shift table or `cashier_id` FK.
+
+### Shift Splitting
+
+A shift can be split mid-way (e.g. supervisor handover). `canSplitShift` guards eligibility. `splitShift` server action closes part 1 and creates part 2 with opening readings carried over. The split workflow lives at `/shift/[id]/split/pumps|dips|pos|confirm`. `shifts.part` (1 or 2) and `computeShiftLabel` identify each part in the UI.
 
 ### Fuel Reconciliation (runs on supervisor shift submit)
 
