@@ -7,6 +7,7 @@ import { canFlag, canOverride } from '@/lib/supervisor-review'
 import { flagShift, unflagShift, createOverride } from '@/app/shift/actions'
 import { computeShiftLabel, buildSplitNotice } from '@/lib/shift-open'
 import type { ShiftPeriod, ShiftPart } from '@/lib/shift-open'
+import { PhotoModal } from '@/components/PhotoModal'
 
 interface Props { params: Promise<{ id: string }> }
 
@@ -196,14 +197,14 @@ export default async function ShiftAuditPage({ params }: Props) {
                   <span className="text-right flex items-center justify-end gap-2">
                     {open ? fmt(open.meter_reading) : '—'}
                     {open?.photo_url && (
-                      <a href={open.photo_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">photo</a>
+                      <PhotoModal url={open.photo_url} label={`${pump.label} — open`} />
                     )}
                   </span>
                   <span>Close</span>
                   <span className="text-right flex items-center justify-end gap-2">
                     {close ? fmt(close.meter_reading) : '—'}
                     {close?.photo_url && (
-                      <a href={close.photo_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">photo</a>
+                      <PhotoModal url={close.photo_url} label={`${pump.label} — close`} />
                     )}
                   </span>
                 </div>
@@ -294,9 +295,7 @@ export default async function ShiftAuditPage({ params }: Props) {
             <div className="border rounded-md text-sm divide-y">
               {posSubmission.photo_url && (
                 <div className="px-4 py-3">
-                  <a href={posSubmission.photo_url} target="_blank" rel="noopener noreferrer" className="text-primary underline text-xs">
-                    View Z-report photo
-                  </a>
+                  <PhotoModal url={posSubmission.photo_url} label="POS Z-report" triggerClassName="text-primary underline text-xs" />
                 </div>
               )}
               {posLines.map((line: any) => (

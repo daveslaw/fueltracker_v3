@@ -22,6 +22,7 @@ export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter, onSaved }:
   const [saved, setSaved] = useState(!!defaultMeter)
   const fileRef = useRef<HTMLInputElement>(null)
   const photoBlobRef = useRef<Blob | null>(null)
+  const photoUrlRef = useRef<string | null>(null)
   const { addToQueue } = useOfflineQueue()
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -48,6 +49,7 @@ export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter, onSaved }:
       const json = await res.json()
       if (json.error) throw new Error(json.error)
 
+      photoUrlRef.current = json.url ?? null
       setOcr({
         phase: 'done',
         value: json.ocr?.value ?? null,
@@ -82,6 +84,7 @@ export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter, onSaved }:
       return
     }
 
+    if (photoUrlRef.current) formData.set('photo_url', photoUrlRef.current)
     const result = await saveClosePumpReading(shiftId, pumpId, formData)
     setPending(false)
     if ('error' in result) { setError(result.error); return }

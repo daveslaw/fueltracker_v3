@@ -59,9 +59,9 @@ export function OfflineQueueProvider({ children }: { children: React.ReactNode }
 
       const fd = new FormData()
       if (action.type === 'pump_reading') {
-        fd.append('meterReading', String(action.meterReading))
-        fd.append('ocrStatus', action.ocrStatus)
-        if (photoUrl) fd.append('photoUrl', photoUrl)
+        fd.append('meter_reading', String(action.meterReading))
+        fd.append('ocr_status', action.ocrStatus)
+        if (photoUrl) fd.append('photo_url', photoUrl)
         await saveClosePumpReading(action.shiftId, action.pumpId, fd)
       } else {
         fd.append('litres', String(action.litres))
