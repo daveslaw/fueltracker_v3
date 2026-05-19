@@ -92,7 +92,7 @@ export default function LoginPage() {
           </h1>
           <p className="mt-2 text-sm" style={{ color: '#7B8EA8' }}>
             {mode === 'forgot-password'
-              ? 'Enter your email and we'll send a reset link.'
+              ? "Enter your email and we'll send a reset link."
               : 'Sign in to your operator dashboard'}
           </p>
         </div>
