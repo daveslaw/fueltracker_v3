@@ -46,6 +46,10 @@ export class AnthropicRecogniser implements ImageRecogniser {
   }
 
   private async callVision(imageBase64: string, prompt: string, maxTokens: number): Promise<string> {
+    if (!imageBase64) {
+      console.error('[OCR] callVision called with empty imageBase64')
+      return 'UNREADABLE'
+    }
     try {
       const message = await this.client.messages.create({
         model: 'claude-sonnet-4-6',
@@ -58,9 +62,15 @@ export class AnthropicRecogniser implements ImageRecogniser {
           ],
         }],
       })
-      return (message.content[0] as { type: 'text'; text: string }).text.trim()
+      const block = message.content[0]
+      if (!block || block.type !== 'text') {
+        console.error('[OCR] Unexpected response block type:', block?.type)
+        return 'UNREADABLE'
+      }
+      return block.text.trim()
     } catch (err) {
-      console.error('[OCR] Anthropic error:', err)
+      const msg = err instanceof Error ? err.message : JSON.stringify(err)
+      console.error('[OCR] Anthropic API error:', msg)
       return 'UNREADABLE'
     }
   }

@@ -54,7 +54,8 @@ export function ClosePumpCaptureForm({ shiftId, pumpId, defaultMeter, onSaved }:
         confidence: json.ocr?.confidence ?? 0,
         status: json.ocr?.status ?? 'unreadable',
       })
-    } catch {
+    } catch (err) {
+      console.error('[pump-photo] upload error:', err)
       setOcr({ phase: 'done', value: null, confidence: 0, status: 'unreadable' })
     }
   }
