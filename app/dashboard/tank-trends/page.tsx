@@ -119,41 +119,39 @@ export default async function TankTrendsPage({ searchParams }: Props) {
               {(stations ?? []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
-          <input type="hidden" name="preset" value={activePreset} />
-          {activePreset === 'custom' && <input type="hidden" name="from" value={fromDate} />}
-          {activePreset === 'custom' && <input type="hidden" name="to" value={toDate} />}
+          <input type="hidden" name="preset" value="custom" />
+          <input type="hidden" name="from" value={fromDate} />
+          <input type="hidden" name="to" value={toDate} />
           <button type="submit" className="rounded bg-black px-3 py-1.5 text-sm text-white">Go</button>
         </form>
 
         {/* Preset tabs */}
         <div className="flex gap-1">
-          {(['7d', '30d', 'custom'] as const).map(p => (
+          {(['7d', '30d'] as const).map(p => (
             <a
               key={p}
-              href={`/dashboard/tank-trends?${stationParam}&preset=${p}${p === 'custom' ? `&from=${fromDate}&to=${toDate}` : ''}`}
+              href={`/dashboard/tank-trends?${stationParam}&preset=${p}`}
               className={`px-3 py-1.5 text-sm rounded border ${activePreset === p ? 'bg-black text-white' : 'hover:bg-muted'}`}
             >
-              {p === '7d' ? 'Last 7 days' : p === '30d' ? 'Last 30 days' : 'Custom'}
+              {p === '7d' ? 'Last 7 days' : 'Last 30 days'}
             </a>
           ))}
         </div>
 
-        {/* Custom date range */}
-        {activePreset === 'custom' && (
-          <form method="GET" action="/dashboard/tank-trends" className="flex gap-2 items-end">
-            <input type="hidden" name="station" value={activeStationId} />
-            <input type="hidden" name="preset" value="custom" />
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">From</label>
-              <input type="date" name="from" defaultValue={fromDate} max={today} lang="en-ZA" className="border rounded px-2 py-1.5 text-sm" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground">To</label>
-              <input type="date" name="to" defaultValue={toDate} max={today} lang="en-ZA" className="border rounded px-2 py-1.5 text-sm" />
-            </div>
-            <button type="submit" className="rounded bg-black px-3 py-1.5 text-sm text-white">Apply</button>
-          </form>
-        )}
+        {/* Date range picker — always visible */}
+        <form method="GET" action="/dashboard/tank-trends" className="flex gap-2 items-end">
+          <input type="hidden" name="station" value={activeStationId} />
+          <input type="hidden" name="preset" value="custom" />
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">From</label>
+            <input type="date" name="from" defaultValue={fromDate} max={today} lang="en-ZA" className="border rounded px-2 py-1.5 text-sm" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">To</label>
+            <input type="date" name="to" defaultValue={toDate} max={today} lang="en-ZA" className="border rounded px-2 py-1.5 text-sm" />
+          </div>
+          <button type="submit" className="rounded bg-black px-3 py-1.5 text-sm text-white">Apply</button>
+        </form>
       </div>
 
       <div className="text-xs text-muted-foreground">
