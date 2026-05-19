@@ -15,12 +15,12 @@ export async function POST(request: NextRequest) {
 
   const path = `shifts/${shiftId}/deliveries/${Date.now()}.jpg`
   const { error: uploadError } = await supabase.storage
-    .from('delivery-photos')
+    .from('shift-photos')
     .upload(path, file, { contentType: file.type || 'image/jpeg', upsert: false })
 
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 })
 
-  const { data: { publicUrl } } = supabase.storage.from('delivery-photos').getPublicUrl(path)
+  const { data: { publicUrl } } = supabase.storage.from('shift-photos').getPublicUrl(path)
 
   return NextResponse.json({ url: publicUrl })
 }
