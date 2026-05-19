@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { signInWithPassword, signInWithMagicLink, resetPassword } from './actions'
+import { createClient } from '@/lib/supabase/client'
 
 type AuthMode = 'password' | 'magic-link' | 'forgot-password'
 
@@ -17,6 +18,24 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+
+  // Handle implicit-flow invite tokens delivered as URL hash fragments.
+  // Supabase admin inviteUserByEmail uses implicit flow (not PKCE), so the
+  // access_token arrives in the hash rather than as a ?code= param.
+  useEffect(() => {
+    const hash = window.location.hash
+    if (!hash.includes('type=invite')) return
+    const params = new URLSearchParams(hash.slice(1))
+    const access_token = params.get('access_token')
+    const refresh_token = params.get('refresh_token')
+    if (!access_token || !refresh_token) return
+
+    createClient()
+      .auth.setSession({ access_token, refresh_token })
+      .then(({ error }) => {
+        if (!error) window.location.replace('/set-password')
+      })
+  }, [])
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
