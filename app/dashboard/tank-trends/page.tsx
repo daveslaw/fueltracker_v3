@@ -49,7 +49,7 @@ export default async function TankTrendsPage({ searchParams }: Props) {
     .eq('station_id', activeStationId)
     .gte('shift_date', fromDate)
     .lte('shift_date', toDate)
-    .in('status', ['submitted', 'approved', 'flagged'])
+    .eq('status', 'closed')
 
   const shiftIds = (shifts ?? []).map(s => s.id)
 

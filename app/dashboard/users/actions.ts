@@ -18,7 +18,10 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
 
   const admin = createAdminClient()
 
-  const { data, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email.trim())
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+  const { data, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email.trim(), {
+    redirectTo: `${siteUrl}/`,
+  })
   if (inviteError) return { error: inviteError.message }
 
   const { error: profileError } = await admin.from('user_profiles').insert({
