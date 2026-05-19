@@ -33,7 +33,7 @@ export default function LoginPage() {
         : await resetPassword(formData)
 
     setPending(false)
-    if (result?.error) setError(result.error)
+    if (result && 'error' in result) setError(result.error)
     if (result && 'message' in result) setMessage(result.message)
   }
 
