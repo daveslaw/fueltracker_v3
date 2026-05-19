@@ -1,11 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { signInWithPassword, signInWithMagicLink } from './actions'
+import { useSearchParams } from 'next/navigation'
+import { signInWithPassword, signInWithMagicLink, resetPassword } from './actions'
 
-type AuthMode = 'password' | 'magic-link'
+type AuthMode = 'password' | 'magic-link' | 'forgot-password'
 
 export default function LoginPage() {
+  const searchParams = useSearchParams()
+  const inviteExpiredError =
+    searchParams.get('error') === 'invite-expired'
+      ? 'This invite link has expired or already been used. Ask an owner to send a new invite.'
+      : null
+
   const [mode, setMode] = useState<AuthMode>('password')
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -21,7 +28,9 @@ export default function LoginPage() {
     const result =
       mode === 'password'
         ? await signInWithPassword(formData)
-        : await signInWithMagicLink(formData)
+        : mode === 'magic-link'
+        ? await signInWithMagicLink(formData)
+        : await resetPassword(formData)
 
     setPending(false)
     if (result?.error) setError(result.error)
@@ -79,37 +88,55 @@ export default function LoginPage() {
             className="text-[2.6rem] font-bold leading-none tracking-wide"
             style={{ color: '#E8EDF4', fontFamily: 'var(--font-heading), sans-serif' }}
           >
-            Station Control
+            {mode === 'forgot-password' ? 'Reset Password' : 'Station Control'}
           </h1>
           <p className="mt-2 text-sm" style={{ color: '#7B8EA8' }}>
-            Sign in to your operator dashboard
+            {mode === 'forgot-password'
+              ? 'Enter your email and we'll send a reset link.'
+              : 'Sign in to your operator dashboard'}
           </p>
         </div>
 
-        {/* Mode selector — pill toggle */}
-        <div
-          className="flex gap-1 mb-6 rounded-lg p-1"
-          style={{
-            background: 'rgba(255,255,255,0.03)',
-            border: '1px solid #2A3656',
-          }}
-        >
-          {(['password', 'magic-link'] as AuthMode[]).map(m => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMode(m)}
-              className="flex-1 rounded py-1.5 text-xs font-semibold transition-all duration-150"
-              style={
-                mode === m
-                  ? { background: '#F59F00', color: '#0B0F1A' }
-                  : { color: '#7B8EA8' }
-              }
-            >
-              {m === 'password' ? 'Password' : 'Magic link'}
-            </button>
-          ))}
-        </div>
+        {/* Invite-expired error banner */}
+        {inviteExpiredError && (
+          <div
+            className="rounded-lg px-4 py-2.5 text-sm mb-6"
+            style={{
+              background: 'rgba(244,63,94,0.10)',
+              border: '1px solid rgba(244,63,94,0.25)',
+              color: '#FB7185',
+            }}
+          >
+            {inviteExpiredError}
+          </div>
+        )}
+
+        {/* Mode selector — pill toggle (hidden in forgot-password mode) */}
+        {mode !== 'forgot-password' && (
+          <div
+            className="flex gap-1 mb-6 rounded-lg p-1"
+            style={{
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid #2A3656',
+            }}
+          >
+            {(['password', 'magic-link'] as AuthMode[]).map(m => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                className="flex-1 rounded py-1.5 text-xs font-semibold transition-all duration-150"
+                style={
+                  mode === m
+                    ? { background: '#F59F00', color: '#0B0F1A' }
+                    : { color: '#7B8EA8' }
+                }
+              >
+                {m === 'password' ? 'Password' : 'Magic link'}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -194,11 +221,37 @@ export default function LoginPage() {
             style={{ background: '#F59F00', color: '#0B0F1A' }}
           >
             {pending
-              ? 'Signing in…'
+              ? mode === 'forgot-password' ? 'Sending…' : 'Signing in…'
               : mode === 'password'
               ? 'Sign in'
-              : 'Send magic link'}
+              : mode === 'magic-link'
+              ? 'Send magic link'
+              : 'Send reset link'}
           </button>
+
+          {/* Forgot password link — only in password mode, before confirmation */}
+          {mode === 'password' && !message && (
+            <button
+              type="button"
+              onClick={() => { setMode('forgot-password'); setError(null); setMessage(null) }}
+              className="w-full text-center text-xs"
+              style={{ color: '#56698A' }}
+            >
+              Forgot password?
+            </button>
+          )}
+
+          {/* Back to sign in — shown after reset confirmation or in forgot-password mode */}
+          {mode === 'forgot-password' && (
+            <button
+              type="button"
+              onClick={() => { setMode('password'); setError(null); setMessage(null) }}
+              className="w-full text-center text-xs"
+              style={{ color: '#56698A' }}
+            >
+              Back to sign in
+            </button>
+          )}
         </form>
       </div>
     </main>

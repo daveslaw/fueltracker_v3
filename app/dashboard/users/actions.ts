@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { validateInvite, INVITABLE_ROLES } from '@/lib/user-management'
+import { validateInvite, INVITABLE_ROLES, buildInviteCallbackUrl } from '@/lib/user-management'
 
 type ActionResult = { error: string } | { success: true }
 
@@ -18,9 +18,8 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
 
   const admin = createAdminClient()
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
   const { data, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email.trim(), {
-    redirectTo: `${siteUrl}/`,
+    redirectTo: buildInviteCallbackUrl(process.env.NEXT_PUBLIC_SITE_URL),
   })
   if (inviteError) return { error: inviteError.message }
 

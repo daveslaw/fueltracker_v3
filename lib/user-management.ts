@@ -17,6 +17,28 @@ export function validateInvite(input: {
   return null
 }
 
+// ── buildInviteCallbackUrl ───────────────────────────────────────────────────
+
+export function buildInviteCallbackUrl(siteUrl?: string): string {
+  const base = (siteUrl ?? 'http://localhost:3000').replace(/\/$/, '')
+  return `${base}/auth/callback`
+}
+
+// ── resolveCallbackRedirect ──────────────────────────────────────────────────
+
+export function resolveCallbackRedirect(code: string | null, exchangeFailed: boolean): string {
+  if (!code || exchangeFailed) return '/login?error=invite-expired'
+  return '/set-password'
+}
+
+// ── validatePasswordInput ────────────────────────────────────────────────────
+
+export function validatePasswordInput(password: string, confirm: string): string | null {
+  if (!password || password.length < 8) return 'Password must be at least 8 characters.'
+  if (password !== confirm) return 'Passwords do not match.'
+  return null
+}
+
 // ── getUserStatus ────────────────────────────────────────────────────────────
 
 export function getUserStatus(profile: { is_active: boolean }): UserStatus {
