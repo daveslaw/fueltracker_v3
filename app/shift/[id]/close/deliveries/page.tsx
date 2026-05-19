@@ -103,10 +103,10 @@ export default async function CloseDeliveriesPage({ params }: Props) {
           Dip readings
         </Link>
         <Link
-          href={`/shift/${shiftId}/close/pos`}
+          href={`/shift/${shiftId}/close/summary`}
           className="flex-1 rounded bg-black py-2 text-center text-sm font-medium text-white"
         >
-          POS Z-report
+          Review &amp; submit
         </Link>
       </div>
     </main>

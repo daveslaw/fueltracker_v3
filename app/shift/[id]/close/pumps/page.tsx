@@ -22,14 +22,13 @@ export default async function ClosePumpsPage({ params }: Props) {
     redirect(`/shift/${shiftId}/close/summary`)
   }
 
-  const [{ data: pumps }, { data: closePumpReadings }, { data: tanks }, { data: closeDipReadings }, { data: posSubmission }] =
+  const [{ data: pumps }, { data: closePumpReadings }, { data: tanks }, { data: closeDipReadings }] =
     await Promise.all([
       supabase.from('pumps').select('id, label').eq('station_id', shift.station_id),
       supabase.from('pump_readings').select('pump_id, meter_reading')
         .eq('shift_id', shiftId).eq('type', 'close'),
       supabase.from('tanks').select('id').eq('station_id', shift.station_id),
       supabase.from('dip_readings').select('tank_id').eq('shift_id', shiftId).eq('type', 'close'),
-      supabase.from('pos_submissions').select('id').eq('shift_id', shiftId).maybeSingle(),
     ])
 
   const sortedPumps = (pumps ?? []).sort((a, b) =>
@@ -41,8 +40,8 @@ export default async function ClosePumpsPage({ params }: Props) {
     (closePumpReadings ?? []).map((r) => r.pump_id),
     (tanks ?? []).map((t) => t.id),
     (closeDipReadings ?? []).map((r) => r.tank_id),
-    !!posSubmission,
-    false, // dry stock track belongs to cashier — not checked on pumps page
+    false,
+    false,
   )
 
   const readingMap = new Map((closePumpReadings ?? []).map((r) => [r.pump_id, r]))
@@ -73,14 +72,12 @@ export default async function ClosePumpsPage({ params }: Props) {
         >
           Dip readings ({progress.tanks.done}/{progress.tanks.total})
         </Link>
-        {progress.isReadyForPos && (
-          <Link
-            href={`/shift/${shiftId}/close/pos`}
-            className="flex-1 rounded bg-black py-2 text-center text-sm font-medium text-white"
-          >
-            POS Z-report
-          </Link>
-        )}
+        <Link
+          href={`/shift/${shiftId}/close/summary`}
+          className="flex-1 rounded bg-black py-2 text-center text-sm font-medium text-white"
+        >
+          Review &amp; submit
+        </Link>
       </div>
     </main>
   )
