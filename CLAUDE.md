@@ -75,7 +75,7 @@ lib/
   reconciliation-runner.ts    # Orchestrates reconciliation on submit
   deliveries.ts               # Fuel delivery CRUD + getShiftPeriod + validateDeliveryInput
   delivery-report.ts          # getDeliveryReport — paginated list with totals + station subtotals
-  pricing.ts                  # selectActivePriceAt
+  pricing.ts                  # selectActivePriceAt, hasPriceChangeDuringWindow, hasPriceRangeOverlap
   owner-reports.ts            # buildStationDayStatus, countPendingShiftsPerStation,
                               #   buildFinancialLines, buildDailyFuelReport, isReportPartial
   aggregate-reports.ts        # Cross-station aggregation
@@ -85,6 +85,9 @@ lib/
   cashier-progress.ts|cashier-submission.ts
   products.ts|product-catalogue.ts|product-pricing.ts
   stock-baselines.ts|stock-readings.ts
+  shift-workflow.ts           # Orchestration layer: runShiftClose, runShiftSplit, runShiftOverride
+                              #   Each function follows a repository pattern (testable with injected repo)
+                              #   and calls reconciliation-runner after mutations
   station-config.ts           # Station/tank/pump/pricing config CRUD (use instead of raw Supabase)
   tank-trends.ts              # Tank trend calculations
   user-management.ts          # User CRUD utilities
@@ -149,6 +152,8 @@ RLS policies scope all data to `station_id` via `user_profiles`. Use `lib/supaba
 **Server Actions** are co-located with route segments in `actions.ts` files.
 
 **Config mutations** go through `lib/station-config.ts` — not raw Supabase calls in components.
+
+**Shift workflow orchestration** lives in `lib/shift-workflow.ts`. The three exported functions (`runShiftClose`, `runShiftSplit`, `runShiftOverride`) use an injected repository interface so the core logic is unit-testable without Supabase. Each function calls `runReconciliation` after its database mutations. Server actions in `app/shift/actions.ts` call these functions directly.
 
 **Shift summary page** (`/shift/[id]/close/summary`) branches on status: `pending` → checklist + submit; `closed` → reconciliation tables + flag/unflag + `<details>` correction forms (zero-JS).
 
