@@ -3,16 +3,27 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { canStartShift, canSplitShift } from '@/lib/shift-open'
-import { getCloseProgress, canSubmit } from '@/lib/shift-close'
-import { runReconciliation } from '@/lib/reconciliation-runner'
-import { canFlag, canOverride, validateFlagComment, validateOverride } from '@/lib/supervisor-review'
-import { hasPriceChangeDuringWindow } from '@/lib/pricing'
+import { canStartShift } from '@/lib/shift-open'
+import { canFlag, validateFlagComment } from '@/lib/supervisor-review'
 import { createDelivery, deleteDelivery as dbDeleteDelivery, validateDeliveryInput } from '@/lib/deliveries'
-import { getCashierSubmissionState } from '@/lib/cashier-submission'
+import { runShiftClose, runShiftSplit, runShiftOverride } from '@/lib/shift-workflow'
+import type { ShiftOverrideData } from '@/lib/shift-workflow'
 import type { ShiftRow, ShiftPeriod, ShiftStatus } from '@/lib/shift-open'
 
-type ActionResult = { error: string } | { success: true }
+type ActionResult = { error: string } | { success: true; warning?: string }
+
+// ── getCallerProfileId ────────────────────────────────────────────────────────
+
+async function getCallerProfileId(supabase: Awaited<ReturnType<typeof createClient>>): Promise<string | null> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('id')
+    .eq('user_id', user.id)
+    .single()
+  return profile?.id ?? null
+}
 
 // ── createShift ───────────────────────────────────────────────────────────────
 
@@ -22,16 +33,8 @@ export async function createShift(formData: FormData) {
   const period = formData.get('period') as ShiftPeriod
   const shift_date = new Date().toISOString().split('T')[0]
 
-  // Resolve caller's profile id
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-  if (!profile) return { error: 'User profile not found' }
+  const profileId = await getCallerProfileId(supabase)
+  if (!profileId) redirect('/login')
 
   // Duplicate guard
   const { data: existing } = await supabase
@@ -53,7 +56,7 @@ export async function createShift(formData: FormData) {
 
   const { data: shift, error } = await supabase
     .from('shifts')
-    .insert({ station_id, period, shift_date, supervisor_id: profile.id, status: 'pending' })
+    .insert({ station_id, period, shift_date, supervisor_id: profileId, status: 'pending' })
     .select('id')
     .single()
   if (error) return { error: error.message }
@@ -163,67 +166,8 @@ export async function savePosSubmission(
 // ── submitShift ───────────────────────────────────────────────────────────────
 
 export async function submitShift(shiftId: string): Promise<ActionResult> {
-  const supabase = await createClient()
-
-  const [cashierState, { data: shift }] = await Promise.all([
-    getCashierSubmissionState(shiftId),
-    supabase.from('shifts').select('station_id, status, part, started_at').eq('id', shiftId).single(),
-  ])
-  if (!shift) return { error: 'Shift not found' }
-
-  if (!cashierState.submitted)
-    return { error: 'Shift cannot be submitted: cashier must submit their shift first.' }
-
-  if (!canSubmit(shift.status as ShiftStatus, true, true))
-    return { error: 'Shift cannot be submitted in its current state.' }
-
-  // Validate supervisor pump + dip close readings present
-  const [
-    { data: pumps }, { data: closePumpReadings },
-    { data: tanks }, { data: closeDipReadings },
-  ] = await Promise.all([
-    supabase.from('pumps').select('id').eq('station_id', shift.station_id),
-    supabase.from('pump_readings').select('pump_id').eq('shift_id', shiftId).eq('type', 'close'),
-    supabase.from('tanks').select('id').eq('station_id', shift.station_id),
-    supabase.from('dip_readings').select('tank_id').eq('shift_id', shiftId).eq('type', 'close'),
-  ])
-
-  const progress = getCloseProgress(
-    (pumps ?? []).map((p) => p.id),
-    (closePumpReadings ?? []).map((r) => r.pump_id),
-    (tanks ?? []).map((t) => t.id),
-    (closeDipReadings ?? []).map((r) => r.tank_id),
-    true,
-    true,
-  )
-
-  if (!progress.isComplete) return { error: 'All close readings, cashier submission, and dry stock count are required before submitting.' }
-
-  const submittedAt = new Date().toISOString()
-
-  let autoFlag: { is_flagged: boolean; flag_comment: string } | null = null
-  if (shift.part === 0) {
-    const { data: prices } = await supabase
-      .from('fuel_prices')
-      .select('valid_from')
-      .eq('station_id', shift.station_id)
-    if (prices && hasPriceChangeDuringWindow(prices, shift.started_at, submittedAt)) {
-      autoFlag = {
-        is_flagged: true,
-        flag_comment: 'Price change detected during shift window — consider splitting.',
-      }
-    }
-  }
-
-  const { error } = await supabase
-    .from('shifts')
-    .update({ status: 'closed', submitted_at: submittedAt, ...autoFlag })
-    .eq('id', shiftId)
-  if (error) return { error: error.message }
-
-  // Run reconciliation server-side immediately after close
-  await runReconciliation(shiftId)
-
+  const result = await runShiftClose(shiftId)
+  if ('error' in result) return result
   redirect(`/shift/${shiftId}/close/summary`)
 }
 
@@ -232,45 +176,10 @@ export async function submitShift(shiftId: string): Promise<ActionResult> {
 export async function splitShift(
   shiftId: string
 ): Promise<{ error: string } | { part2ShiftId: string }> {
-  const supabase = await createClient()
-
-  const { data: shift } = await supabase
-    .from('shifts')
-    .select('id, station_id, period, shift_date, supervisor_id, status, part')
-    .eq('id', shiftId)
-    .single()
-  if (!shift) return { error: 'Shift not found' }
-
-  if (!canSplitShift(shift)) return { error: 'Shift cannot be split in its current state' }
-
-  const now = new Date().toISOString()
-
-  const { error: closeErr } = await supabase
-    .from('shifts')
-    .update({ part: 1, shift_type: 'price_change', status: 'closed', submitted_at: now })
-    .eq('id', shiftId)
-  if (closeErr) return { error: closeErr.message }
-
-  await runReconciliation(shiftId)
-
-  const { data: part2, error: createErr } = await supabase
-    .from('shifts')
-    .insert({
-      station_id:   shift.station_id,
-      period:       shift.period,
-      shift_date:   shift.shift_date,
-      supervisor_id: shift.supervisor_id,
-      part:         2,
-      shift_type:   'price_change',
-      status:       'pending',
-      started_at:   now,
-    })
-    .select('id')
-    .single()
-  if (createErr) return { error: createErr.message }
-
+  const result = await runShiftSplit(shiftId)
+  if ('error' in result) return result
   revalidatePath(`/shift/${shiftId}/close/summary`)
-  return { part2ShiftId: part2.id }
+  return { part2ShiftId: result.part2ShiftId }
 }
 
 // ── flagShift ─────────────────────────────────────────────────────────────────
@@ -337,12 +246,8 @@ export async function saveDelivery(
     .from('shifts').select('station_id, status').eq('id', shiftId).single()
   if (!shift) return { error: 'Shift not found' }
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
-
-  const { data: profile } = await supabase
-    .from('user_profiles').select('id').eq('user_id', user.id).single()
-  if (!profile) return { error: 'User profile not found' }
+  const profileId = await getCallerProfileId(supabase)
+  if (!profileId) return { error: 'Not authenticated' }
 
   const result = await createDelivery(supabase, {
     stationId:          shift.station_id,
@@ -351,7 +256,7 @@ export async function saveDelivery(
     deliveryNoteUrl,
     deliveryNoteNumber,
     driverName,
-    recordedBy:         profile.id,
+    recordedBy:         profileId,
   })
   if (result.error) return { error: result.error }
 
@@ -402,69 +307,29 @@ export async function createOverride(
   const override_value = parseFloat(formData.get('override_value') as string)
   const reason         = (formData.get('reason') as string) ?? ''
 
-  // pos_line forms submit original_litres / original_revenue instead of a single original_value,
-  // so the audit trail can record the right pre-correction value regardless of which field is corrected.
+  if (!reading_id || !reading_type) return { error: 'Reading reference is required' }
+  if (isNaN(override_value)) return { error: 'Values must be valid numbers' }
+
+  // pos_line forms submit original_litres / original_revenue instead of a single original_value
   const original_value = reading_type === 'pos_line'
     ? parseFloat(formData.get(field_name === 'revenue_zar' ? 'original_revenue' : 'original_litres') as string)
     : parseFloat(formData.get('original_value') as string)
 
-  if (!reading_id || !reading_type) return { error: 'Reading reference is required' }
-  if (isNaN(override_value))
-    return { error: 'Values must be valid numbers' }
+  const profileId = await getCallerProfileId(supabase)
+  if (!profileId) return { error: 'Not authenticated' }
 
-  const validation = validateOverride({ value: override_value, reason, reading_type, field_name })
-  if (!validation.valid) return { error: validation.error }
-
-  const { data: shift } = await supabase
-    .from('shifts').select('status').eq('id', shiftId).single()
-  if (!shift) return { error: 'Shift not found' }
-  if (!canOverride(shift.status as ShiftStatus))
-    return { error: 'Overrides are only allowed on closed shifts' }
-
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' }
-
-  const { data: profile } = await supabase
-    .from('user_profiles').select('id').eq('user_id', user.id).single()
-  if (!profile) return { error: 'User profile not found' }
-
-  // Mutate source table so re-reconciliation uses the corrected value.
-  // ocr_overrides is the audit trail only.
-  if (reading_type === 'pump') {
-    const { error: mutErr } = await supabase
-      .from('pump_readings')
-      .update({ meter_reading: override_value })
-      .eq('id', reading_id)
-      .eq('type', 'close')
-    if (mutErr) return { error: mutErr.message }
-  } else if (reading_type === 'dip') {
-    const { error: mutErr } = await supabase
-      .from('dip_readings')
-      .update({ litres: override_value })
-      .eq('id', reading_id)
-      .eq('type', 'close')
-    if (mutErr) return { error: mutErr.message }
-  } else if (reading_type === 'pos_line' && field_name) {
-    const { error: mutErr } = await supabase
-      .from('pos_submission_lines')
-      .update({ [field_name]: override_value })
-      .eq('id', reading_id)
-    if (mutErr) return { error: mutErr.message }
+  const data: ShiftOverrideData = {
+    readingId:     reading_id,
+    readingType:   reading_type,
+    fieldName:     field_name,
+    overrideValue: override_value,
+    originalValue: original_value,
+    reason,
+    overriddenBy:  profileId,
   }
 
-  const { error } = await supabase.from('ocr_overrides').insert({
-    shift_id:      shiftId,
-    reading_id,
-    reading_type,
-    field_name,
-    original_value,
-    override_value,
-    reason,
-    overridden_by: profile.id,
-  })
-  if (error) return { error: error.message }
-
-  await runReconciliation(shiftId)
+  const result = await runShiftOverride(shiftId, data)
+  if ('error' in result) return result
 
   revalidatePath(`/shift/${shiftId}/close/summary`)
   revalidatePath(`/dashboard/history/${shiftId}`)
