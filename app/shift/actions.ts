@@ -92,6 +92,10 @@ export async function saveClosePumpReading(
   }, { onConflict: 'shift_id,pump_id,type' })
   if (error) return { error: error.message }
 
+  if (ocr_status !== 'auto') {
+    await supabase.from('shifts').update({ has_manual_entry: true }).eq('id', shiftId)
+  }
+
   revalidatePath(`/shift/${shiftId}/close/pumps`)
   return { success: true }
 }
@@ -126,6 +130,7 @@ export type PosLineInput = {
   fuel_grade_id: string
   litres_sold: number
   revenue_zar: number
+  ocr_status?: string
 }
 
 export async function savePosSubmission(
@@ -156,9 +161,14 @@ export async function savePosSubmission(
       fuel_grade_id: l.fuel_grade_id,
       litres_sold: l.litres_sold,
       revenue_zar: l.revenue_zar,
+      ocr_status: l.ocr_status ?? 'auto',
     }))
   )
   if (linesErr) return { error: linesErr.message }
+
+  if (lines.some((l) => (l.ocr_status ?? 'auto') !== 'auto')) {
+    await supabase.from('shifts').update({ has_manual_entry: true }).eq('id', shiftId)
+  }
 
   revalidatePath(`/shift/${shiftId}/close/pos`)
   return { success: true }

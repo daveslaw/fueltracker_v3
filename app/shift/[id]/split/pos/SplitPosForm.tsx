@@ -79,12 +79,14 @@ export function SplitPosForm({ shiftId, grades, existingLines, existingPhotoUrl 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    const posOcrStatus = ocrPhase.phase === 'done' ? ocrPhase.result.status : 'manual_override'
     const validLines = lines
       .filter(l => l.litres_sold !== '' || l.revenue_zar !== '')
       .map(l => ({
         fuel_grade_id: l.fuel_grade_id,
         litres_sold: parseFloat(l.litres_sold) || 0,
         revenue_zar: parseFloat(l.revenue_zar) || 0,
+        ocr_status: posOcrStatus,
       }))
     if (!validLines.length) {
       setError('Enter at least one grade line')

@@ -22,6 +22,7 @@ function makeRepo(overrides: Partial<ShiftOverrideRepository> = {}): ShiftOverri
     loadOverrideBundle: async () => ({ status: 'closed' }),
     applyMutation:      async () => ({}),
     insertAuditRecord:  async () => ({}),
+    setManualEntry:     async () => ({}),
     ...overrides,
   }
 }
@@ -160,5 +161,48 @@ describe('runShiftOverrideWith — allowPending flag', () => {
     const result = await runShiftOverrideWith('shift-1', makeData(), repo, failReconcile, { allowPending: true })
     expect('success' in result).toBe(true)
     expect((result as { success: true; warning?: string }).warning).toMatch(/reconciliation failed/i)
+  })
+})
+
+// ── setManualEntry — pump and pos_line triggers ────────────────────────────────
+
+describe('runShiftOverrideWith — setManualEntry called for pump and pos_line', () => {
+  it('tracer bullet: calls setManualEntry for pump readingType', async () => {
+    const setManualEntry = vi.fn(async () => ({}))
+    await runShiftOverrideWith('shift-1', makeData({ readingType: 'pump' }), makeRepo({ setManualEntry }), noopReconcile)
+    expect(setManualEntry).toHaveBeenCalledWith('shift-1')
+  })
+
+  it('calls setManualEntry for pos_line readingType', async () => {
+    const setManualEntry = vi.fn(async () => ({}))
+    const data = makeData({ readingType: 'pos_line', fieldName: 'litres_sold' })
+    await runShiftOverrideWith('shift-1', data, makeRepo({ setManualEntry }), noopReconcile)
+    expect(setManualEntry).toHaveBeenCalledWith('shift-1')
+  })
+
+  it('does NOT call setManualEntry for dip readingType', async () => {
+    const setManualEntry = vi.fn(async () => ({}))
+    await runShiftOverrideWith('shift-1', makeData({ readingType: 'dip' }), makeRepo({ setManualEntry }), noopReconcile)
+    expect(setManualEntry).not.toHaveBeenCalled()
+  })
+
+  it('does NOT call setManualEntry for dry_stock_line readingType', async () => {
+    const setManualEntry = vi.fn(async () => ({}))
+    const data = makeData({ readingType: 'dry_stock_line', fieldName: 'units_sold' })
+    await runShiftOverrideWith('shift-1', data, makeRepo({ setManualEntry }), noopReconcile)
+    expect(setManualEntry).not.toHaveBeenCalled()
+  })
+
+  it('does NOT call setManualEntry for stock_reading readingType', async () => {
+    const setManualEntry = vi.fn(async () => ({}))
+    const data = makeData({ readingType: 'stock_reading', fieldName: null })
+    await runShiftOverrideWith('shift-1', data, makeRepo({ setManualEntry }), noopReconcile)
+    expect(setManualEntry).not.toHaveBeenCalled()
+  })
+
+  it('returns error when setManualEntry fails', async () => {
+    const setManualEntry = vi.fn(async () => ({ error: 'db write failed' }))
+    const result = await runShiftOverrideWith('shift-1', makeData({ readingType: 'pump' }), makeRepo({ setManualEntry }), noopReconcile)
+    expect(result).toEqual({ error: 'db write failed' })
   })
 })

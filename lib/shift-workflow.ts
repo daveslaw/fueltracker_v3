@@ -94,6 +94,7 @@ export interface ShiftOverrideRepository {
   loadOverrideBundle(shiftId: string): Promise<{ status: ShiftStatus } | null>
   applyMutation(data: ShiftOverrideData): Promise<{ error?: string }>
   insertAuditRecord(shiftId: string, data: ShiftOverrideData): Promise<{ error?: string }>
+  setManualEntry(shiftId: string): Promise<{ error?: string }>
 }
 
 export async function runShiftOverrideWith(
@@ -119,6 +120,11 @@ export async function runShiftOverrideWith(
 
   const mutErr = await repo.applyMutation(data)
   if (mutErr.error) return { error: mutErr.error }
+
+  if (data.readingType === 'pump' || data.readingType === 'pos_line') {
+    const flagErr = await repo.setManualEntry(shiftId)
+    if (flagErr.error) return { error: flagErr.error }
+  }
 
   const auditErr = await repo.insertAuditRecord(shiftId, data)
   if (auditErr.error) return { error: auditErr.error }
@@ -190,6 +196,14 @@ export async function runShiftOverride(shiftId: string, data: ShiftOverrideData)
         reason:         d.reason,
         overridden_by:  d.overriddenBy,
       })
+      return { error: error?.message }
+    },
+
+    async setManualEntry(id) {
+      const { error } = await supabase
+        .from('shifts')
+        .update({ has_manual_entry: true })
+        .eq('id', id)
       return { error: error?.message }
     },
   }
