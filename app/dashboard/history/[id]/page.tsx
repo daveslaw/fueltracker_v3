@@ -190,7 +190,12 @@ export default async function ShiftAuditPage({ params }: Props) {
               <div key={pump.id} className="px-4 py-3 space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="font-medium">{pump.label}</span>
-                  {isOverridden && <span className="text-xs text-amber-600">overridden</span>}
+                  <div className="flex items-center gap-1.5">
+                    {close?.ocr_status && close.ocr_status !== 'auto' && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800">Manual</span>
+                    )}
+                    {isOverridden && <span className="text-xs text-amber-600">overridden</span>}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 text-muted-foreground">
                   <span>Open</span>
@@ -300,10 +305,15 @@ export default async function ShiftAuditPage({ params }: Props) {
               )}
               {posLines.map((line: any) => (
                 <div key={line.id} className="px-4 py-3">
-                  <div className="flex justify-between">
-                    <span className={`font-medium ${overriddenIds.has(line.id) ? 'text-amber-600' : ''}`}>
-                      {line.fuel_grade_id}{overriddenIds.has(line.id) ? ' (overridden)' : ''}
-                    </span>
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`font-medium ${overriddenIds.has(line.id) ? 'text-amber-600' : ''}`}>
+                        {line.fuel_grade_id}{overriddenIds.has(line.id) ? ' (overridden)' : ''}
+                      </span>
+                      {line.ocr_status && line.ocr_status !== 'auto' && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800">Manual</span>
+                      )}
+                    </div>
                     <span>{fmtL(line.litres_sold)} · {fmtR(line.revenue_zar)}</span>
                   </div>
                   {isOverridable && (

@@ -10,6 +10,7 @@ interface Props {
     period?: string
     status?: string
     supervisor?: string
+    manual?: string
   }>
 }
 
@@ -42,7 +43,7 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
   let query = supabase
     .from('shifts')
     .select(`
-      id, shift_date, period, status, submitted_at,
+      id, shift_date, period, status, submitted_at, has_manual_entry,
       stations ( name ),
       user_profiles!supervisor_id ( email )
     `)
@@ -52,10 +53,11 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
     .order('period', { ascending: true })
     .limit(200)
 
-  if (filters.station)    query = query.eq('station_id', filters.station)
-  if (filters.period)     query = query.eq('period', filters.period)
-  if (filters.status)     query = query.eq('status', filters.status)
-  if (filters.supervisor) query = query.eq('supervisor_id', filters.supervisor)
+  if (filters.station)         query = query.eq('station_id', filters.station)
+  if (filters.period)          query = query.eq('period', filters.period)
+  if (filters.status)          query = query.eq('status', filters.status)
+  if (filters.supervisor)      query = query.eq('supervisor_id', filters.supervisor)
+  if (filters.manual === 'on') query = query.eq('has_manual_entry', true)
 
   const { data: shifts, error: shiftsError } = await query
   if (shiftsError) console.error('[history] shifts query error:', shiftsError.message)
@@ -134,6 +136,10 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
             ))}
           </select>
         </div>
+        <div className="flex items-center gap-2 self-end pb-1.5">
+          <input type="checkbox" id="manual" name="manual" value="on" defaultChecked={filters.manual === 'on'} className="h-4 w-4" />
+          <label htmlFor="manual" className="text-sm">Manual entry only</label>
+        </div>
         <button type="submit" className="rounded bg-black px-4 py-1.5 text-sm text-white">Filter</button>
       </form>
 
@@ -169,9 +175,14 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
                   <td className="px-3 py-2">{supervisorName}</td>
                   <td className="px-3 py-2 text-muted-foreground">{submittedAt}</td>
                   <td className="px-3 py-2">
-                    <span className={`text-xs px-2 py-0.5 rounded capitalize ${statusColour(s.status)}`}>
-                      {s.status}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-xs px-2 py-0.5 rounded capitalize ${statusColour(s.status)}`}>
+                        {s.status}
+                      </span>
+                      {(ss as any).has_manual_entry && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800">Manual</span>
+                      )}
+                    </div>
                   </td>
                   <td className={`px-3 py-2 text-right ${vs ? (vs.tankVar < 0 ? 'text-destructive' : vs.tankVar > 0 ? 'text-amber-600' : 'text-green-600') : 'text-muted-foreground'}`}>
                     {vs ? (vs.tankVar > 0 ? '+' : '') + vs.tankVar.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' L' : '—'}
