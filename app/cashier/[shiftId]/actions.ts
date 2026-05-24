@@ -68,8 +68,6 @@ export async function saveCashierDryStockPos(
 ): Promise<ActionResult> {
   const supabase = await createClient()
 
-  if (!lines.length) return { error: 'At least one product line is required' }
-
   const { data: submission, error: subErr } = await supabase
     .from('dry_stock_pos_submissions')
     .upsert(
@@ -82,16 +80,18 @@ export async function saveCashierDryStockPos(
 
   await supabase.from('pos_dry_stock_lines').delete().eq('dry_stock_pos_submission_id', submission.id)
 
-  const { error: linesErr } = await supabase.from('pos_dry_stock_lines').insert(
-    lines.map(l => ({
-      dry_stock_pos_submission_id: submission.id,
-      product_id: l.product_id,
-      units_sold: l.units_sold,
-      revenue_zar: l.revenue_zar,
-      ocr_status: 'confirmed',
-    }))
-  )
-  if (linesErr) return { error: linesErr.message }
+  if (lines.length > 0) {
+    const { error: linesErr } = await supabase.from('pos_dry_stock_lines').insert(
+      lines.map(l => ({
+        dry_stock_pos_submission_id: submission.id,
+        product_id: l.product_id,
+        units_sold: l.units_sold,
+        revenue_zar: l.revenue_zar,
+        ocr_status: 'confirmed',
+      }))
+    )
+    if (linesErr) return { error: linesErr.message }
+  }
 
   revalidatePath(`/cashier/${shiftId}`)
   return { success: true }

@@ -83,19 +83,13 @@ export function StockPosForm({ shiftId, products, savedLines, existingPhotoUrl }
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    const validLines: DryStockPosLineInput[] = lines
-      .filter(l => l.units_sold !== '' || l.revenue_zar !== '')
-      .map(l => ({
-        product_id: l.product_id,
-        units_sold: parseFloat(l.units_sold) || 0,
-        revenue_zar: parseFloat(l.revenue_zar) || 0,
-      }))
-    if (!validLines.length) {
-      setError('Enter at least one product line')
-      return
-    }
+    const allLines: DryStockPosLineInput[] = lines.map(l => ({
+      product_id: l.product_id,
+      units_sold: parseFloat(l.units_sold) || 0,
+      revenue_zar: parseFloat(l.revenue_zar) || 0,
+    }))
     startTransition(async () => {
-      const result = await saveCashierDryStockPos(shiftId, photoUrl, validLines)
+      const result = await saveCashierDryStockPos(shiftId, photoUrl, allLines)
       if ('error' in result) setError(result.error)
       else setSaved(true)
     })
