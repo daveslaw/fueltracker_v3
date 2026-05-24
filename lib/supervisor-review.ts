@@ -20,6 +20,14 @@ export function canOverride(status: ShiftStatus): boolean {
 }
 
 /**
+ * Guards the owner correction action.
+ * Owners may correct readings on any shift regardless of status.
+ */
+export function canOwnerOverride(_status: ShiftStatus): boolean {
+  return true
+}
+
+/**
  * Validates the comment required when flagging a shift.
  * Comment must be non-empty (not just whitespace).
  */
@@ -28,7 +36,8 @@ export function validateFlagComment(comment: string): ValidationResult {
   return { valid: true }
 }
 
-const POS_LINE_FIELDS = ['litres_sold', 'revenue_zar'] as const
+const POS_LINE_FIELDS       = ['litres_sold', 'revenue_zar'] as const
+const DRY_STOCK_LINE_FIELDS = ['units_sold', 'revenue_zar'] as const
 export type PosLineField = typeof POS_LINE_FIELDS[number]
 
 /**
@@ -36,11 +45,13 @@ export type PosLineField = typeof POS_LINE_FIELDS[number]
  * - Value must be >= 0.
  * - Reason must be non-empty (not just whitespace).
  * - pos_line overrides must specify field_name as 'litres_sold' or 'revenue_zar'.
+ * - dry_stock_line overrides must specify field_name as 'units_sold' or 'revenue_zar'.
+ * - stock_reading overrides target closing_count directly — no field_name needed.
  */
 export function validateOverride(input: {
   value:        number
   reason:       string
-  reading_type: 'pump' | 'dip' | 'pos_line'
+  reading_type: 'pump' | 'dip' | 'pos_line' | 'dry_stock_line' | 'stock_reading'
   field_name?:  string | null
 }): ValidationResult {
   if (input.value < 0) return { valid: false, error: 'Override value must be zero or greater' }
@@ -48,6 +59,11 @@ export function validateOverride(input: {
   if (input.reading_type === 'pos_line') {
     if (!input.field_name || !(POS_LINE_FIELDS as readonly string[]).includes(input.field_name)) {
       return { valid: false, error: 'field_name must be litres_sold or revenue_zar for POS line overrides' }
+    }
+  }
+  if (input.reading_type === 'dry_stock_line') {
+    if (!input.field_name || !(DRY_STOCK_LINE_FIELDS as readonly string[]).includes(input.field_name)) {
+      return { valid: false, error: 'field_name must be units_sold or revenue_zar for dry stock line overrides' }
     }
   }
   return { valid: true }

@@ -95,6 +95,20 @@ describe('runShiftOverrideWith — applyMutation routing', () => {
     await runShiftOverrideWith('shift-1', data, makeRepo({ applyMutation }), noopReconcile)
     expect(applyMutation).toHaveBeenCalledWith(expect.objectContaining({ readingType: 'pos_line', fieldName: 'litres_sold' }))
   })
+
+  it('calls applyMutation with dry_stock_line readingType and fieldName', async () => {
+    const applyMutation = vi.fn(async () => ({}))
+    const data = makeData({ readingType: 'dry_stock_line', fieldName: 'units_sold' })
+    await runShiftOverrideWith('shift-1', data, makeRepo({ applyMutation }), noopReconcile)
+    expect(applyMutation).toHaveBeenCalledWith(expect.objectContaining({ readingType: 'dry_stock_line', fieldName: 'units_sold' }))
+  })
+
+  it('calls applyMutation with stock_reading readingType', async () => {
+    const applyMutation = vi.fn(async () => ({}))
+    const data = makeData({ readingType: 'stock_reading', fieldName: null })
+    await runShiftOverrideWith('shift-1', data, makeRepo({ applyMutation }), noopReconcile)
+    expect(applyMutation).toHaveBeenCalledWith(expect.objectContaining({ readingType: 'stock_reading' }))
+  })
 })
 
 describe('runShiftOverrideWith — audit record', () => {
@@ -110,6 +124,40 @@ describe('runShiftOverrideWith — reconciliation failure', () => {
   it('returns success with warning when reconciliation fails after override', async () => {
     const failReconcile = async () => ({ error: 'timeout' })
     const result = await runShiftOverrideWith('shift-1', makeData(), makeRepo(), failReconcile)
+    expect('success' in result).toBe(true)
+    expect((result as { success: true; warning?: string }).warning).toMatch(/reconciliation failed/i)
+  })
+})
+
+describe('runShiftOverrideWith — allowPending flag', () => {
+  it('tracer bullet: allowPending: true succeeds on a pending shift', async () => {
+    const repo = makeRepo({ loadOverrideBundle: async () => ({ status: 'pending' }) })
+    const result = await runShiftOverrideWith('shift-1', makeData(), repo, noopReconcile, { allowPending: true })
+    expect(result).toEqual({ success: true })
+  })
+
+  it('allowPending: true also succeeds on a closed shift', async () => {
+    const repo = makeRepo({ loadOverrideBundle: async () => ({ status: 'closed' }) })
+    const result = await runShiftOverrideWith('shift-1', makeData(), repo, noopReconcile, { allowPending: true })
+    expect(result).toEqual({ success: true })
+  })
+
+  it('without allowPending, pending shift still returns error (existing guard preserved)', async () => {
+    const repo = makeRepo({ loadOverrideBundle: async () => ({ status: 'pending' }) })
+    const result = await runShiftOverrideWith('shift-1', makeData(), repo, noopReconcile)
+    expect('error' in result).toBe(true)
+  })
+
+  it('allowPending: true still validates override data (negative value rejected)', async () => {
+    const repo = makeRepo({ loadOverrideBundle: async () => ({ status: 'pending' }) })
+    const result = await runShiftOverrideWith('shift-1', makeData({ overrideValue: -1 }), repo, noopReconcile, { allowPending: true })
+    expect('error' in result).toBe(true)
+  })
+
+  it('allowPending: true + reconciliation failure → success with warning', async () => {
+    const repo = makeRepo({ loadOverrideBundle: async () => ({ status: 'pending' }) })
+    const failReconcile = async () => ({ error: 'timeout' })
+    const result = await runShiftOverrideWith('shift-1', makeData(), repo, failReconcile, { allowPending: true })
     expect('success' in result).toBe(true)
     expect((result as { success: true; warning?: string }).warning).toMatch(/reconciliation failed/i)
   })

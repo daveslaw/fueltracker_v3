@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { canFlag, canOverride, validateOverride, validateFlagComment } from '../lib/supervisor-review'
+import { canFlag, canOverride, canOwnerOverride, validateOverride, validateFlagComment } from '../lib/supervisor-review'
 
 describe('canFlag', () => {
   it('closed shift can be flagged', () => {
@@ -21,6 +21,16 @@ describe('canFlag', () => {
 
   it('old approved status cannot be flagged', () => {
     expect(canFlag('approved')).toBe(false)
+  })
+})
+
+describe('canOwnerOverride', () => {
+  it('tracer bullet: returns true for a closed shift', () => {
+    expect(canOwnerOverride('closed')).toBe(true)
+  })
+
+  it('returns true for a pending shift (owners can correct pending shifts)', () => {
+    expect(canOwnerOverride('pending')).toBe(true)
   })
 })
 
@@ -104,6 +114,37 @@ describe('validateOverride', () => {
 
   it('invalid: pos_line override with unrecognised field_name', () => {
     const result = validateOverride({ value: 1800, reason: 'OCR misread', reading_type: 'pos_line', field_name: 'unknown_field' })
+    expect(result.valid).toBe(false)
+  })
+
+  it('valid: dry_stock_line override with field_name = units_sold', () => {
+    const result = validateOverride({ value: 12, reason: 'Count corrected', reading_type: 'dry_stock_line', field_name: 'units_sold' })
+    expect(result).toEqual({ valid: true })
+  })
+
+  it('valid: dry_stock_line override with field_name = revenue_zar', () => {
+    const result = validateOverride({ value: 240, reason: 'Price corrected', reading_type: 'dry_stock_line', field_name: 'revenue_zar' })
+    expect(result).toEqual({ valid: true })
+  })
+
+  it('invalid: dry_stock_line override with no field_name', () => {
+    const result = validateOverride({ value: 12, reason: 'Count corrected', reading_type: 'dry_stock_line' })
+    expect(result.valid).toBe(false)
+    if (!result.valid) expect(result.error).toMatch(/field_name/i)
+  })
+
+  it('invalid: dry_stock_line override with unrecognised field_name', () => {
+    const result = validateOverride({ value: 12, reason: 'Count corrected', reading_type: 'dry_stock_line', field_name: 'litres_sold' })
+    expect(result.valid).toBe(false)
+  })
+
+  it('valid: stock_reading override with no field_name (single-field type)', () => {
+    const result = validateOverride({ value: 24, reason: 'Recount', reading_type: 'stock_reading' })
+    expect(result).toEqual({ valid: true })
+  })
+
+  it('invalid: stock_reading override with negative value', () => {
+    const result = validateOverride({ value: -1, reason: 'Recount', reading_type: 'stock_reading' })
     expect(result.valid).toBe(false)
   })
 })

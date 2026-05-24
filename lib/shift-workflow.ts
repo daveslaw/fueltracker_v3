@@ -82,7 +82,7 @@ export async function runShiftCloseWith(
 
 export interface ShiftOverrideData {
   readingId:     string
-  readingType:   'pump' | 'dip' | 'pos_line'
+  readingType:   'pump' | 'dip' | 'pos_line' | 'dry_stock_line' | 'stock_reading'
   fieldName:     string | null
   overrideValue: number
   originalValue: number
@@ -101,11 +101,13 @@ export async function runShiftOverrideWith(
   data:      ShiftOverrideData,
   repo:      ShiftOverrideRepository,
   reconcile: Reconcile,
+  options?:  { allowPending?: boolean },
 ): Promise<WorkflowResult> {
   const bundle = await repo.loadOverrideBundle(shiftId)
   if (!bundle) return { error: 'Shift not found' }
 
-  if (!canOverride(bundle.status)) return { error: 'Overrides are only allowed on closed shifts' }
+  if (!options?.allowPending && !canOverride(bundle.status))
+    return { error: 'Overrides are only allowed on closed shifts' }
 
   const validation = validateOverride({
     value:        data.overrideValue,
@@ -153,6 +155,20 @@ export async function runShiftOverride(shiftId: string, data: ShiftOverrideData)
           .update({ litres: d.overrideValue })
           .eq('id', d.readingId)
           .eq('type', 'close')
+        return { error: error?.message }
+      }
+      if (d.readingType === 'dry_stock_line') {
+        const { error } = await supabase
+          .from('pos_dry_stock_lines')
+          .update({ [d.fieldName!]: d.overrideValue })
+          .eq('id', d.readingId)
+        return { error: error?.message }
+      }
+      if (d.readingType === 'stock_reading') {
+        const { error } = await supabase
+          .from('stock_readings')
+          .update({ closing_count: d.overrideValue })
+          .eq('id', d.readingId)
         return { error: error?.message }
       }
       // pos_line
