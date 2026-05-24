@@ -170,19 +170,19 @@ export default async function DashboardPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-gray-400 border-b">
-                      <th className="text-left pb-1 font-medium">Grade</th>
-                      <th className="text-right pb-1 font-medium">Litres</th>
-                      <th className="text-right pb-1 font-medium">Cost/L</th>
-                      <th className="text-right pb-1 font-medium">Value</th>
+                      <th className="text-left pb-1 font-medium pr-2 border-r border-gray-200">Grade</th>
+                      <th className="text-right pb-1 font-medium px-2 border-r border-gray-200">Litres</th>
+                      <th className="text-right pb-1 font-medium px-2 border-r border-gray-200">Cost/L</th>
+                      <th className="text-right pb-1 font-medium pl-2">Value</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {station.inventory.map(line => (
                       <tr key={line.gradeId}>
-                        <td className="py-1">{line.gradeLabel}</td>
-                        <td className="py-1 text-right tabular-nums">{formatLitres(line.litres)}</td>
-                        <td className="py-1 text-right tabular-nums">{formatCostPerLitre(line.costPerLitre)}</td>
-                        <td className="py-1 text-right tabular-nums">{formatZAR(line.valueZar)}</td>
+                        <td className="py-1 pr-2 border-r border-gray-200">{line.gradeLabel}</td>
+                        <td className="py-1 px-2 text-right tabular-nums border-r border-gray-200">{formatLitres(line.litres)}</td>
+                        <td className="py-1 px-2 text-right tabular-nums border-r border-gray-200">{formatCostPerLitre(line.costPerLitre)}</td>
+                        <td className="py-1 pl-2 text-right tabular-nums">{formatZAR(line.valueZar)}</td>
                       </tr>
                     ))}
                   </tbody>

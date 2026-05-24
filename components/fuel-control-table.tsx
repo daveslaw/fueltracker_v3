@@ -12,7 +12,7 @@ interface Props {
 
 function fmtL(n: number | null): string {
   if (n === null) return '—'
-  return n.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' L'
+  return n.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
 function fmtR(n: number | null): string {
@@ -26,7 +26,7 @@ function VarCell({ v }: { v: number | null }) {
   const sign = v > 0 ? '+' : ''
   return (
     <span className={`font-semibold ${cls}`}>
-      {sign}{v.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} L
+      {sign}{v.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
     </span>
   )
 }
@@ -78,7 +78,7 @@ function PriceChangeImpactRow({ row }: { row: Extract<FuelControlReportRow, { ty
   return (
     <tr className="bg-amber-50 text-xs divide-x italic">
       <td className="px-3 py-1.5 text-amber-800" colSpan={5}>
-        Price change impact — {fmtL(row.closing_dip_litres)} closing dip
+        Price change impact — {fmtL(row.closing_dip_litres)} L closing dip
         &nbsp;· old cost {fmtR(row.old_cost)}/L → new cost {fmtR(row.new_cost)}/L
       </td>
       <td className="px-3 py-1.5" colSpan={3} />
@@ -159,13 +159,13 @@ export function FuelControlTable({ entries, grades, stationId: _stationId }: Pro
           <thead className="bg-muted/30 sticky top-0 z-10">
             <tr className="text-xs text-muted-foreground divide-x">
               <th className="text-left px-3 py-2 bg-muted/30">Shift</th>
-              <th className="text-right px-3 py-2 bg-muted/30">Opening dip</th>
-              <th className="text-right px-3 py-2 bg-muted/30">Closing dip</th>
-              <th className="text-left px-3 py-2 bg-muted/30">Deliveries</th>
-              <th className="text-right px-3 py-2 bg-muted/30">POS litres</th>
-              <th className="text-right px-3 py-2 bg-muted/30">Dip-calc litres</th>
-              <th className="text-right px-3 py-2 bg-muted/30">Variance</th>
-              <th className="text-right px-3 py-2 bg-muted/30">Acc. variance</th>
+              <th className="text-right px-3 py-2 bg-muted/30">Opening dip (L)</th>
+              <th className="text-right px-3 py-2 bg-muted/30">Closing dip (L)</th>
+              <th className="text-left px-3 py-2 bg-muted/30">Deliveries (L)</th>
+              <th className="text-right px-3 py-2 bg-muted/30">POS (L)</th>
+              <th className="text-right px-3 py-2 bg-muted/30">Dip-calc (L)</th>
+              <th className="text-right px-3 py-2 bg-muted/30">Variance (L)</th>
+              <th className="text-right px-3 py-2 bg-muted/30">Acc. variance (L)</th>
               <th className="text-right px-3 py-2 bg-muted/30">GP (ZAR)</th>
             </tr>
           </thead>

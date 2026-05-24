@@ -227,7 +227,6 @@ export async function getFuelControlMonth(
       .gte('shift_date', firstDay)
       .lte('shift_date', lastDay)
       .order('shift_date')
-      .order('period')
       .order('part'),
     db.from('tanks')
       .select('id, fuel_grade_id')
@@ -243,7 +242,14 @@ export async function getFuelControlMonth(
       .order('valid_from'),
   ])
 
-  const allShifts     = shifts     ?? []
+  const periodOrder = { morning: 0, evening: 1 }
+  const allShifts = (shifts ?? []).sort((a, b) => {
+    if (a.shift_date !== b.shift_date) return (a.shift_date as string).localeCompare(b.shift_date as string)
+    const pa = periodOrder[(a.period as keyof typeof periodOrder)] ?? 0
+    const pb = periodOrder[(b.period as keyof typeof periodOrder)] ?? 0
+    if (pa !== pb) return pa - pb
+    return ((a.part as number) ?? 0) - ((b.part as number) ?? 0)
+  })
   const allTanks      = tanks      ?? []
   const allDeliveries = deliveries ?? []
   const allPriceRows  = (allPrices ?? []) as PriceRow[]
