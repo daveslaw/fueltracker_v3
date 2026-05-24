@@ -60,8 +60,8 @@ async function main() {
     process.exit(1)
   }
   for (const row of posRows ?? []) {
-    const sub = row.pos_submissions as { shift_id: string } | null
-    if (sub?.shift_id) shiftIds.add(sub.shift_id)
+    const sub = row.pos_submissions as { shift_id: string }[] | null
+    if (sub?.[0]?.shift_id) shiftIds.add(sub[0].shift_id)
   }
   console.log(`  pos_submission_lines: ${posRows?.length ?? 0} non-auto row(s)`)
 
