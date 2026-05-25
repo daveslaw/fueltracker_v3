@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { assertOwner } from '@/lib/auth-assert'
 import { canStartShift } from '@/lib/shift-open'
 import type { ShiftRow, ShiftPeriod } from '@/lib/shift-open'
 
@@ -12,6 +13,7 @@ import type { ShiftRow, ShiftPeriod } from '@/lib/shift-open'
 
 export async function createShiftSlot(formData: FormData) {
   const supabase = await createClient()
+  await assertOwner(supabase)
 
   const station_id = formData.get('station_id') as string
   const period     = formData.get('period') as ShiftPeriod

@@ -1,10 +1,14 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { assertOwner } from '@/lib/auth-assert'
 import { createSupabaseBaselinesRepository } from '@/lib/shift-baselines'
 
 export async function savePumpBaseline(formData: FormData) {
+  await assertOwner(await createClient())
+
   const stationId = formData.get('station_id') as string
   const pumpId    = formData.get('pump_id') as string
   const value     = parseFloat(formData.get('value') as string)
@@ -21,6 +25,8 @@ export async function savePumpBaseline(formData: FormData) {
 }
 
 export async function saveTankBaseline(formData: FormData) {
+  await assertOwner(await createClient())
+
   const stationId = formData.get('station_id') as string
   const tankId    = formData.get('tank_id') as string
   const value     = parseFloat(formData.get('value') as string)

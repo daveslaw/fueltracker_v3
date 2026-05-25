@@ -1,20 +1,11 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect }       from 'next/navigation'
 import { createClient }   from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { assertOwner } from '@/lib/auth-assert'
 import { createSupabaseProductCatalogueRepository } from '@/lib/product-catalogue'
 import { createSupabaseProductPriceWriter, setProductPrice } from '@/lib/product-pricing'
-
-async function requireOwner() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-  const { data: profile } = await supabase
-    .from('user_profiles').select('role, is_active').eq('user_id', user.id).single()
-  if (!profile?.is_active || profile.role !== 'owner') redirect('/login')
-}
 
 function makeRepo() {
   const db     = createAdminClient()
@@ -25,7 +16,7 @@ function makeRepo() {
 // ── Create product ─────────────────────────────────────────────────────────────
 
 export async function createProduct(formData: FormData) {
-  await requireOwner()
+  await assertOwner(await createClient())
 
   const stationId           = formData.get('station_id') as string
   const stock_code          = (formData.get('stock_code') as string)?.trim()
@@ -54,7 +45,7 @@ export async function createProduct(formData: FormData) {
 // ── Update product details ─────────────────────────────────────────────────────
 
 export async function updateProductDetails(formData: FormData) {
-  await requireOwner()
+  await assertOwner(await createClient())
 
   const productId  = formData.get('product_id') as string
   const stock_code = (formData.get('stock_code') as string)?.trim()
@@ -73,7 +64,7 @@ export async function updateProductDetails(formData: FormData) {
 // ── Update product pricing ─────────────────────────────────────────────────────
 
 export async function updateProductPricing(formData: FormData) {
-  await requireOwner()
+  await assertOwner(await createClient())
 
   const productId = formData.get('product_id') as string
   const stationId = formData.get('station_id') as string
@@ -98,7 +89,7 @@ export async function updateProductPricing(formData: FormData) {
 // ── Deactivate product ─────────────────────────────────────────────────────────
 
 export async function deactivateProduct(formData: FormData) {
-  await requireOwner()
+  await assertOwner(await createClient())
 
   const productId = formData.get('product_id') as string
   if (!productId) return { error: 'Product ID required' }
@@ -113,7 +104,7 @@ export async function deactivateProduct(formData: FormData) {
 // ── Reactivate product ─────────────────────────────────────────────────────────
 
 export async function reactivateProduct(formData: FormData) {
-  await requireOwner()
+  await assertOwner(await createClient())
 
   const productId = formData.get('product_id') as string
   if (!productId) return { error: 'Product ID required' }

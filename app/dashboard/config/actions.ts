@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { assertOwner } from '@/lib/auth-assert'
 import { validateStation, validateTank, validatePump, revalidateStationConfig } from '@/lib/station-config'
 
 type ActionResult = { error: string } | { success: true }
@@ -9,14 +10,15 @@ type ActionResult = { error: string } | { success: true }
 // ── Stations ─────────────────────────────────────────────────────────────────
 
 export async function createStation(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  await assertOwner(supabase)
+
   const name = (formData.get('name') as string) ?? ''
   const address = (formData.get('address') as string) || null
   const stock_on_consignment = formData.get('stock_on_consignment') === 'on'
 
   const error = validateStation({ name })
   if (error) return { error }
-
-  const supabase = await createClient()
   const { error: dbError } = await supabase.from('stations').insert({ name: name.trim(), address, stock_on_consignment })
   if (dbError) return { error: dbError.message }
 
@@ -26,14 +28,15 @@ export async function createStation(formData: FormData): Promise<ActionResult> {
 }
 
 export async function updateStation(id: string, formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  await assertOwner(supabase)
+
   const name = (formData.get('name') as string) ?? ''
   const address = (formData.get('address') as string) || null
   const stock_on_consignment = formData.get('stock_on_consignment') === 'on'
 
   const error = validateStation({ name })
   if (error) return { error }
-
-  const supabase = await createClient()
   const { error: dbError } = await supabase
     .from('stations')
     .update({ name: name.trim(), address, stock_on_consignment })
@@ -48,14 +51,15 @@ export async function updateStation(id: string, formData: FormData): Promise<Act
 // ── Tanks ────────────────────────────────────────────────────────────────────
 
 export async function createTank(stationId: string, formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  await assertOwner(supabase)
+
   const label = (formData.get('label') as string) ?? ''
   const fuel_grade_id = (formData.get('fuel_grade_id') as string) ?? ''
   const capacity_litres = parseFloat((formData.get('capacity_litres') as string) ?? '0')
 
   const error = validateTank({ label, fuel_grade_id, capacity_litres })
   if (error) return { error }
-
-  const supabase = await createClient()
   const { error: dbError } = await supabase
     .from('tanks')
     .insert({ station_id: stationId, label: label.trim(), fuel_grade_id, capacity_litres })
@@ -67,14 +71,15 @@ export async function createTank(stationId: string, formData: FormData): Promise
 }
 
 export async function updateTank(id: string, formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  await assertOwner(supabase)
+
   const label = (formData.get('label') as string) ?? ''
   const fuel_grade_id = (formData.get('fuel_grade_id') as string) ?? ''
   const capacity_litres = parseFloat((formData.get('capacity_litres') as string) ?? '0')
 
   const error = validateTank({ label, fuel_grade_id, capacity_litres })
   if (error) return { error }
-
-  const supabase = await createClient()
   const { error: dbError } = await supabase
     .from('tanks')
     .update({ label: label.trim(), fuel_grade_id, capacity_litres })
@@ -89,13 +94,14 @@ export async function updateTank(id: string, formData: FormData): Promise<Action
 // ── Pumps ────────────────────────────────────────────────────────────────────
 
 export async function createPump(stationId: string, formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  await assertOwner(supabase)
+
   const label = (formData.get('label') as string) ?? ''
   const tank_id = (formData.get('tank_id') as string) ?? ''
 
   const error = validatePump({ label, tank_id })
   if (error) return { error }
-
-  const supabase = await createClient()
   const { error: dbError } = await supabase
     .from('pumps')
     .insert({ station_id: stationId, tank_id, label: label.trim() })
@@ -107,13 +113,14 @@ export async function createPump(stationId: string, formData: FormData): Promise
 }
 
 export async function updatePump(id: string, formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  await assertOwner(supabase)
+
   const label = (formData.get('label') as string) ?? ''
   const tank_id = (formData.get('tank_id') as string) ?? ''
 
   const error = validatePump({ label, tank_id })
   if (error) return { error }
-
-  const supabase = await createClient()
   const { error: dbError } = await supabase
     .from('pumps')
     .update({ label: label.trim(), tank_id })

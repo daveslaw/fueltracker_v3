@@ -26,7 +26,7 @@ function VarCell({ v }: { v: number | null }) {
   const sign = v > 0 ? '+' : ''
   return (
     <span className={`font-semibold ${cls}`}>
-      {sign}{v.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+      {sign}{v.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} L
     </span>
   )
 }
@@ -111,8 +111,8 @@ function DayCollapsedRow({ entry, summary, accVariance, expanded, onToggle }: {
       <td className="px-3 py-1.5 text-right tabular-nums">
         {summary.total_deliveries > 0 ? fmtL(summary.total_deliveries) : <span className="text-muted-foreground">—</span>}
       </td>
-      <td className="px-3 py-1.5 text-right tabular-nums">{fmtL(summary.total_pos_litres)}</td>
-      <td className="px-3 py-1.5 text-right tabular-nums">{fmtL(summary.total_dip_calc)}</td>
+      <td className="px-3 py-1.5 text-right tabular-nums">{summary.total_pos_litres !== null ? `${fmtL(summary.total_pos_litres)} L` : <span className="text-muted-foreground">—</span>}</td>
+      <td className="px-3 py-1.5 text-right tabular-nums">{summary.total_dip_calc !== null ? `${fmtL(summary.total_dip_calc)} L` : <span className="text-muted-foreground">—</span>}</td>
       <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">—</td>
       <td className="px-3 py-1.5 text-right"><VarCell v={accVariance} /></td>
       <td className="px-3 py-1.5 text-right tabular-nums">{fmtR(summary.total_gp)}</td>

@@ -7,6 +7,7 @@ import { canStartShift } from '@/lib/shift-open'
 import { canFlag, validateFlagComment } from '@/lib/supervisor-review'
 import { runReconciliation } from '@/lib/reconciliation-runner'
 import { createDelivery, deleteDelivery as dbDeleteDelivery, validateDeliveryInput } from '@/lib/deliveries'
+import { assertOwner } from '@/lib/auth-assert'
 import { runShiftClose, runShiftSplit, runShiftOverride } from '@/lib/shift-workflow'
 import type { ShiftOverrideData } from '@/lib/shift-workflow'
 import type { ShiftRow, ShiftPeriod, ShiftStatus } from '@/lib/shift-open'
@@ -311,6 +312,7 @@ export async function createOverride(
   formData: FormData
 ): Promise<ActionResult> {
   const supabase = await createClient()
+  await assertOwner(supabase)
 
   const reading_id   = formData.get('reading_id') as string
   const reading_type = formData.get('reading_type') as 'pump' | 'dip' | 'pos_line'

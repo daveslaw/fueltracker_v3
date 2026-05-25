@@ -1,7 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { assertOwner } from '@/lib/auth-assert'
 import { validateInvite, INVITABLE_ROLES, buildInviteCallbackUrl } from '@/lib/user-management'
 
 type ActionResult = { error: string } | { success: true }
@@ -9,6 +11,8 @@ type ActionResult = { error: string } | { success: true }
 // ── Invite user ──────────────────────────────────────────────────────────────
 
 export async function inviteUser(formData: FormData): Promise<ActionResult> {
+  await assertOwner(await createClient())
+
   const email = (formData.get('email') as string) ?? ''
   const role = (formData.get('role') as string) ?? ''
   const station_id = (formData.get('station_id') as string) ?? ''
@@ -42,6 +46,8 @@ export async function updateUserProfile(
   profileId: string,
   formData: FormData
 ): Promise<ActionResult> {
+  await assertOwner(await createClient())
+
   const role = (formData.get('role') as string) ?? ''
   const station_id = (formData.get('station_id') as string) ?? ''
 
@@ -63,6 +69,8 @@ export async function updateUserProfile(
 // ── Deactivate / reactivate ──────────────────────────────────────────────────
 
 export async function setUserActive(profileId: string, is_active: boolean): Promise<ActionResult> {
+  await assertOwner(await createClient())
+
   const admin = createAdminClient()
   const { error } = await admin
     .from('user_profiles')

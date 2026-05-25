@@ -2,12 +2,14 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { assertOwner } from '@/lib/auth-assert'
 import { hasPriceRangeOverlap } from '@/lib/pricing'
 
 type ActionResult = { error: string } | { success: true }
 
 export async function setPriceForGrade(formData: FormData): Promise<ActionResult> {
   const supabase = await createClient()
+  await assertOwner(supabase)
 
   const fuel_grade_id      = formData.get('fuel_grade_id') as string
   const station_id         = formData.get('station_id') as string
@@ -57,6 +59,8 @@ export async function setPriceForGrade(formData: FormData): Promise<ActionResult
 
 export async function closePriceRange(priceId: string, valid_to: string): Promise<ActionResult> {
   const supabase = await createClient()
+  await assertOwner(supabase)
+
   const { error } = await supabase
     .from('fuel_prices')
     .update({ valid_to: new Date(valid_to).toISOString() })
