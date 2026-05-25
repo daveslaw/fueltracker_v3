@@ -37,9 +37,10 @@ export default async function CashierFuelPosPage({ params }: Props) {
     .from('pumps')
     .select('id, label, tanks(fuel_grade_id)')
     .eq('station_id', stationId)
-    .order('label')
 
-  const pumps = (pumpsRaw ?? []).map(p => ({
+  const pumps = (pumpsRaw ?? []).sort((a, b) =>
+    parseInt(a.label as string, 10) - parseInt(b.label as string, 10)
+  ).map(p => ({
     id: p.id,
     label: p.label as string,
     fuel_grade_id: (p.tanks as unknown as { fuel_grade_id: string } | null)?.fuel_grade_id ?? '',
