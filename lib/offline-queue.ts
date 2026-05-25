@@ -3,7 +3,7 @@ export type QueueItemStatus = 'pending' | 'syncing' | 'failed'
 export type OfflineAction =
   | { type: 'pump_reading'; shiftId: string; pumpId: string; readingType: 'open' | 'close'; meterReading: number; ocrStatus: string; maintenanceRequired?: boolean; photoBlob?: Blob; photoName?: string }
   | { type: 'dip_reading'; shiftId: string; tankId: string; readingType: 'open' | 'close'; litres: number }
-  | { type: 'pos_submission'; shiftId: string; rawOcr: string; lines: { fuel_grade_id: string; litres_sold: number; revenue_zar: number }[]; photoBlob?: Blob }
+  | { type: 'pos_submission'; shiftId: string; rawOcr: string; lines: { pump_id: string; litres_sold: number; revenue_zar: number }[]; photoBlob?: Blob }
 
 export interface QueueItem {
   id: string

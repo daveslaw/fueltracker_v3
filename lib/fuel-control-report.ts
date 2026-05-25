@@ -203,6 +203,21 @@ function sumNullable(a: number | null, b: number | null): number | null {
   return (a ?? 0) + (b ?? 0)
 }
 
+// ── aggregatePumpLinesToGradePos ──────────────────────────────────────────────
+// Pure helper: sums pos_litres_sold from reconciliation_pump_lines grouped by
+// (shift_id, fuel_grade_id). Used by getFuelControlMonth.
+
+export function aggregatePumpLinesToGradePos(
+  lines: { shift_id: string; fuel_grade_id: string; pos_litres_sold: number }[],
+): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const line of lines) {
+    const key = `${line.shift_id}|${line.fuel_grade_id}`
+    map.set(key, (map.get(key) ?? 0) + line.pos_litres_sold)
+  }
+  return map
+}
+
 // ── Data fetch (server-only, not unit tested) ─────────────────────────────────
 
 export async function getFuelControlMonth(
@@ -276,7 +291,7 @@ export async function getFuelControlMonth(
     }
   }
 
-  // fetch reconciliation tank lines for closed shifts
+  // fetch reconciliation tank lines + pump lines for closed shifts
   const recTankLines: Array<{
     reconciliation_id: string
     tank_id:           string
@@ -286,6 +301,8 @@ export async function getFuelControlMonth(
     reconciliations:   { shift_id: string }
   }> = []
 
+  const posLinesByShiftGrade = new Map<string, number>()
+
   if (closedShiftIds.length > 0) {
     const { data: recs } = await db
       .from('reconciliations')
@@ -293,44 +310,31 @@ export async function getFuelControlMonth(
       .in('shift_id', closedShiftIds)
 
     if (recs && recs.length > 0) {
-      const recIds = recs.map(r => r.id as string)
-      const { data: lines } = await db
-        .from('reconciliation_tank_lines')
-        .select('reconciliation_id, tank_id, opening_dip, actual_closing_dip, deliveries_received')
-        .in('reconciliation_id', recIds)
+      const recIds       = recs.map(r => r.id as string)
+      const recById      = new Map(recs.map(r => [r.id as string, r]))
+      const recShiftById = new Map(recs.map(r => [r.id as string, r.shift_id as string]))
 
-      const recById = new Map(recs.map(r => [r.id as string, r]))
-      for (const line of lines ?? []) {
+      const [{ data: tankLineRows }, { data: pumpLineRows }] = await Promise.all([
+        db.from('reconciliation_tank_lines')
+          .select('reconciliation_id, tank_id, opening_dip, actual_closing_dip, deliveries_received')
+          .in('reconciliation_id', recIds),
+        db.from('reconciliation_pump_lines')
+          .select('reconciliation_id, fuel_grade_id, pos_litres_sold')
+          .in('reconciliation_id', recIds),
+      ])
+
+      for (const line of tankLineRows ?? []) {
         recTankLines.push({
           ...line,
           reconciliations: recById.get(line.reconciliation_id as string)!,
         })
       }
-    }
-  }
 
-  // fetch pos_submission_lines for closed shifts
-  const posLinesByShiftGrade = new Map<string, number>()
-
-  if (closedShiftIds.length > 0) {
-    const { data: posSubs } = await db
-      .from('pos_submissions')
-      .select('id, shift_id')
-      .in('shift_id', closedShiftIds)
-
-    if (posSubs && posSubs.length > 0) {
-      const posSubIds = posSubs.map(ps => ps.id as string)
-      const { data: posLines } = await db
-        .from('pos_submission_lines')
-        .select('pos_submission_id, fuel_grade_id, litres_sold')
-        .in('pos_submission_id', posSubIds)
-
-      const posSubShift = new Map(posSubs.map(ps => [ps.id as string, ps.shift_id as string]))
-      for (const line of posLines ?? []) {
-        const shiftId = posSubShift.get(line.pos_submission_id as string)
+      for (const line of pumpLineRows ?? []) {
+        const shiftId = recShiftById.get(line.reconciliation_id as string)
         if (!shiftId) continue
         const key = `${shiftId}|${line.fuel_grade_id}`
-        posLinesByShiftGrade.set(key, (posLinesByShiftGrade.get(key) ?? 0) + Number(line.litres_sold))
+        posLinesByShiftGrade.set(key, (posLinesByShiftGrade.get(key) ?? 0) + Number(line.pos_litres_sold))
       }
     }
   }

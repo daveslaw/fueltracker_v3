@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { buildWeeklyReport, buildMonthlyReport } from '@/lib/aggregate-reports'
-import { buildFinancialLines } from '@/lib/owner-reports'
-import { selectActivePriceAt } from '@/lib/pricing'
-import { buildCsvFilename, reportRowsToCsv } from '@/lib/csv-export'
+import { buildCsvFilename, reportRowsToCsv, formatDailyReconciliationCsv } from '@/lib/csv-export'
+import type { DailyReconciliationPumpRow } from '@/lib/csv-export'
 import type { DayVarianceRow } from '@/lib/aggregate-reports'
 
 export async function GET(req: NextRequest) {
@@ -29,7 +28,7 @@ export async function GET(req: NextRequest) {
 
   if (type === 'daily') {
     const { data: shifts } = await supabase
-      .from('shifts').select('id, period, status, submitted_at')
+      .from('shifts').select('id, period, status')
       .eq('station_id', stationId).eq('shift_date', date)
 
     const shiftIds = (shifts ?? []).map(s => s.id)
@@ -37,59 +36,46 @@ export async function GET(req: NextRequest) {
       return new NextResponse('No data', { status: 404 })
     }
 
-    const [recsResult, posSubsResult, { data: allPrices }, { data: tanks }] = await Promise.all([
-      supabase.from('reconciliations')
-        .select('shift_id, reconciliation_tank_lines(*), reconciliation_grade_lines(*)')
-        .in('shift_id', shiftIds),
-      supabase.from('pos_submissions').select('id, shift_id').in('shift_id', shiftIds),
-      supabase.from('fuel_prices').select('station_id, fuel_grade_id, sell_price_per_litre, cost_per_litre, valid_from, valid_to').order('valid_from'),
-      supabase.from('tanks').select('id, label').eq('station_id', stationId),
-    ])
+    const { data: recs } = await supabase
+      .from('reconciliations')
+      .select('id, shift_id')
+      .in('shift_id', shiftIds)
 
-    const recs = recsResult.data ?? []
-    const posSubs = posSubsResult.data ?? []
-    const posSubIds = posSubs.map((ps: any) => ps.id)
-    const { data: allPosLines } = posSubIds.length > 0
-      ? await supabase.from('pos_submission_lines')
-          .select('pos_submission_id, fuel_grade_id, litres_sold, revenue_zar')
-          .in('pos_submission_id', posSubIds)
+    const recIds = (recs ?? []).map((r: any) => r.id as string)
+    const recShiftById = new Map((recs ?? []).map((r: any) => [r.id as string, r.shift_id as string]))
+
+    const { data: pumpLineRows } = recIds.length > 0
+      ? await supabase
+          .from('reconciliation_pump_lines')
+          .select('reconciliation_id, pump_id, fuel_grade_id, meter_delta_litres, pos_litres_sold, pos_revenue_zar, expected_revenue_zar, variance_litres, variance_zar')
+          .in('reconciliation_id', recIds)
       : { data: [] as any[] }
 
-    const tankLabel = (id: string) => (tanks ?? []).find(t => t.id === id)?.label ?? id
+    const { data: pumps } = await supabase
+      .from('pumps').select('id, label').eq('station_id', stationId)
+    const pumpLabel = (id: string) => (pumps ?? []).find((p: any) => p.id === id)?.label ?? id
 
-    const rows: (string | number)[][] = []
-
-    for (const s of shifts ?? []) {
-      const rec = recs.find((r: any) => r.shift_id === s.id)
-      if (!rec) continue
-      const posSub = posSubs.find((ps: any) => ps.shift_id === s.id)
-      const posLines = posSub ? (allPosLines ?? []).filter((pl: any) => pl.pos_submission_id === posSub.id) : []
-      const gradeIds = [...new Set(posLines.map((l: any) => l.fuel_grade_id as string))]
-      const prices = gradeIds.map(gid => {
-        const rows = (allPrices ?? []).filter(
-          (p: any) => p.fuel_grade_id === gid && p.station_id === stationId,
-        )
-        const active = selectActivePriceAt(rows, (s as any).started_at ?? s.submitted_at ?? date)
-        return {
-          fuel_grade_id:        gid,
-          sell_price_per_litre: active?.sell_price_per_litre ?? 0,
-        }
+    const csvRows: DailyReconciliationPumpRow[] = []
+    for (const line of pumpLineRows ?? []) {
+      const shiftId = recShiftById.get(line.reconciliation_id as string)
+      if (!shiftId) continue
+      const shift = (shifts ?? []).find((s: any) => s.id === shiftId)
+      if (!shift) continue
+      csvRows.push({
+        date,
+        period:               shift.period as string,
+        pump_label:           pumpLabel(line.pump_id as string),
+        fuel_grade:           line.fuel_grade_id as string,
+        meter_delta_litres:   Number(line.meter_delta_litres),
+        pos_litres_sold:      Number(line.pos_litres_sold),
+        variance_litres:      Number(line.variance_litres),
+        pos_revenue_zar:      Number(line.pos_revenue_zar),
+        expected_revenue_zar: Number(line.expected_revenue_zar),
+        variance_zar:         Number(line.variance_zar),
       })
-      const financial = buildFinancialLines(posLines as any, prices)
-
-      for (const line of (rec as any).reconciliation_tank_lines ?? []) {
-        rows.push([date, s.period, 'tank', tankLabel(line.tank_id), '', line.opening_dip, line.deliveries_received, line.pos_litres_sold, line.expected_closing_dip, line.actual_closing_dip, line.variance_litres, '', '', ''])
-      }
-      for (const line of (rec as any).reconciliation_grade_lines ?? []) {
-        rows.push([date, s.period, 'grade', '', line.fuel_grade_id, '', '', line.pos_litres_sold, '', '', line.variance_litres, line.meter_delta, '', ''])
-      }
-      for (const line of financial.lines) {
-        rows.push([date, s.period, 'financial', '', line.fuel_grade_id, '', '', line.litres_sold, '', '', '', '', line.expected_revenue_zar, line.pos_revenue_zar])
-      }
     }
 
-    const headers = ['Date', 'Period', 'Type', 'Tank', 'Grade', 'Opening dip (L)', 'Deliveries (L)', 'POS sold (L)', 'Expected close (L)', 'Actual close (L)', 'Tank variance (L)', 'Meter delta (L)', 'Expected revenue (ZAR)', 'POS revenue (ZAR)']
-    const csv = reportRowsToCsv(headers, rows)
+    const csv = formatDailyReconciliationCsv(csvRows)
     const filename = buildCsvFilename('daily', stationName, date)
     return csvResponse(csv, filename)
   }
@@ -124,11 +110,27 @@ export async function GET(req: NextRequest) {
   const shiftIds = (shifts ?? []).map(s => s.id)
   const recsResult = shiftIds.length > 0
     ? await supabase.from('reconciliations')
-        .select('shift_id, reconciliation_tank_lines(variance_litres), reconciliation_grade_lines(variance_litres, variance_zar)')
+        .select('id, shift_id, reconciliation_tank_lines(variance_litres)')
         .in('shift_id', shiftIds)
     : { data: [] as any[] }
 
   const recs = recsResult.data ?? []
+
+  // aggregate pump lines for variance_litres and variance_zar
+  const recIds = recs.map((r: any) => r.id as string)
+  const pumpLinesResult = recIds.length > 0
+    ? await supabase.from('reconciliation_pump_lines')
+        .select('reconciliation_id, variance_litres, variance_zar')
+        .in('reconciliation_id', recIds)
+    : { data: [] as any[] }
+  const pumpLines = pumpLinesResult.data ?? []
+  const pumpLinesByRecId = new Map<string, { variance_litres: number; variance_zar: number }[]>()
+  for (const pl of pumpLines) {
+    const id = pl.reconciliation_id as string
+    if (!pumpLinesByRecId.has(id)) pumpLinesByRecId.set(id, [])
+    pumpLinesByRecId.get(id)!.push({ variance_litres: Number(pl.variance_litres), variance_zar: Number(pl.variance_zar ?? 0) })
+  }
+
   const dates = new Set((shifts ?? []).map(s => s.shift_date))
   const dayRows: DayVarianceRow[] = [...dates].map(d => {
     const dayShifts = (shifts ?? []).filter(s => s.shift_date === d)
@@ -136,17 +138,18 @@ export async function GET(req: NextRequest) {
     for (const s of dayShifts) {
       const rec = recs.find((r: any) => r.shift_id === s.id)
       if (!rec) continue
-      tankVar   += (rec.reconciliation_tank_lines ?? []).reduce((a: number, l: any) => a + l.variance_litres, 0)
-      gradeVar  += (rec.reconciliation_grade_lines ?? []).reduce((a: number, l: any) => a + l.variance_litres, 0)
-      revenueVar += (rec.reconciliation_grade_lines ?? []).reduce((a: number, l: any) => a + (l.variance_zar ?? 0), 0)
+      tankVar    += (rec.reconciliation_tank_lines ?? []).reduce((a: number, l: any) => a + l.variance_litres, 0)
+      const recPL = pumpLinesByRecId.get(rec.id as string) ?? []
+      gradeVar   += recPL.reduce((a, l) => a + l.variance_litres, 0)
+      revenueVar += recPL.reduce((a, l) => a + l.variance_zar,    0)
     }
     return {
       date: d,
       morningStatus: (dayShifts.find(s => s.period === 'morning')?.status ?? 'not_started') as any,
       eveningStatus: (dayShifts.find(s => s.period === 'evening')?.status ?? 'not_started') as any,
-      tankVarianceLitres: Math.round(tankVar * 100) / 100,
-      gradeVarianceLitres: Math.round(gradeVar * 100) / 100,
-      revenueVarianceZar: Math.round(revenueVar * 100) / 100,
+      tankVarianceLitres:  Math.round(tankVar    * 100) / 100,
+      gradeVarianceLitres: Math.round(gradeVar   * 100) / 100,
+      revenueVarianceZar:  Math.round(revenueVar * 100) / 100,
     }
   })
 

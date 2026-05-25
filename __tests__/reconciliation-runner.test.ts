@@ -154,7 +154,7 @@ describe('assemblePureInputs — price snapshot', () => {
   it('emits STARTED_AT_NULL when started_at is null', () => {
     const { warnings } = assemblePureInputs(makeBundle({
       shift: {
-        id: 'shift-1', station_id: 'station-1', period: 'morning',
+        id: 'shift-1', station_id: 'station-1', period: 'morning', shift_type: 'standard',
         shift_date: '2026-03-20', started_at: null, submitted_at: null,
       },
     }))
@@ -241,6 +241,59 @@ describe('selectBestPriorShift', () => {
     const morning = { id: 'morning', shift_date: '2026-03-20', period: 'morning', part: 0 }
     const evening = { id: 'evening', shift_date: '2026-03-20', period: 'evening', part: 0 }
     expect(selectBestPriorShift([morning, evening])?.id).toBe('evening')
+  })
+})
+
+// ── runReconciliationWith — multi-pump grade totals ───────────────────────────
+
+describe('runReconciliationWith — multi-pump grade totals', () => {
+  it('persist receives one pump line per pump; grade total is sum of pump lines', async () => {
+    const repo: ShiftDataRepository = {
+      loadBundle: async () => makeBundle({
+        pumps: [
+          { id: 'P1', tank_id: 'T1' },
+          { id: 'P2', tank_id: 'T1' },
+        ],
+        pumpReadings: [
+          { pump_id: 'P1', meter_reading: 50000, type: 'open' },
+          { pump_id: 'P1', meter_reading: 52000, type: 'close' }, // delta 2000
+          { pump_id: 'P2', meter_reading: 10000, type: 'open' },
+          { pump_id: 'P2', meter_reading: 10500, type: 'close' }, // delta 500
+        ],
+        posLines: [
+          { pump_id: 'P1', litres_sold: 2000, revenue_zar: 34000 },
+          { pump_id: 'P2', litres_sold: 480,  revenue_zar: 8160  },
+        ],
+        closeDips: [{ tank_id: 'T1', litres: 7520 }],
+      }),
+    }
+    const captured: Parameters<ReconciliationWriter['persist']>[] = []
+    const writer: ReconciliationWriter = {
+      persist: async (shiftId, result) => { captured.push([shiftId, result]); return {} },
+    }
+
+    await runReconciliationWith('shift-1', repo, writer)
+
+    const [, result] = captured[0]
+    expect(result.pumpLines).toHaveLength(2)
+
+    const p1 = result.pumpLines.find(l => l.pump_id === 'P1')!
+    const p2 = result.pumpLines.find(l => l.pump_id === 'P2')!
+    expect(p1.fuel_grade_id).toBe('95')
+    expect(p2.fuel_grade_id).toBe('95')
+
+    // Grade total derivable by summing pump lines grouped by fuel_grade_id
+    const gradeTotalLitres   = p1.variance_litres + p2.variance_litres
+    const gradeTotalRevenue  = p1.variance_zar    + p2.variance_zar
+    // P1: variance = 0 (2000 pos - 2000 meter), P2: variance = -20 (480 pos - 500 meter)
+    expect(p1.variance_litres).toBe(0)
+    expect(p2.variance_litres).toBe(-20)
+    expect(gradeTotalLitres).toBe(-20)
+    // P1: expected = 2000 × 17 = 34000, pos = 34000, varZar = 0
+    // P2: expected = 500  × 17 = 8500,  pos = 8160,  varZar = -340
+    expect(p1.variance_zar).toBe(0)
+    expect(p2.variance_zar).toBe(-340)
+    expect(gradeTotalRevenue).toBe(-340)
   })
 })
 

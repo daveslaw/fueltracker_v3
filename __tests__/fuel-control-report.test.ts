@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildFuelControlRows, buildDaySubtotals, buildFuelControlReportRows, trailingMonths, buildDayEntries } from '../lib/fuel-control-report'
+import { buildFuelControlRows, buildDaySubtotals, buildFuelControlReportRows, trailingMonths, buildDayEntries, aggregatePumpLinesToGradePos } from '../lib/fuel-control-report'
 import type { FuelControlRowInput, FuelControlDaySubtotal, FuelControlReportRow } from '../lib/fuel-control-report'
 import type { PriceRow } from '../lib/pricing'
 
@@ -512,5 +512,47 @@ describe('buildDayEntries', () => {
     const entries = buildDayEntries(reportRows, ['95'], subs)
     const group = entries[0].gradeGroups[0]
     expect(group.rows.some(r => r.type === 'price_change_impact')).toBe(true)
+  })
+})
+
+// ── aggregatePumpLinesToGradePos ──────────────────────────────────────────────
+
+describe('aggregatePumpLinesToGradePos', () => {
+  it('tracer bullet: single pump line produces a grade pos entry', () => {
+    const map = aggregatePumpLinesToGradePos([
+      { shift_id: 's1', fuel_grade_id: '95', pos_litres_sold: 1500 },
+    ])
+    expect(map.get('s1|95')).toBe(1500)
+  })
+
+  it('two pump lines of same shift and grade are summed', () => {
+    const map = aggregatePumpLinesToGradePos([
+      { shift_id: 's1', fuel_grade_id: '95', pos_litres_sold: 1000 },
+      { shift_id: 's1', fuel_grade_id: '95', pos_litres_sold: 500  },
+    ])
+    expect(map.get('s1|95')).toBe(1500)
+  })
+
+  it('pump lines of different grades are tracked separately', () => {
+    const map = aggregatePumpLinesToGradePos([
+      { shift_id: 's1', fuel_grade_id: '95',  pos_litres_sold: 1000 },
+      { shift_id: 's1', fuel_grade_id: 'D50', pos_litres_sold: 400  },
+    ])
+    expect(map.get('s1|95')).toBe(1000)
+    expect(map.get('s1|D50')).toBe(400)
+  })
+
+  it('pump lines from different shifts are tracked separately', () => {
+    const map = aggregatePumpLinesToGradePos([
+      { shift_id: 's1', fuel_grade_id: '95', pos_litres_sold: 1000 },
+      { shift_id: 's2', fuel_grade_id: '95', pos_litres_sold: 800  },
+    ])
+    expect(map.get('s1|95')).toBe(1000)
+    expect(map.get('s2|95')).toBe(800)
+  })
+
+  it('empty input returns empty map', () => {
+    const map = aggregatePumpLinesToGradePos([])
+    expect(map.size).toBe(0)
   })
 })

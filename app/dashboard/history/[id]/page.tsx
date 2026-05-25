@@ -1,8 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { buildFinancialLines } from '@/lib/owner-reports'
-import { selectActivePriceAt } from '@/lib/pricing'
 import { canFlag, canOverride } from '@/lib/supervisor-review'
 import { flagShift, unflagShift, createOverride } from '@/app/shift/actions'
 import { computeShiftLabel, buildSplitNotice } from '@/lib/shift-open'
@@ -58,7 +56,6 @@ export default async function ShiftAuditPage({ params }: Props) {
     { data: posSubmission },
     { data: rec },
     { data: overrides },
-    { data: allPrices },
     { data: siblingShifts },
     { data: maintenancePumpReadings },
   ] = await Promise.all([
@@ -68,10 +65,9 @@ export default async function ShiftAuditPage({ params }: Props) {
     supabase.from('dip_readings').select('id, tank_id, type, litres').eq('shift_id', shiftId),
     supabase.from('pos_submissions').select('id, photo_url').eq('shift_id', shiftId).maybeSingle(),
     supabase.from('reconciliations')
-      .select('id, expected_revenue, pos_revenue, revenue_variance, reconciliation_tank_lines(*), reconciliation_grade_lines(*)')
+      .select('id, reconciliation_tank_lines(*), reconciliation_pump_lines(pump_id, fuel_grade_id, meter_delta_litres, pos_litres_sold, variance_litres, expected_revenue_zar, pos_revenue_zar, variance_zar)')
       .eq('shift_id', shiftId).maybeSingle(),
     supabase.from('ocr_overrides').select('id, reading_id, reading_type, original_value, override_value, reason, created_at, user_profiles!overridden_by(full_name)').eq('shift_id', shiftId),
-    supabase.from('fuel_prices').select('station_id, fuel_grade_id, sell_price_per_litre, cost_per_litre, valid_from, valid_to').order('valid_from'),
     (shift as any).shift_type === 'price_change'
       ? supabase.from('shifts').select('id, part')
           .eq('station_id', shift.station_id)
@@ -85,22 +81,9 @@ export default async function ShiftAuditPage({ params }: Props) {
 
   const posLines = posSubmission
     ? (await supabase.from('pos_submission_lines')
-        .select('id, fuel_grade_id, litres_sold, revenue_zar, ocr_status')
+        .select('id, pump_id, litres_sold, revenue_zar, ocr_status')
         .eq('pos_submission_id', posSubmission.id)).data ?? []
     : []
-
-  const gradeIds = [...new Set(posLines.map((l: any) => l.fuel_grade_id as string))]
-  const prices = gradeIds.map(gid => {
-    const rows = (allPrices ?? []).filter(
-      (p: any) => p.fuel_grade_id === gid && p.station_id === shift.station_id,
-    )
-    const active = selectActivePriceAt(rows, (shift as any).started_at ?? shift.submitted_at ?? shift.shift_date)
-    return {
-      fuel_grade_id:        gid,
-      sell_price_per_litre: active?.sell_price_per_litre ?? 0,
-    }
-  })
-  const financial = posLines.length > 0 ? buildFinancialLines(posLines as any, prices) : null
 
   const sortedPumps = (pumps ?? []).slice().sort((a, b) =>
     a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' })
@@ -317,7 +300,7 @@ export default async function ShiftAuditPage({ params }: Props) {
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-1.5">
                       <span className={`font-medium ${overriddenIds.has(line.id) ? 'text-amber-600' : ''}`}>
-                        {line.fuel_grade_id}{overriddenIds.has(line.id) ? ' (overridden)' : ''}
+                        {(pumps ?? []).find((p: any) => p.id === line.pump_id)?.label ?? line.pump_id}{overriddenIds.has(line.id) ? ' (overridden)' : ''}
                       </span>
                       {line.ocr_status && line.ocr_status !== 'auto' && (
                         <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800">Manual</span>
@@ -386,77 +369,11 @@ export default async function ShiftAuditPage({ params }: Props) {
 
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground font-medium">Formula 2 — Pump Meter vs POS</p>
-            <div className="border rounded-md text-sm overflow-x-auto">
-              <table className="w-full">
-                <thead className="border-b">
-                  <tr className="text-muted-foreground text-xs">
-                    <th className="text-left px-3 py-2">Grade</th>
-                    <th className="text-right px-3 py-2">Meter delta</th>
-                    <th className="text-right px-3 py-2">POS sold</th>
-                    <th className="text-right px-3 py-2">Variance</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {((rec as any).reconciliation_grade_lines ?? []).map((line: any) => {
-                    const v = line.variance_litres
-                    const cls = v > 0 ? 'text-destructive' : v < 0 ? 'text-amber-600' : 'text-green-600'
-                    return (
-                      <tr key={line.id}>
-                        <td className="px-3 py-2 font-medium">{line.fuel_grade_id}</td>
-                        <td className="px-3 py-2 text-right">{fmtL(line.meter_delta)}</td>
-                        <td className="px-3 py-2 text-right">{fmtL(line.pos_litres_sold)}</td>
-                        <td className={`px-3 py-2 text-right font-semibold ${cls}`}>{v > 0 ? '+' : ''}{fmtL(v)}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <HistoryPumpVarianceTable
+              pumpLines={(rec as any).reconciliation_pump_lines ?? []}
+              pumps={pumps ?? []}
+            />
           </div>
-
-          {financial && (
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground font-medium">Financial</p>
-              <div className="border rounded-md text-sm overflow-x-auto">
-                <table className="w-full">
-                  <thead className="border-b">
-                    <tr className="text-muted-foreground text-xs">
-                      <th className="text-left px-3 py-2">Grade</th>
-                      <th className="text-right px-3 py-2">Litres</th>
-                      <th className="text-right px-3 py-2">Price/L</th>
-                      <th className="text-right px-3 py-2">Expected</th>
-                      <th className="text-right px-3 py-2">POS</th>
-                      <th className="text-right px-3 py-2">Variance</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {financial.lines.map(line => {
-                      const v = line.variance_zar
-                      const cls = v > 0 ? 'text-destructive' : v < 0 ? 'text-amber-600' : 'text-green-600'
-                      return (
-                        <tr key={line.fuel_grade_id}>
-                          <td className="px-3 py-2 font-medium">{line.fuel_grade_id}</td>
-                          <td className="px-3 py-2 text-right">{fmtL(line.litres_sold)}</td>
-                          <td className="px-3 py-2 text-right">R {line.sell_price_per_litre.toFixed(2)}</td>
-                          <td className="px-3 py-2 text-right">{fmtR(line.expected_revenue_zar)}</td>
-                          <td className="px-3 py-2 text-right">{fmtR(line.pos_revenue_zar)}</td>
-                          <td className={`px-3 py-2 text-right font-semibold ${cls}`}>{v > 0 ? '+' : ''}{fmtR(v)}</td>
-                        </tr>
-                      )
-                    })}
-                    <tr className="border-t-2 font-semibold bg-muted/30">
-                      <td className="px-3 py-2" colSpan={3}>Total</td>
-                      <td className="px-3 py-2 text-right">{fmtR(financial.totals.expected_revenue_zar)}</td>
-                      <td className="px-3 py-2 text-right">{fmtR(financial.totals.pos_revenue_zar)}</td>
-                      <td className={`px-3 py-2 text-right font-semibold ${financial.totals.variance_zar > 0 ? 'text-destructive' : financial.totals.variance_zar < 0 ? 'text-amber-600' : 'text-green-600'}`}>
-                        {financial.totals.variance_zar > 0 ? '+' : ''}{fmtR(financial.totals.variance_zar)}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </section>
       )}
 
@@ -507,5 +424,112 @@ export default async function ShiftAuditPage({ params }: Props) {
         </section>
       )}
     </main>
+  )
+}
+
+// ── HistoryPumpVarianceTable ───────────────────────────────────────────────────
+
+interface HistoryPumpLine {
+  pump_id:              string
+  fuel_grade_id:        string
+  meter_delta_litres:   number
+  pos_litres_sold:      number
+  variance_litres:      number
+  expected_revenue_zar: number
+  pos_revenue_zar:      number
+  variance_zar:         number
+}
+
+function HistoryPumpVarianceTable({
+  pumpLines,
+  pumps,
+}: {
+  pumpLines: HistoryPumpLine[]
+  pumps:     { id: string; label: string }[]
+}) {
+  const pumpLabel = (id: string) => pumps.find(p => p.id === id)?.label ?? id
+
+  const sortedLines = [...pumpLines].sort((a, b) => {
+    if (a.fuel_grade_id !== b.fuel_grade_id) return a.fuel_grade_id.localeCompare(b.fuel_grade_id)
+    return pumpLabel(a.pump_id).localeCompare(pumpLabel(b.pump_id), undefined, { numeric: true, sensitivity: 'base' })
+  })
+
+  const grades = [...new Set(sortedLines.map(l => l.fuel_grade_id))]
+
+  const fmtL = (n: number) => n.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' L'
+  const fmtR = (n: number) => 'R ' + Math.abs(n).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  if (sortedLines.length === 0) {
+    return <p className="text-sm text-muted-foreground">No pump variance data.</p>
+  }
+
+  return (
+    <div className="border rounded-md text-sm overflow-x-auto">
+      <table className="w-full">
+        <thead className="border-b">
+          <tr className="text-muted-foreground text-xs">
+            <th className="text-left px-3 py-2">Pump</th>
+            <th className="text-left px-3 py-2">Grade</th>
+            <th className="text-right px-3 py-2">Meter Δ</th>
+            <th className="text-right px-3 py-2">POS (L)</th>
+            <th className="text-right px-3 py-2">Var (L)</th>
+            <th className="text-right px-3 py-2">POS Rev</th>
+            <th className="text-right px-3 py-2">Exp Rev</th>
+            <th className="text-right px-3 py-2">Var (ZAR)</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {grades.map(grade => {
+            const gradeLines = sortedLines.filter(l => l.fuel_grade_id === grade)
+            const sub = {
+              meter:   gradeLines.reduce((s, l) => s + Number(l.meter_delta_litres),   0),
+              pos:     gradeLines.reduce((s, l) => s + Number(l.pos_litres_sold),      0),
+              varL:    gradeLines.reduce((s, l) => s + Number(l.variance_litres),      0),
+              posRev:  gradeLines.reduce((s, l) => s + Number(l.pos_revenue_zar),      0),
+              expRev:  gradeLines.reduce((s, l) => s + Number(l.expected_revenue_zar), 0),
+              varZar:  gradeLines.reduce((s, l) => s + Number(l.variance_zar),         0),
+            }
+            return (
+              <>
+                {gradeLines.map(l => {
+                  const vL  = Number(l.variance_litres)
+                  const vR  = Number(l.variance_zar)
+                  return (
+                    <tr key={l.pump_id}>
+                      <td className="px-3 py-2">{pumpLabel(l.pump_id)}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{l.fuel_grade_id}</td>
+                      <td className="px-3 py-2 text-right">{fmtL(Number(l.meter_delta_litres))}</td>
+                      <td className="px-3 py-2 text-right">{fmtL(Number(l.pos_litres_sold))}</td>
+                      <td className={`px-3 py-2 text-right ${vL > 0 ? 'text-destructive' : vL < 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                        {vL > 0 ? '+' : ''}{fmtL(vL)}
+                      </td>
+                      <td className="px-3 py-2 text-right">{fmtR(Number(l.pos_revenue_zar))}</td>
+                      <td className="px-3 py-2 text-right">{fmtR(Number(l.expected_revenue_zar))}</td>
+                      <td className={`px-3 py-2 text-right ${vR > 0 ? 'text-destructive' : vR < 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                        {vR > 0 ? '+' : ''}{fmtR(vR)}
+                      </td>
+                    </tr>
+                  )
+                })}
+                <tr className="border-t border-muted bg-muted/30 font-semibold text-xs">
+                  <td className="px-3 py-2">{grade} total</td>
+                  <td />
+                  <td className="px-3 py-2 text-right">{fmtL(sub.meter)}</td>
+                  <td className="px-3 py-2 text-right">{fmtL(sub.pos)}</td>
+                  <td className={`px-3 py-2 text-right ${sub.varL > 0 ? 'text-destructive' : sub.varL < 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                    {sub.varL > 0 ? '+' : ''}{fmtL(sub.varL)}
+                  </td>
+                  <td className="px-3 py-2 text-right">{fmtR(sub.posRev)}</td>
+                  <td className="px-3 py-2 text-right">{fmtR(sub.expRev)}</td>
+                  <td className={`px-3 py-2 text-right ${sub.varZar > 0 ? 'text-destructive' : sub.varZar < 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                    {sub.varZar > 0 ? '+' : ''}{fmtR(sub.varZar)}
+                  </td>
+                </tr>
+              </>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }

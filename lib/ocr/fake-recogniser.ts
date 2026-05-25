@@ -1,17 +1,18 @@
 import type { ImageRecogniser } from './image-recogniser'
-import type { OcrResult, PosOcrResult } from './ocr-service'
+import type { OcrResult } from './ocr-service'
+import type { NozzlePosOcrResult } from './parse-nozzle-pos'
 import type { DryStockLine } from './dry-stock-ocr'
 
 export class FakeRecogniser implements ImageRecogniser {
   meterResult: OcrResult = { value: null, confidence: 0, status: 'unreadable' }
-  posResult: PosOcrResult = { lines: [], raw_text: '', status: 'unreadable' }
+  posResult: NozzlePosOcrResult = { lines: [], raw_text: '', status: 'unreadable' }
   dryStockResult: DryStockLine[] = []
 
   async extractMeterReading(_imageBase64: string): Promise<OcrResult> {
     return this.meterResult
   }
 
-  async extractPosLines(_imageBase64: string): Promise<PosOcrResult> {
+  async extractPosLines(_imageBase64: string): Promise<NozzlePosOcrResult> {
     return this.posResult
   }
 

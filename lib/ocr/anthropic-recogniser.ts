@@ -1,9 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { ImageRecogniser } from './image-recogniser'
-import type { OcrResult, PosOcrResult } from './ocr-service'
+import type { OcrResult } from './ocr-service'
+import type { NozzlePosOcrResult } from './parse-nozzle-pos'
 import type { DryStockLine } from './dry-stock-ocr'
 import { parseMeterText } from './parse-meter'
-import { parsePosText } from './parse-pos'
+import { parseNozzlePosText } from './parse-nozzle-pos'
 import { parseDryStockOcrResponse } from './dry-stock-ocr'
 
 const METER_PROMPT =
@@ -11,9 +12,11 @@ const METER_PROMPT =
 
 const POS_PROMPT = [
   'This is a fuel POS Z-report from a South African petrol station.',
-  'For each fuel grade line, output exactly: GRADE | LITRES_SOLD | REVENUE_ZAR',
-  'Valid grade codes: 95, 93, D10, D50.',
+  'Find the nozzle/pump sales section. For each nozzle line, output exactly:',
+  'NOZZLE_NUMBER | RATE | LITRES_SOLD | REVENUE_ZAR',
+  'NOZZLE_NUMBER is an integer. RATE, LITRES_SOLD, REVENUE_ZAR are decimals.',
   'Use NULL for any value you cannot read.',
+  'Skip the totals row.',
   'If the image is completely unreadable, return only: UNREADABLE',
   'Do not include headers, explanations, or extra text.',
 ].join('\n')
@@ -35,9 +38,9 @@ export class AnthropicRecogniser implements ImageRecogniser {
     return parseMeterText(text)
   }
 
-  async extractPosLines(imageBase64: string): Promise<PosOcrResult> {
+  async extractPosLines(imageBase64: string): Promise<NozzlePosOcrResult> {
     const text = await this.callVision(imageBase64, POS_PROMPT, 512)
-    return parsePosText(text)
+    return parseNozzlePosText(text)
   }
 
   async extractDryStockLines(imageBase64: string): Promise<DryStockLine[]> {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { buildCsvFilename, reportRowsToCsv, formatDeliveriesCSV } from '../lib/csv-export'
+import { buildCsvFilename, reportRowsToCsv, formatDeliveriesCSV, formatDailyReconciliationCsv } from '../lib/csv-export'
 import type { DeliveryReportRow } from '../lib/delivery-report'
+import type { DailyReconciliationPumpRow } from '../lib/csv-export'
 
 // ── buildCsvFilename ──────────────────────────────────────────────────────
 
@@ -112,5 +113,55 @@ describe('formatDeliveriesCSV', () => {
     const csv = formatDeliveriesCSV([deliveryRow({ id: 'del-1' }), deliveryRow({ id: 'del-2' })])
     const lines = csv.split('\n')
     expect(lines).toHaveLength(3)
+  })
+})
+
+// ── formatDailyReconciliationCsv ──────────────────────────────────────────────
+
+const pumpRow = (overrides: Partial<DailyReconciliationPumpRow> = {}): DailyReconciliationPumpRow => ({
+  date:                 '2026-05-01',
+  period:               'morning',
+  pump_label:           'Pump 1',
+  fuel_grade:           '95',
+  meter_delta_litres:   2000,
+  pos_litres_sold:      2000,
+  variance_litres:      0,
+  pos_revenue_zar:      34000,
+  expected_revenue_zar: 34000,
+  variance_zar:         0,
+  ...overrides,
+})
+
+describe('formatDailyReconciliationCsv', () => {
+  it('tracer bullet: produces a header row and one data row for a single pump line', () => {
+    const csv = formatDailyReconciliationCsv([pumpRow()])
+    const lines = csv.split('\n')
+    expect(lines).toHaveLength(2)
+  })
+
+  it('header row contains pump_label and fuel_grade columns', () => {
+    const csv = formatDailyReconciliationCsv([pumpRow()])
+    const header = csv.split('\n')[0]
+    expect(header).toContain('Pump')
+    expect(header).toContain('Grade')
+  })
+
+  it('data row includes pump label and grade', () => {
+    const csv = formatDailyReconciliationCsv([pumpRow({ pump_label: 'Pump 3', fuel_grade: 'D50' })])
+    const data = csv.split('\n')[1]
+    expect(data).toContain('Pump 3')
+    expect(data).toContain('D50')
+  })
+
+  it('data row includes variance figures', () => {
+    const csv = formatDailyReconciliationCsv([pumpRow({ variance_litres: -20, variance_zar: -340 })])
+    const data = csv.split('\n')[1]
+    expect(data).toContain('-20')
+    expect(data).toContain('-340')
+  })
+
+  it('produces one data row per pump line', () => {
+    const csv = formatDailyReconciliationCsv([pumpRow(), pumpRow({ pump_label: 'Pump 2' })])
+    expect(csv.split('\n')).toHaveLength(3)
   })
 })

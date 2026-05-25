@@ -171,7 +171,7 @@ export default async function CloseSummaryPage({ params }: Props) {
   const { data: posSubmission } = await supabase
     .from('pos_submissions').select('id').eq('shift_id', shiftId).maybeSingle()
 
-  const [{ data: tankLines }, { data: gradeLines }, { data: posLines }, { data: overrides }] =
+  const [{ data: tankLines }, { data: pumpLines }, { data: posLines }, { data: overrides }] =
     await Promise.all([
       rec
         ? supabase.from('reconciliation_tank_lines')
@@ -179,13 +179,13 @@ export default async function CloseSummaryPage({ params }: Props) {
             .eq('reconciliation_id', rec.id)
         : Promise.resolve({ data: [] as any[] }),
       rec
-        ? supabase.from('reconciliation_grade_lines')
-            .select('fuel_grade_id, meter_delta, pos_litres_sold, variance_litres, sell_price_per_litre, expected_revenue_zar, pos_revenue_zar, variance_zar')
+        ? supabase.from('reconciliation_pump_lines')
+            .select('pump_id, fuel_grade_id, meter_delta_litres, pos_litres_sold, variance_litres, sell_price_per_litre, expected_revenue_zar, pos_revenue_zar, variance_zar')
             .eq('reconciliation_id', rec.id)
         : Promise.resolve({ data: [] as any[] }),
       posSubmission
         ? supabase.from('pos_submission_lines')
-            .select('id, fuel_grade_id, litres_sold, revenue_zar')
+            .select('id, pump_id, litres_sold, revenue_zar')
             .eq('pos_submission_id', posSubmission.id)
         : Promise.resolve({ data: [] as any[] }),
       supabase.from('ocr_overrides')
@@ -272,30 +272,7 @@ export default async function CloseSummaryPage({ params }: Props) {
 
           <section className="space-y-2">
             <h2 className="font-semibold text-xs uppercase tracking-wide text-gray-500">Pump Meter vs POS — Revenue</h2>
-            <div className="border rounded-md divide-y text-sm">
-              {(gradeLines ?? []).map(line => (
-                <div key={line.fuel_grade_id} className="px-4 py-3 space-y-1">
-                  <div className="font-medium">{line.fuel_grade_id}</div>
-                  <div className="grid grid-cols-2 gap-x-4 text-gray-500 text-xs">
-                    <span>Meter delta</span><span className="text-right">{fmtL(line.meter_delta)}</span>
-                    <span>POS litres</span><span className="text-right">{fmtL(line.pos_litres_sold)}</span>
-                    <span>Litres variance</span>
-                    <span className={`text-right font-medium ${line.variance_litres < 0 ? 'text-red-600' : line.variance_litres > 0 ? 'text-amber-600' : 'text-green-600'}`}>
-                      {line.variance_litres > 0 ? '+' : ''}{fmtL(line.variance_litres)}
-                    </span>
-                    <span>Expected revenue</span><span className="text-right">{fmtR(line.expected_revenue_zar)}</span>
-                    <span>POS revenue</span><span className="text-right">{fmtR(line.pos_revenue_zar)}</span>
-                  </div>
-                  <div className={`flex justify-between font-semibold text-sm pt-1 border-t ${
-                    line.variance_zar < 0 ? 'text-red-600' :
-                    line.variance_zar > 0 ? 'text-amber-600' : 'text-green-600'
-                  }`}>
-                    <span>Revenue variance</span>
-                    <span>{line.variance_zar > 0 ? '+' : ''}{fmtR(line.variance_zar)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <PumpVarianceTable pumpLines={pumpLines ?? []} pumps={pumps ?? []} />
           </section>
         </>
       )}
@@ -439,7 +416,7 @@ export default async function CloseSummaryPage({ params }: Props) {
           {(posLines ?? []).map(l => (
             <details key={l.id} className="border rounded-md">
               <summary className="px-4 py-3 text-sm cursor-pointer flex justify-between items-center">
-                <span>POS: {l.fuel_grade_id}</span>
+                <span>POS: {(pumps ?? []).find(p => p.id === l.pump_id)?.label ?? l.pump_id}</span>
                 <span className="text-gray-500">{fmtL(l.litres_sold)} · {fmtR(l.revenue_zar)}</span>
               </summary>
               <form action={handleOverride} className="px-4 pb-4 pt-2 space-y-2 border-t">
@@ -507,6 +484,103 @@ export default async function CloseSummaryPage({ params }: Props) {
         Back to shifts
       </Link>
     </main>
+  )
+}
+
+// ── PumpVarianceTable ─────────────────────────────────────────────────────────
+
+interface PumpLineRow {
+  pump_id:              string
+  fuel_grade_id:        string
+  meter_delta_litres:   number
+  pos_litres_sold:      number
+  variance_litres:      number
+  sell_price_per_litre: number
+  expected_revenue_zar: number
+  pos_revenue_zar:      number
+  variance_zar:         number
+}
+
+function PumpVarianceTable({
+  pumpLines,
+  pumps,
+}: {
+  pumpLines: PumpLineRow[]
+  pumps:     { id: string; label: string }[]
+}) {
+  const pumpLabel = (id: string) => pumps.find(p => p.id === id)?.label ?? id
+
+  const sortedLines = [...pumpLines].sort((a, b) => {
+    if (a.fuel_grade_id !== b.fuel_grade_id) return a.fuel_grade_id.localeCompare(b.fuel_grade_id)
+    return pumpLabel(a.pump_id).localeCompare(pumpLabel(b.pump_id), undefined, { numeric: true, sensitivity: 'base' })
+  })
+
+  const grades = [...new Set(sortedLines.map(l => l.fuel_grade_id))]
+
+  return (
+    <div className="border rounded-md divide-y text-sm overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-gray-50 text-gray-500">
+            <th className="px-3 py-2 text-left">Pump</th>
+            <th className="px-3 py-2 text-left">Grade</th>
+            <th className="px-3 py-2 text-right">Meter Δ (L)</th>
+            <th className="px-3 py-2 text-right">POS (L)</th>
+            <th className="px-3 py-2 text-right">Var (L)</th>
+            <th className="px-3 py-2 text-right">POS Rev</th>
+            <th className="px-3 py-2 text-right">Exp Rev</th>
+            <th className="px-3 py-2 text-right">Var (ZAR)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {grades.map(grade => {
+            const gradeLines = sortedLines.filter(l => l.fuel_grade_id === grade)
+            const subtotal = {
+              meter_delta:   gradeLines.reduce((s, l) => s + l.meter_delta_litres,   0),
+              pos_litres:    gradeLines.reduce((s, l) => s + l.pos_litres_sold,      0),
+              var_litres:    gradeLines.reduce((s, l) => s + l.variance_litres,      0),
+              pos_rev:       gradeLines.reduce((s, l) => s + l.pos_revenue_zar,      0),
+              exp_rev:       gradeLines.reduce((s, l) => s + l.expected_revenue_zar, 0),
+              var_zar:       gradeLines.reduce((s, l) => s + l.variance_zar,         0),
+            }
+            return (
+              <>
+                {gradeLines.map(l => (
+                  <tr key={l.pump_id} className="border-t border-gray-100">
+                    <td className="px-3 py-2">{pumpLabel(l.pump_id)}</td>
+                    <td className="px-3 py-2 text-gray-500">{l.fuel_grade_id}</td>
+                    <td className="px-3 py-2 text-right">{fmt(l.meter_delta_litres)}</td>
+                    <td className="px-3 py-2 text-right">{fmt(l.pos_litres_sold)}</td>
+                    <td className={`px-3 py-2 text-right ${l.variance_litres < 0 ? 'text-red-600' : l.variance_litres > 0 ? 'text-amber-600' : ''}`}>
+                      {l.variance_litres > 0 ? '+' : ''}{fmt(l.variance_litres)}
+                    </td>
+                    <td className="px-3 py-2 text-right">{fmt(l.pos_revenue_zar)}</td>
+                    <td className="px-3 py-2 text-right">{fmt(l.expected_revenue_zar)}</td>
+                    <td className={`px-3 py-2 text-right ${l.variance_zar < 0 ? 'text-red-600' : l.variance_zar > 0 ? 'text-amber-600' : ''}`}>
+                      {l.variance_zar > 0 ? '+' : ''}{fmt(l.variance_zar)}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-t border-gray-300 bg-gray-50 font-semibold">
+                  <td className="px-3 py-2 text-gray-600">{grade} total</td>
+                  <td />
+                  <td className="px-3 py-2 text-right">{fmt(subtotal.meter_delta)}</td>
+                  <td className="px-3 py-2 text-right">{fmt(subtotal.pos_litres)}</td>
+                  <td className={`px-3 py-2 text-right ${subtotal.var_litres < 0 ? 'text-red-600' : subtotal.var_litres > 0 ? 'text-amber-600' : ''}`}>
+                    {subtotal.var_litres > 0 ? '+' : ''}{fmt(subtotal.var_litres)}
+                  </td>
+                  <td className="px-3 py-2 text-right">{fmt(subtotal.pos_rev)}</td>
+                  <td className="px-3 py-2 text-right">{fmt(subtotal.exp_rev)}</td>
+                  <td className={`px-3 py-2 text-right ${subtotal.var_zar < 0 ? 'text-red-600' : subtotal.var_zar > 0 ? 'text-amber-600' : ''}`}>
+                    {subtotal.var_zar > 0 ? '+' : ''}{fmt(subtotal.var_zar)}
+                  </td>
+                </tr>
+              </>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }
 

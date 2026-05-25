@@ -42,10 +42,10 @@ describe('pos-photo upload route', () => {
     mockSupabase()
   })
 
-  it('authenticated upload → returns url and structured ocr lines', async () => {
+  it('authenticated upload → returns url and structured nozzle ocr lines', async () => {
     fake.posResult = {
-      lines: [{ grade_id: 'D50', litres_sold: 520.0, revenue_zar: 12480.0 }],
-      raw_text: 'D50 | 520.0 | 12480.0',
+      lines: [{ nozzle_number: 5, litres_sold: 520.0, revenue_zar: 12480.0, extracted_rate: 24.0 }],
+      raw_text: '5 | 24.00 | 520.0 | 12480.0',
       status: 'auto',
     }
     const handler = makeHandler(fake)
@@ -54,7 +54,7 @@ describe('pos-photo upload route', () => {
     expect(res.status).toBe(200)
     expect(body.url).toBe('https://example.com/pos.jpg')
     expect(body.ocr.lines).toHaveLength(1)
-    expect(body.ocr.lines[0].grade_id).toBe('D50')
+    expect(body.ocr.lines[0].nozzle_number).toBe(5)
     expect(body.ocr.status).toBe('auto')
   })
 

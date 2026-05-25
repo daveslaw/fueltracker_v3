@@ -127,22 +127,22 @@ export async function saveCloseDipReading(
 
 // ── savePosSubmission ─────────────────────────────────────────────────────────
 
-export type PosLineInput = {
-  fuel_grade_id: string
+export type PosNozzleLineInput = {
+  pump_id: string
   litres_sold: number
   revenue_zar: number
-  ocr_status?: string
+  ocr_status?: 'auto' | 'manual_override' | 'unreadable'
 }
 
 export async function savePosSubmission(
   shiftId: string,
   photoUrl: string | null,
   rawOcr: unknown,
-  lines: PosLineInput[]
+  lines: PosNozzleLineInput[]
 ): Promise<ActionResult> {
   const supabase = await createClient()
 
-  if (!lines.length) return { error: 'At least one grade line is required' }
+  if (!lines.length) return { error: 'At least one pump line is required' }
 
   // Upsert the pos_submissions record
   const { data: submission, error: subErr } = await supabase
@@ -159,7 +159,7 @@ export async function savePosSubmission(
   const { error: linesErr } = await supabase.from('pos_submission_lines').insert(
     lines.map((l) => ({
       pos_submission_id: submission.id,
-      fuel_grade_id: l.fuel_grade_id,
+      pump_id: l.pump_id,
       litres_sold: l.litres_sold,
       revenue_zar: l.revenue_zar,
       ocr_status: l.ocr_status ?? 'auto',
