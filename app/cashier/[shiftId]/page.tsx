@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound }     from 'next/navigation'
 import { getCashierProgress, canCashierSubmit } from '@/lib/cashier-progress'
+import { buildCashierSteps } from '@/lib/workflow-steps'
+import { StepIndicator }     from '@/components/StepIndicator'
 import { submitCashierShift } from './actions'
 
 function CheckItem({ label, done }: { label: string; done: boolean }) {
@@ -91,9 +93,11 @@ export default async function CashierHubPage({
   const canSubmit = canCashierSubmit(progress) && !shift.cashier_submitted_at
 
   const periodLabel = shift.period === 'morning' ? 'Morning' : 'Evening'
+  const steps = buildCashierSteps(shiftId, 'summary', progress)
 
   return (
     <main className="p-6 max-w-lg mx-auto space-y-6">
+      <StepIndicator steps={steps} currentIndex={3} />
       <div>
         <p className="text-sm text-gray-500">{station?.name}</p>
         <h1 className="text-2xl font-semibold">{periodLabel} Shift</h1>

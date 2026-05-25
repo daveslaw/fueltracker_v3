@@ -32,9 +32,9 @@ export function buildCashierSteps(
   progress: CashierProgress,
 ): Step[] {
   return [
-    { label: 'Fuel POS',    href: `/cashier/${shiftId}/fuel-pos`,     status: statusFor('fuel-pos',     current, progress.fuelPos) },
-    { label: 'Stock POS',   href: `/cashier/${shiftId}/stock-pos`,    status: statusFor('stock-pos',    current, progress.stockPos) },
-    { label: 'Stock Count', href: `/cashier/${shiftId}/stock-count`,  status: statusFor('stock-count',  current, progress.stockCount) },
-    { label: 'Summary',     href: `/cashier/${shiftId}/summary`,      status: statusFor('summary',      current, true) },
+    { label: 'Fuel POS',    href: `/cashier/${shiftId}/fuel-pos`,    status: statusFor('fuel-pos',    current, progress.fuelPos) },
+    { label: 'Stock POS',   href: `/cashier/${shiftId}/stock-pos`,   status: statusFor('stock-pos',   current, progress.stockPos) },
+    { label: 'Stock Count', href: `/cashier/${shiftId}/stock-count`, status: statusFor('stock-count', current, progress.stockCount) },
+    { label: 'Submit',      href: `/cashier/${shiftId}`,             status: statusFor('summary',     current, true) },
   ]
 }
