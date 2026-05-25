@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getDeliveryReport } from '@/lib/delivery-report'
 import { DeliveriesTable } from './DeliveriesTable'
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 
 interface Props {
   searchParams: Promise<{
@@ -54,9 +55,15 @@ export default async function DeliveriesReportPage({ searchParams }: Props) {
 
   return (
     <main className="max-w-5xl mx-auto p-4 space-y-5">
+      <Breadcrumb>
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard/reports">Reports</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbPage>Deliveries</BreadcrumbPage></BreadcrumbItem>
+      </Breadcrumb>
       {/* Header */}
       <div>
-        <Link href="/dashboard/reports" className="text-xs text-muted-foreground hover:underline">← Reports</Link>
         <h1 className="text-xl font-semibold mt-1">Deliveries Report</h1>
       </div>
 

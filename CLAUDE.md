@@ -63,6 +63,8 @@ app/
 
 components/                   # ServiceWorkerRegistrar, OfflineQueueProvider, Toaster,
                               #   ThemeProvider, SentryUserContext, fuel-control-table, etc.
+  StepIndicator.tsx           # Step indicator with prev/next nav — used in shift-close + cashier workflows
+  ui/breadcrumb.tsx           # Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator
 
 lib/
   supabase/client.ts|server.ts|admin.ts
@@ -82,6 +84,7 @@ lib/
   fuel-control-report.ts      # buildFuelControlRows, buildDaySubtotals, getFuelControlMonth
   stock-reconciliation.ts     # Dry stock variance formula
   dry-stock-runner.ts         # Orchestrates dry stock reconciliation on cashier submit
+  workflow-steps.ts           # buildShiftCloseSteps, buildCashierSteps — derive Step[] for StepIndicator
   cashier-progress.ts|cashier-submission.ts
   products.ts|product-catalogue.ts|product-pricing.ts
   stock-baselines.ts|stock-readings.ts
@@ -163,6 +166,7 @@ RLS policies scope all data to `station_id` via `user_profiles`. Use `lib/supaba
 - `lib/fuel-control-report.ts` — `buildFuelControlRows`, `buildDaySubtotals`
 - `lib/reconciliation.ts` — core fuel variance formulas
 - `lib/pricing.ts` — `selectActivePriceAt`
+- `lib/workflow-steps.ts` — `buildShiftCloseSteps`, `buildCashierSteps`
 
 ## Testing
 

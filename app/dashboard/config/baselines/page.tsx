@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createSupabaseBaselinesRepository } from '@/lib/shift-baselines'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 import { savePumpBaseline, saveTankBaseline } from './actions'
 import { StationSelect } from './StationSelect'
 
@@ -39,9 +40,15 @@ export default async function BaselinesPage({ searchParams }: Props) {
 
   return (
     <main className="p-6 max-w-2xl mx-auto space-y-6">
+      <Breadcrumb>
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard/config">Config</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbPage>Baselines</BreadcrumbPage></BreadcrumbItem>
+      </Breadcrumb>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Opening Baselines</h1>
-        <Link href="/dashboard/config" className="text-sm text-blue-600 underline">← Config</Link>
       </div>
 
       <p className="text-sm text-gray-500">

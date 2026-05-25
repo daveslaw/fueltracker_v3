@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound, redirect } from 'next/navigation'
 import { getCloseProgress } from '@/lib/shift-close'
+import { buildShiftCloseSteps } from '@/lib/workflow-steps'
+import { StepIndicator } from '@/components/StepIndicator'
 import { PumpCarousel } from './PumpCarousel'
 import Link from 'next/link'
 
@@ -52,8 +54,11 @@ export default async function ClosePumpsPage({ params }: Props) {
   }))
   const savedPumpIds = (closePumpReadings ?? []).map(r => r.pump_id)
 
+  const steps = buildShiftCloseSteps(shiftId, 'pumps', progress)
+
   return (
     <main className="p-6 max-w-lg mx-auto space-y-6">
+      <StepIndicator steps={steps} currentIndex={0} />
       <div>
         <h1 className="text-xl font-semibold capitalize">{shift.period} shift — Close readings</h1>
         <p className="text-sm text-gray-500">{shift.shift_date} · Pump meters</p>

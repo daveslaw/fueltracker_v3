@@ -3,6 +3,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound, redirect } from 'next/navigation'
 import { getCloseProgress } from '@/lib/shift-close'
+import { buildShiftCloseSteps } from '@/lib/workflow-steps'
+import { StepIndicator } from '@/components/StepIndicator'
 import { canFlag, canOverride } from '@/lib/supervisor-review'
 import { submitShift, flagShift, unflagShift, createOverride } from '../../../actions'
 import { getShiftDeliveries } from '@/lib/deliveries'
@@ -72,6 +74,7 @@ export default async function CloseSummaryPage({ params }: Props) {
     !!shift.cashier_submitted_at,
     hasDryStock,
   )
+  const steps = buildShiftCloseSteps(shiftId, 'summary', progress)
 
   // ── Pending view: progress checklist + submit ─────────────────────────────
   if (shift.status === 'pending') {
@@ -82,6 +85,7 @@ export default async function CloseSummaryPage({ params }: Props) {
 
     return (
       <main className="p-6 max-w-lg mx-auto space-y-6">
+        <StepIndicator steps={steps} currentIndex={3} />
         <div>
           <h1 className="text-xl font-semibold">Review &amp; submit</h1>
           <p className="text-sm text-gray-500 capitalize mt-0.5">
@@ -203,6 +207,7 @@ export default async function CloseSummaryPage({ params }: Props) {
 
   return (
     <main className="max-w-xl mx-auto p-4 space-y-6">
+      <StepIndicator steps={steps} currentIndex={3} />
       {/* Header */}
       <div>
         <div className="flex items-center justify-between">

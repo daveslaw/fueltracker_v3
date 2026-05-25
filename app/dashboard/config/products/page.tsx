@@ -2,6 +2,7 @@ import { createClient }    from '@/lib/supabase/server'
 import { redirect }        from 'next/navigation'
 import Link                from 'next/link'
 import { StationSelect }   from '../baselines/StationSelect'
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 import {
   createProduct,
   updateProductDetails,
@@ -71,9 +72,15 @@ export default async function ProductsPage({ searchParams }: Props) {
 
   return (
     <main className="p-6 max-w-4xl mx-auto space-y-6">
+      <Breadcrumb>
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard/config">Config</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbPage>Products</BreadcrumbPage></BreadcrumbItem>
+      </Breadcrumb>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Product Catalogue</h1>
-        <Link href="/dashboard/config" className="text-sm text-blue-600 underline">← Config</Link>
       </div>
 
       <p className="text-sm text-gray-500">

@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getCashierSubmissionState } from '@/lib/cashier-submission'
+import { buildCashierSteps } from '@/lib/workflow-steps'
+import { StepIndicator } from '@/components/StepIndicator'
 import { resolveOpeningCount } from '@/lib/stock-baselines'
 import { StockCountForm } from './StockCountForm'
 
@@ -103,14 +105,11 @@ export default async function CashierStockCountPage({ params }: Props) {
   }))
 
   const periodLabel = shift.period === 'morning' ? 'Morning' : 'Evening'
+  const steps = buildCashierSteps(shiftId, 'stock-count', state.progress)
 
   return (
     <main className="p-6 max-w-lg mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href={`/cashier/${shiftId}`} className="text-sm text-gray-500 hover:text-gray-700">
-          &larr; Back
-        </Link>
-      </div>
+      <StepIndicator steps={steps} currentIndex={2} />
 
       <div>
         <h1 className="text-xl font-semibold">{periodLabel} shift — Stock count</h1>

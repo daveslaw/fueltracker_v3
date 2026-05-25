@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link             from 'next/link'
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 
 interface Props {
   searchParams: Promise<{ station?: string; from?: string; to?: string }>
@@ -76,6 +77,13 @@ export default async function DryStockReportPage({ searchParams }: Props) {
 
   return (
     <main className="p-6 max-w-4xl mx-auto space-y-6">
+      <Breadcrumb>
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard/reports">Reports</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbPage>Dry Stock</BreadcrumbPage></BreadcrumbItem>
+      </Breadcrumb>
       <div>
         <h1 className="text-2xl font-semibold">Dry Stock Variance</h1>
         <p className="text-sm text-gray-500">Physical variance per product per shift</p>

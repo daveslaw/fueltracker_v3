@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound, redirect } from 'next/navigation'
 import { getCloseProgress } from '@/lib/shift-close'
+import { buildShiftCloseSteps } from '@/lib/workflow-steps'
+import { StepIndicator } from '@/components/StepIndicator'
 import { CloseDipForm } from './CloseDipForm'
 import Link from 'next/link'
 
@@ -38,8 +40,11 @@ export default async function CloseDipsPage({ params }: Props) {
 
   const dipMap = new Map((closeDipReadings ?? []).map((d) => [d.tank_id, d.litres]))
 
+  const steps = buildShiftCloseSteps(shiftId, 'dips', progress)
+
   return (
     <main className="p-6 max-w-lg mx-auto space-y-6">
+      <StepIndicator steps={steps} currentIndex={1} />
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Close — Dip readings</h1>
         <span className="text-sm text-gray-500">

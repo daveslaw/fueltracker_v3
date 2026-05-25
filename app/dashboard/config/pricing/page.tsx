@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { SetPriceForm } from './SetPriceForm'
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 
 export default async function PricingPage() {
   const supabase = await createClient()
@@ -46,6 +47,13 @@ export default async function PricingPage() {
 
   return (
     <main className="max-w-2xl mx-auto p-4 space-y-8">
+      <Breadcrumb>
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard/config">Config</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbPage>Pricing</BreadcrumbPage></BreadcrumbItem>
+      </Breadcrumb>
       <h1 className="text-xl font-semibold">Fuel Prices</h1>
 
       {/* Set new price */}

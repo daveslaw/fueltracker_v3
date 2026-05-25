@@ -1,17 +1,20 @@
 import { getCachedStationTree } from '@/lib/station-config'
 import { StationTree } from './StationTree'
 import Link from 'next/link'
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 
 export default async function ConfigPage() {
   const tree = await getCachedStationTree()
 
   return (
     <main className="p-6 max-w-4xl mx-auto space-y-6">
+      <Breadcrumb>
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbPage>Config</BreadcrumbPage></BreadcrumbItem>
+      </Breadcrumb>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-800">
-            ← Dashboard
-          </Link>
           <h1 className="text-2xl font-semibold">Station Config</h1>
         </div>
         <div className="flex gap-2">

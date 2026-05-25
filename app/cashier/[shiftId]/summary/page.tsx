@@ -2,6 +2,8 @@ import { createClient }              from '@/lib/supabase/server'
 import { notFound }                  from 'next/navigation'
 import Link                          from 'next/link'
 import { getCashierSubmissionState } from '@/lib/cashier-submission'
+import { buildCashierSteps }         from '@/lib/workflow-steps'
+import { StepIndicator }             from '@/components/StepIndicator'
 
 type Props = { params: Promise<{ shiftId: string }> }
 
@@ -53,9 +55,11 @@ export default async function CashierSummaryPage({ params }: Props) {
     products?.find(p => p.id === productId)?.name ?? productId
 
   const periodLabel = shift.period === 'morning' ? 'Morning' : 'Evening'
+  const steps = buildCashierSteps(shiftId, 'summary', { fuelPos: true, stockPos: true, stockCount: true })
 
   return (
     <main className="p-6 max-w-lg mx-auto space-y-6">
+      <StepIndicator steps={steps} currentIndex={3} />
       <div>
         <p className="text-sm text-gray-500">{station?.name}</p>
         <h1 className="text-2xl font-semibold">{periodLabel} Shift</h1>

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { buildWeeklyReport } from '@/lib/aggregate-reports'
 import type { DayVarianceRow } from '@/lib/aggregate-reports'
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 
 interface Props {
   searchParams: Promise<{ station?: string; week?: string }>
@@ -113,6 +114,13 @@ export default async function WeeklyReportPage({ searchParams }: Props) {
 
   return (
     <main className="max-w-4xl mx-auto p-4 space-y-6">
+      <Breadcrumb>
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard/reports">Reports</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbPage>Weekly</BreadcrumbPage></BreadcrumbItem>
+      </Breadcrumb>
       <div>
         <Link href="/dashboard" className="text-xs text-muted-foreground hover:underline">← Dashboard</Link>
         <h1 className="text-xl font-semibold mt-1">Weekly Report</h1>

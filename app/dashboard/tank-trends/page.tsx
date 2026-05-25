@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { buildTankTrendSeries, buildDeliveryMarkers, applyDateRangePreset } from '@/lib/tank-trends'
 import { TankTrendChart } from './_components/TankTrendChart'
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 
 interface Props {
   searchParams: Promise<{
@@ -103,6 +104,11 @@ export default async function TankTrendsPage({ searchParams }: Props) {
 
   return (
     <main className="max-w-4xl mx-auto p-4 space-y-6">
+      <Breadcrumb>
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbPage>Tank Trends</BreadcrumbPage></BreadcrumbItem>
+      </Breadcrumb>
       <div>
         <Link href="/dashboard" className="text-xs text-muted-foreground hover:underline">← Dashboard</Link>
         <h1 className="text-xl font-semibold mt-1">Tank Level Trends</h1>

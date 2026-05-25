@@ -8,6 +8,7 @@ import { flagShift, unflagShift, createOverride } from '@/app/shift/actions'
 import { computeShiftLabel, buildSplitNotice } from '@/lib/shift-open'
 import type { ShiftPeriod, ShiftPart } from '@/lib/shift-open'
 import { PhotoModal } from '@/components/PhotoModal'
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 
 interface Props { params: Promise<{ id: string }> }
 
@@ -135,13 +136,21 @@ export default async function ShiftAuditPage({ params }: Props) {
     (siblingShifts ?? []) as Array<{ id: string; part: ShiftPart }>
   )
 
+  const shiftLabel = `${computeShiftLabel(shift.period as ShiftPeriod, shiftPart)} shift · ${shift.shift_date}`
+
   return (
     <main className="max-w-2xl mx-auto p-4 space-y-6">
+      <Breadcrumb>
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard/history">Shift History</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbPage>{shiftLabel}</BreadcrumbPage></BreadcrumbItem>
+      </Breadcrumb>
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <Link href="/dashboard/history" className="text-xs text-muted-foreground hover:underline">← Shift history</Link>
-          <h1 className="text-xl font-semibold mt-1">{computeShiftLabel(shift.period as ShiftPeriod, shiftPart)} shift · {shift.shift_date}</h1>
+          <h1 className="text-xl font-semibold mt-1">{shiftLabel}</h1>
           <p className="text-sm text-muted-foreground">
             {ss.stations?.name} · {ss.user_profiles?.email ?? '—'}
           </p>

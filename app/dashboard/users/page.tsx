@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUserStatus } from '@/lib/user-management'
 import { UserRow } from './UserRow'
 import { InviteForm } from './InviteForm'
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 import Link from 'next/link'
 
 export default async function UsersPage() {
@@ -22,10 +23,12 @@ export default async function UsersPage() {
 
   return (
     <main className="p-6 max-w-5xl mx-auto space-y-8">
+      <Breadcrumb>
+        <BreadcrumbItem><BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink></BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem><BreadcrumbPage>Users</BreadcrumbPage></BreadcrumbItem>
+      </Breadcrumb>
       <div className="flex items-center gap-3">
-        <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-800">
-          ← Dashboard
-        </Link>
         <h1 className="text-2xl font-semibold">User Management</h1>
       </div>
 

@@ -1,6 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound, redirect } from 'next/navigation'
 import { getShiftDeliveries } from '@/lib/deliveries'
+import { getCloseProgress } from '@/lib/shift-close'
+import { buildShiftCloseSteps } from '@/lib/workflow-steps'
+import { StepIndicator } from '@/components/StepIndicator'
 import { deleteDelivery } from '../../../actions'
 import { AddDeliveryForm } from './AddDeliveryForm'
 import Link from 'next/link'
@@ -21,7 +24,7 @@ export default async function CloseDeliveriesPage({ params }: Props) {
   if (!shift) notFound()
   if (shift.status !== 'pending') redirect(`/shift/${shiftId}/close/summary`)
 
-  const [{ data: station }, { data: tanks }, deliveries] = await Promise.all([
+  const [{ data: station }, { data: tanks }, deliveries, { data: pumps }, { data: closePumpReadings }, { data: closeDipReadings }] = await Promise.all([
     supabase.from('stations').select('name').eq('id', shift.station_id).single(),
     supabase.from('tanks').select('id, label, fuel_grade_id').eq('station_id', shift.station_id).order('label'),
     getShiftDeliveries(supabase, {
@@ -29,7 +32,20 @@ export default async function CloseDeliveriesPage({ params }: Props) {
       shiftDate: shift.shift_date,
       period: shift.period as 'morning' | 'evening',
     }),
+    supabase.from('pumps').select('id').eq('station_id', shift.station_id),
+    supabase.from('pump_readings').select('pump_id').eq('shift_id', shiftId).eq('type', 'close'),
+    supabase.from('dip_readings').select('tank_id').eq('shift_id', shiftId).eq('type', 'close'),
   ])
+
+  const progress = getCloseProgress(
+    (pumps ?? []).map(p => p.id),
+    (closePumpReadings ?? []).map(r => r.pump_id),
+    (tanks ?? []).map(t => t.id),
+    (closeDipReadings ?? []).map(r => r.tank_id),
+    false,
+    false,
+  )
+  const steps = buildShiftCloseSteps(shiftId, 'deliveries', progress)
 
   const tankLabel = (tankId: string) =>
     tanks?.find(t => t.id === tankId)?.label ?? tankId
@@ -42,6 +58,7 @@ export default async function CloseDeliveriesPage({ params }: Props) {
 
   return (
     <main className="p-6 max-w-lg mx-auto space-y-6">
+      <StepIndicator steps={steps} currentIndex={2} />
       <div>
         <h1 className="text-xl font-semibold">Deliveries</h1>
         <p className="text-sm text-gray-500 capitalize mt-0.5">
