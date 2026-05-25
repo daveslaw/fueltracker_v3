@@ -42,7 +42,7 @@ export interface ShiftDataBundle {
   openDips:     { tank_id: string; litres: number }[]
   closeDips:    { tank_id: string; litres: number }[]
   pumpReadings: { pump_id: string; meter_reading: number; type: 'open' | 'close' }[]
-  posLines:     { fuel_grade_id: string; litres_sold: number; revenue_zar: number }[]
+  posLines:     { pump_id: string; litres_sold: number; revenue_zar: number }[]
   deliveries:   { tank_id: string; litres_received: number; delivered_at: string }[]
   priceRows:    PriceRow[]      // all versioned rows for relevant grades; period filtering in assembly
   repositoryWarnings?: AssemblyWarning[]  // warnings emitted during I/O (e.g. missing baseline)
@@ -280,7 +280,7 @@ export function createSupabaseRepository(db: SupabaseClient): ShiftDataRepositor
       const posLines = posSubmission
         ? (await db
             .from('pos_submission_lines')
-            .select('fuel_grade_id, litres_sold, revenue_zar')
+            .select('pump_id, litres_sold, revenue_zar')
             .eq('pos_submission_id', posSubmission.id)
           ).data ?? []
         : []
@@ -343,12 +343,12 @@ export function createSupabaseWriter(db: SupabaseClient): ReconciliationWriter {
       )
       if (tankErr) return { error: tankErr.message }
 
-      // Replace grade lines
-      await db.from('reconciliation_grade_lines').delete().eq('reconciliation_id', rec.id)
-      const { error: gradeErr } = await db.from('reconciliation_grade_lines').insert(
-        result.gradeLines.map(l => ({ reconciliation_id: rec.id, ...l }))
+      // Replace pump lines
+      await db.from('reconciliation_pump_lines').delete().eq('reconciliation_id', rec.id)
+      const { error: pumpErr } = await db.from('reconciliation_pump_lines').insert(
+        result.pumpLines.map(l => ({ reconciliation_id: rec.id, ...l }))
       )
-      if (gradeErr) return { error: gradeErr.message }
+      if (pumpErr) return { error: pumpErr.message }
 
       return {}
     },

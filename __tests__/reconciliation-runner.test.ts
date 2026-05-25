@@ -31,7 +31,7 @@ function makeBundle(overrides: Partial<ShiftDataBundle> = {}): ShiftDataBundle {
       { pump_id: 'P1', meter_reading: 50000, type: 'open' },
       { pump_id: 'P1', meter_reading: 52000, type: 'close' },
     ],
-    posLines:   [{ fuel_grade_id: '95', litres_sold: 2000, revenue_zar: 34000 }],
+    posLines:   [{ pump_id: 'P1', litres_sold: 2000, revenue_zar: 34000 }],
     deliveries: [],
     priceRows:  [{ station_id: 'station-1', fuel_grade_id: '95', sell_price_per_litre: 17.00, cost_per_litre: 14.00, valid_from: '2026-01-01T00:00:00Z', valid_to: null }],
     ...overrides,
@@ -277,10 +277,10 @@ describe('runReconciliationWith', () => {
     expect(result.error).toBeUndefined()
     expect(captured).toHaveLength(1)
     const [, reconciliationResult] = captured[0]
-    // Grade 95: meter_delta=2000L × R17.00 = R34,000 expected; POS revenue=R34,000 → variance=0
-    const gradeLine = reconciliationResult.gradeLines.find(l => l.fuel_grade_id === '95')!
-    expect(gradeLine.expected_revenue_zar).toBe(34000)
-    expect(gradeLine.pos_revenue_zar).toBe(34000)
-    expect(gradeLine.variance_zar).toBe(0)
+    // Pump P1 (grade 95): meter_delta=2000L × R17.00 = R34,000 expected; POS revenue=R34,000 → variance=0
+    const pumpLine = reconciliationResult.pumpLines.find(l => l.pump_id === 'P1')!
+    expect(pumpLine.expected_revenue_zar).toBe(34000)
+    expect(pumpLine.pos_revenue_zar).toBe(34000)
+    expect(pumpLine.variance_zar).toBe(0)
   })
 })

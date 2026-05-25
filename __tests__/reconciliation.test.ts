@@ -11,8 +11,8 @@ const delivery = (tank_id: string, litres_received: number) => ({ tank_id, litre
 const reading = (pump_id: string, opening_reading: number, closing_reading: number) => ({
   pump_id, opening_reading, closing_reading,
 })
-const posLine = (fuel_grade_id: string, litres_sold: number, revenue_zar: number) => ({
-  fuel_grade_id, litres_sold, revenue_zar,
+const posLine = (pump_id: string, litres_sold: number, revenue_zar: number) => ({
+  pump_id, litres_sold, revenue_zar,
 })
 const price = (fuel_grade_id: string, sell_price_per_litre: number) => ({
   fuel_grade_id, sell_price_per_litre,
@@ -141,14 +141,15 @@ describe('computeReconciliation — tank lines', () => {
   })
 })
 
-// ── Formula 2: Pump Meter vs POS (per grade) ──────────────────────────────────
+// ── Formula 2: Pump Meter vs POS (per pump) ───────────────────────────────────
 //
-// variance_litres     = pos_litres_sold − meter_delta        (negative = unrecorded dispensing)
-// expected_revenue_zar = meter_delta × price_per_litre
-// variance_zar        = pos_revenue_zar − expected_revenue_zar (negative = revenue shortfall)
+// variance_litres      = pos_litres_sold − meter_delta_litres  (negative = unrecorded dispensing)
+// expected_revenue_zar = meter_delta_litres × price_per_litre
+// variance_zar         = pos_revenue_zar − expected_revenue_zar (negative = revenue shortfall)
+// fuel_grade_id        = derived from pump → tank
 
-describe('computeReconciliation — grade lines', () => {
-  it('variance_litres = pos_litres_sold − meter_delta (negative when pumps dispensed more than POS recorded)', () => {
+describe('computeReconciliation — pump lines', () => {
+  it('variance_litres = pos_litres_sold − meter_delta (negative when pump dispensed more than POS recorded)', () => {
     // Meter delta = 2100. POS sold = 2000. variance = 2000 − 2100 = −100 (unrecorded dispensing)
     const inputs: ReconciliationInputs = {
       tanks:        [tank('T1', '95')],
@@ -157,12 +158,12 @@ describe('computeReconciliation — grade lines', () => {
       closeDips:    [closeDip('T1', 7900)],
       deliveries:   [],
       pumpReadings: [reading('P1', 50000, 52100)],
-      posLines:     [posLine('95', 2000, 34000)],
+      posLines:     [posLine('P1', 2000, 34000)],
       prices:       [price('95', 17.00)],
     }
     const result = computeReconciliation(inputs)
-    const line = result.gradeLines.find(l => l.fuel_grade_id === '95')!
-    expect(line.meter_delta).toBe(2100)
+    const line = result.pumpLines.find(l => l.pump_id === 'P1')!
+    expect(line.meter_delta_litres).toBe(2100)
     expect(line.pos_litres_sold).toBe(2000)
     expect(line.variance_litres).toBe(-100)
   })
@@ -176,11 +177,11 @@ describe('computeReconciliation — grade lines', () => {
       closeDips:    [closeDip('T1', 8000)],
       deliveries:   [],
       pumpReadings: [reading('P1', 100000, 102000)],
-      posLines:     [posLine('95', 2000, 33000)],
+      posLines:     [posLine('P1', 2000, 33000)],
       prices:       [price('95', 17.00)],
     }
     const result = computeReconciliation(inputs)
-    const line = result.gradeLines.find(l => l.fuel_grade_id === '95')!
+    const line = result.pumpLines.find(l => l.pump_id === 'P1')!
     expect(line.expected_revenue_zar).toBe(34000)
   })
 
@@ -194,18 +195,16 @@ describe('computeReconciliation — grade lines', () => {
       closeDips:    [closeDip('T1', 8000)],
       deliveries:   [],
       pumpReadings: [reading('P1', 100000, 102000)],
-      posLines:     [posLine('95', 2000, 33000)],
+      posLines:     [posLine('P1', 2000, 33000)],
       prices:       [price('95', 17.00)],
     }
     const result = computeReconciliation(inputs)
-    const line = result.gradeLines.find(l => l.fuel_grade_id === '95')!
+    const line = result.pumpLines.find(l => l.pump_id === 'P1')!
     expect(line.pos_revenue_zar).toBe(33000)
     expect(line.variance_zar).toBe(-1000)
   })
 
-  it('multiple grades are computed independently', () => {
-    // 95: meter=1000, POS=1000, price=17 → variance_litres=0, revenue=17000, variance_zar=0
-    // D10: meter=500, POS=480, price=22 → variance_litres=−20, revenue=11000, pos_revenue=10560
+  it('fuel_grade_id is derived from pump → tank', () => {
     const inputs: ReconciliationInputs = {
       tanks:        [tank('T1', '95'), tank('T2', 'D10')],
       pumps:        [pump('P1', 'T1'), pump('P2', 'T2')],
@@ -213,24 +212,40 @@ describe('computeReconciliation — grade lines', () => {
       closeDips:    [closeDip('T1', 4000), closeDip('T2', 7500)],
       deliveries:   [],
       pumpReadings: [reading('P1', 10000, 11000), reading('P2', 20000, 20500)],
-      posLines:     [posLine('95', 1000, 17000), posLine('D10', 480, 10560)],
+      posLines:     [posLine('P1', 1000, 17000), posLine('P2', 480, 10560)],
       prices:       [price('95', 17.00), price('D10', 22.00)],
     }
     const result = computeReconciliation(inputs)
-    const g95  = result.gradeLines.find(l => l.fuel_grade_id === '95')!
-    const gD10 = result.gradeLines.find(l => l.fuel_grade_id === 'D10')!
-
-    expect(g95.variance_litres).toBe(0)
-    expect(g95.expected_revenue_zar).toBe(17000)
-    expect(g95.variance_zar).toBe(0)
-
-    expect(gD10.variance_litres).toBe(-20)
-    expect(gD10.expected_revenue_zar).toBe(11000)
-    expect(gD10.variance_zar).toBe(-440)
+    expect(result.pumpLines.find(l => l.pump_id === 'P1')!.fuel_grade_id).toBe('95')
+    expect(result.pumpLines.find(l => l.pump_id === 'P2')!.fuel_grade_id).toBe('D10')
   })
 
-  it('grade with no POS line defaults pos_litres_sold and pos_revenue_zar to 0', () => {
-    // D10 tank has a pump but no POS line submitted
+  it('multiple pumps same grade — each computed independently, grade total derivable by sum', () => {
+    // P1 and P2 both on grade 95. P1: delta=1000, POS=1000. P2: delta=500, POS=480.
+    // Grade total: delta=1500, POS=1480, variance=−20
+    const inputs: ReconciliationInputs = {
+      tanks:        [tank('T1', '95')],
+      pumps:        [pump('P1', 'T1'), pump('P2', 'T1')],
+      openDips:     [openDip('T1', 10000)],
+      closeDips:    [closeDip('T1', 8500)],
+      deliveries:   [],
+      pumpReadings: [reading('P1', 10000, 11000), reading('P2', 20000, 20500)],
+      posLines:     [posLine('P1', 1000, 17000), posLine('P2', 480, 8160)],
+      prices:       [price('95', 17.00)],
+    }
+    const result = computeReconciliation(inputs)
+    const p1 = result.pumpLines.find(l => l.pump_id === 'P1')!
+    const p2 = result.pumpLines.find(l => l.pump_id === 'P2')!
+
+    expect(p1.variance_litres).toBe(0)       // 1000 − 1000
+    expect(p2.variance_litres).toBe(-20)     // 480 − 500
+
+    // Grade total derived by summing pump lines
+    const gradeVariance = p1.variance_litres + p2.variance_litres
+    expect(gradeVariance).toBe(-20)
+  })
+
+  it('pump with no POS line → pos_litres_sold = 0, full meter delta as variance', () => {
     const inputs: ReconciliationInputs = {
       tanks:        [tank('T1', '95'), tank('T2', 'D10')],
       pumps:        [pump('P1', 'T1'), pump('P2', 'T2')],
@@ -238,19 +253,18 @@ describe('computeReconciliation — grade lines', () => {
       closeDips:    [closeDip('T1', 4000), closeDip('T2', 7500)],
       deliveries:   [],
       pumpReadings: [reading('P1', 10000, 11000), reading('P2', 20000, 20500)],
-      posLines:     [posLine('95', 1000, 17000)],  // no D10 line
+      posLines:     [posLine('P1', 1000, 17000)],  // no POS line for P2
       prices:       [price('95', 17.00), price('D10', 22.00)],
     }
     const result = computeReconciliation(inputs)
-    const gD10 = result.gradeLines.find(l => l.fuel_grade_id === 'D10')!
-    expect(gD10.pos_litres_sold).toBe(0)
-    expect(gD10.pos_revenue_zar).toBe(0)
-    expect(gD10.meter_delta).toBe(500)
-    expect(gD10.variance_litres).toBe(-500)   // 0 − 500 = −500 (all dispensed, none recorded)
+    const p2 = result.pumpLines.find(l => l.pump_id === 'P2')!
+    expect(p2.pos_litres_sold).toBe(0)
+    expect(p2.pos_revenue_zar).toBe(0)
+    expect(p2.meter_delta_litres).toBe(500)
+    expect(p2.variance_litres).toBe(-500)
   })
 
   it('uses the price snapshot passed in', () => {
-    // Same litres but different price → different expected_revenue_zar
     const base = {
       tanks:        [tank('T1', '95')],
       pumps:        [pump('P1', 'T1')],
@@ -258,11 +272,11 @@ describe('computeReconciliation — grade lines', () => {
       closeDips:    [closeDip('T1', 4000)],
       deliveries:   [],
       pumpReadings: [reading('P1', 10000, 11000)],
-      posLines:     [posLine('95', 1000, 17000)],
+      posLines:     [posLine('P1', 1000, 17000)],
     }
     const r1 = computeReconciliation({ ...base, prices: [price('95', 17.00)] })
     const r2 = computeReconciliation({ ...base, prices: [price('95', 21.95)] })
-    expect(r1.gradeLines[0].expected_revenue_zar).toBe(17000)
-    expect(r2.gradeLines[0].expected_revenue_zar).toBeCloseTo(21950)
+    expect(r1.pumpLines[0].expected_revenue_zar).toBe(17000)
+    expect(r2.pumpLines[0].expected_revenue_zar).toBeCloseTo(21950)
   })
 })

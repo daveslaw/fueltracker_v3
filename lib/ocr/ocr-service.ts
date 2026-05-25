@@ -32,6 +32,10 @@ export type PosOcrResult = {
   status: 'auto' | 'needs_review' | 'unreadable'
 }
 
+// ── Nozzle POS Z-report types (Anthropic-extracted, per-pump) ─────────────────
+
+export type { NozzlePosLine, NozzlePosOcrResult } from './parse-nozzle-pos'
+
 // Grade keyword mapping: each entry lists lowercased substrings that identify
 // that grade in a POS Z-report printout.
 const GRADE_KEYWORDS: Array<{ grade_id: string; keywords: string[] }> = [
@@ -114,6 +118,20 @@ export function buildPosOcrResult(raw: RawVisionResponse): PosOcrResult {
   } catch {
     return FALLBACK
   }
+}
+
+// ── buildNozzlePosOcrResult ───────────────────────────────────────────────────
+
+import { parseNozzlePosText } from './parse-nozzle-pos'
+import type { NozzlePosOcrResult } from './parse-nozzle-pos'
+
+/**
+ * Pure function: wraps parseNozzlePosText for use with Anthropic Vision API
+ * responses. Anthropic returns structured pipe-delimited text in the format
+ * "NOZZLE | RATE | LITRES | REVENUE" per line, or the sentinel "UNREADABLE".
+ */
+export function buildNozzlePosOcrResult(anthropicText: string | null | undefined): NozzlePosOcrResult {
+  return parseNozzlePosText(anthropicText ?? '')
 }
 
 // ── buildOcrResult ────────────────────────────────────────────────────────────
