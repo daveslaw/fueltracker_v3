@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   saveCashierStockReading,
   saveCashierStockDelivery,
@@ -25,6 +26,7 @@ type Props = {
 }
 
 export function StockCountForm({ shiftId, stationId, products: initialProducts }: Props) {
+  const router = useRouter()
   const [products, setProducts] = useState(initialProducts)
   const [closingInputs, setClosingInputs] = useState<Record<string, string>>(
     Object.fromEntries(initialProducts.map(p => [p.id, p.closingCount?.toString() ?? '']))
@@ -52,6 +54,7 @@ export function StockCountForm({ shiftId, stationId, products: initialProducts }
         setErrors(prev => ({ ...prev, [productId]: result.error }))
       } else {
         setProducts(prev => prev.map(p => p.id === productId ? { ...p, closingCount: value } : p))
+        router.refresh()
       }
     })
   }
