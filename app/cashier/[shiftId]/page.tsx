@@ -145,7 +145,13 @@ export default async function CashierHubPage({
           Submitted {new Date(shift.cashier_submitted_at).toLocaleString('en-ZA')}
         </p>
       ) : (
-        <form action={async () => { 'use server'; await submitCashierShift(shiftId) }}>
+        <form action={async (formData: FormData) => {
+          'use server'
+          const result = await submitCashierShift(shiftId)
+          if (result && 'error' in result) {
+            throw new Error(result.error)
+          }
+        }}>
           <button
             type="submit"
             disabled={!canSubmit}
