@@ -52,8 +52,6 @@ export default async function FuelControlReportPage({ searchParams }: Props) {
           <Link href="/dashboard" className="text-xs text-muted-foreground hover:underline">← Dashboard</Link>
           <h1 className="text-xl font-semibold mt-1">Fuel Control Report</h1>
           <div className="flex gap-3 mt-1">
-            <Link href="/dashboard/reports/weekly"     className="text-xs text-blue-600 hover:underline">Weekly</Link>
-            <Link href="/dashboard/reports/monthly"    className="text-xs text-blue-600 hover:underline">Monthly</Link>
             <Link href="/dashboard/reports/dry-stock"  className="text-xs text-blue-600 hover:underline">Dry Stock</Link>
             <Link href="/dashboard/reports/deliveries" className="text-xs text-blue-600 hover:underline">Deliveries</Link>
           </div>

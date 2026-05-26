@@ -25,10 +25,14 @@ export default async function BaselinesPage({ searchParams }: Props) {
 
   const selectedStation = stationParam ?? stations?.[0]?.id ?? ''
 
-  const [{ data: pumps }, { data: tanks }] = await Promise.all([
-    supabase.from('pumps').select('id, label').eq('station_id', selectedStation).order('label'),
+  const [{ data: pumpsRaw }, { data: tanks }] = await Promise.all([
+    supabase.from('pumps').select('id, label').eq('station_id', selectedStation),
     supabase.from('tanks').select('id, label, fuel_grade_id').eq('station_id', selectedStation).order('label'),
   ])
+
+  const pumps = (pumpsRaw ?? []).sort((a, b) =>
+    parseInt((a.label as string).replace(/\D/g, ''), 10) - parseInt((b.label as string).replace(/\D/g, ''), 10)
+  )
 
   const repo = createSupabaseBaselinesRepository(createAdminClient())
   const baselines = selectedStation ? await repo.getBaselines(selectedStation) : []

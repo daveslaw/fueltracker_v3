@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
 import type { DayEntry, DaySummary, FuelControlReportRow } from '@/lib/fuel-control-report'
 
@@ -197,9 +197,8 @@ export function FuelControlTable({ entries, grades, stationId: _stationId }: Pro
               const visibleGroups = entry.gradeGroups.filter(g => g.grade === selectedGrade)
 
               return (
-                <>
+                <React.Fragment key={`day-${entry.date}`}>
                   <DayCollapsedRow
-                    key={`day-${entry.date}`}
                     entry={entry}
                     summary={summary}
                     accVariance={accVariance}
@@ -213,7 +212,7 @@ export function FuelControlTable({ entries, grades, stationId: _stationId }: Pro
                         : <PriceChangeImpactRow key={`impact-${entry.date}-${group.grade}-${i}`} row={row} />
                     )
                   )}
-                </>
+                </React.Fragment>
               )
             })}
           </tbody>

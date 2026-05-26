@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { countPendingShiftsPerStation } from '@/lib/owner-reports'
 import { DashboardPoller } from './_components/DashboardPoller'
@@ -197,12 +196,7 @@ export default async function DashboardPage() {
                 <p className="text-xs text-gray-400">No closed shift data.</p>
               )}
 
-              <Link
-                href={`/dashboard/reports?station=${station.id}&date=${today}`}
-                className="block text-xs text-blue-600 underline"
-              >
-                View daily report →
-              </Link>
+
             </div>
           )
         })}
