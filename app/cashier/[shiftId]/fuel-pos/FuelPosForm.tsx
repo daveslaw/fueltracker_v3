@@ -21,6 +21,7 @@ export function FuelPosForm({ shiftId, pumps, prices, existingLines, existingPho
       existingPhotoUrl={existingPhotoUrl}
       onSave={saveCashierFuelPos}
       uploadPath={`fuel-z-${shiftId}.jpg`}
+      redirectTo={`/cashier/${shiftId}/stock-pos`}
     />
   )
 }

@@ -26,5 +26,5 @@ export function getCashierProgress(input: CashierProgressInput): CashierProgress
 }
 
 export function canCashierSubmit(progress: CashierProgress): boolean {
-  return progress.fuelPos && progress.stockPos && progress.stockCount
+  return progress.fuelPos
 }

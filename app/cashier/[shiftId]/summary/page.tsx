@@ -117,7 +117,7 @@ export default async function CashierSummaryPage({ params }: Props) {
           </div>
         </section>
       ) : (
-        <p className="text-sm text-gray-400">Dry stock reconciliation pending.</p>
+        <p className="text-sm text-gray-400">Not captured this shift.</p>
       )}
 
       <Link

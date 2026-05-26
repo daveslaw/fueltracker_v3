@@ -357,7 +357,7 @@ export default async function ShiftAuditPage({ params }: Props) {
                   <div className="grid grid-cols-2 gap-x-4 text-muted-foreground">
                     <span>Opening</span><span className="text-right">{fmtL(line.opening_dip)}</span>
                     <span>Deliveries</span><span className="text-right">+{fmtL(line.deliveries_received)}</span>
-                    <span>POS sold</span><span className="text-right">−{fmtL(line.pos_litres_sold)}</span>
+                    <span>Meter delta</span><span className="text-right">−{fmtL(line.meter_delta)}</span>
                     <span>Expected</span><span className="text-right">{fmtL(line.expected_closing_dip)}</span>
                     <span>Actual</span><span className="text-right">{fmtL(line.actual_closing_dip)}</span>
                   </div>

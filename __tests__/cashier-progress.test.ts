@@ -60,30 +60,24 @@ describe('getCashierProgress', () => {
 // ── canCashierSubmit ──────────────────────────────────────────────────────────
 
 describe('canCashierSubmit', () => {
-  it('tracer bullet: all sections complete → true', () => {
-    const progress = getCashierProgress(complete)
-    expect(canCashierSubmit(progress)).toBe(true)
+  it('tracer bullet: fuelPos true, dry stock skipped → true', () => {
+    expect(canCashierSubmit({ fuelPos: true, stockPos: false, stockCount: false })).toBe(true)
   })
 
-  it('fuelPos incomplete → false', () => {
+  it('fuelPos true, dry stock complete → true', () => {
+    expect(canCashierSubmit({ fuelPos: true, stockPos: true, stockCount: true })).toBe(true)
+  })
+
+  it('fuelPos true, stockPos captured, stockCount skipped → true', () => {
+    expect(canCashierSubmit({ fuelPos: true, stockPos: true, stockCount: false })).toBe(true)
+  })
+
+  it('fuelPos true, stockPos skipped, stockCount captured → true', () => {
+    expect(canCashierSubmit({ fuelPos: true, stockPos: false, stockCount: true })).toBe(true)
+  })
+
+  it('fuelPos incomplete → false regardless of dry stock state', () => {
     expect(canCashierSubmit({ fuelPos: false, stockPos: true, stockCount: true })).toBe(false)
-  })
-
-  it('stockPos incomplete → false', () => {
-    expect(canCashierSubmit({ fuelPos: true, stockPos: false, stockCount: true })).toBe(false)
-  })
-
-  it('stockCount incomplete → false', () => {
-    expect(canCashierSubmit({ fuelPos: true, stockPos: true, stockCount: false })).toBe(false)
-  })
-
-  it('all sections incomplete → false', () => {
     expect(canCashierSubmit({ fuelPos: false, stockPos: false, stockCount: false })).toBe(false)
-  })
-
-  it('two of three complete → false', () => {
-    expect(canCashierSubmit({ fuelPos: true, stockPos: true, stockCount: false })).toBe(false)
-    expect(canCashierSubmit({ fuelPos: true, stockPos: false, stockCount: true })).toBe(false)
-    expect(canCashierSubmit({ fuelPos: false, stockPos: true, stockCount: true })).toBe(false)
   })
 })

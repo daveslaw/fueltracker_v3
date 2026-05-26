@@ -177,7 +177,7 @@ export async function submitCashierShift(shiftId: string): Promise<ActionResult>
   const state = await getCashierSubmissionState(shiftId)
   if (state.submitted) return { error: 'Shift already submitted' }
   if (!canCashierSubmit(state.progress)) {
-    return { error: 'All three sections must be complete before submitting.' }
+    return { error: 'The fuel Z-report must be saved before submitting.' }
   }
 
   const { error: stampErr } = await supabase

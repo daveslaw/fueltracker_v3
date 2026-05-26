@@ -62,6 +62,43 @@ describe('matchNozzlesToPumps', () => {
     expect(matched).toHaveLength(1)
     expect(matched[0].pump.id).toBe('p2')
   })
+
+  it('"Pump 1" style label matches nozzle 1', () => {
+    const pumps = [{ id: 'p1', label: 'Pump 1' }]
+    const { matched, unmatched } = matchNozzlesToPumps([makeLine(1)], pumps)
+    expect(matched).toHaveLength(1)
+    expect(matched[0].pump.id).toBe('p1')
+    expect(unmatched).toHaveLength(0)
+  })
+
+  it('"Pump 10" style label matches nozzle 10', () => {
+    const pumps = [{ id: 'p10', label: 'Pump 10' }]
+    const { matched, unmatched } = matchNozzlesToPumps([makeLine(10)], pumps)
+    expect(matched).toHaveLength(1)
+    expect(matched[0].pump.id).toBe('p10')
+    expect(unmatched).toHaveLength(0)
+  })
+
+  it('all "Pump N" labels — matches all nozzles, none unmatched', () => {
+    const pumps = [
+      { id: 'p1', label: 'Pump 1' },
+      { id: 'p2', label: 'Pump 2' },
+      { id: 'p3', label: 'Pump 3' },
+    ]
+    const lines = [makeLine(1), makeLine(2), makeLine(3)]
+    const { matched, unmatched } = matchNozzlesToPumps(lines, pumps)
+    expect(matched).toHaveLength(3)
+    expect(unmatched).toHaveLength(0)
+    expect(matched.map(m => m.pump.id)).toEqual(['p1', 'p2', 'p3'])
+  })
+
+  it('"Pump N" label — nozzle with no matching pump still goes to unmatched', () => {
+    const pumps = [{ id: 'p1', label: 'Pump 1' }]
+    const { matched, unmatched } = matchNozzlesToPumps([makeLine(5)], pumps)
+    expect(matched).toHaveLength(0)
+    expect(unmatched).toHaveLength(1)
+    expect(unmatched[0].nozzle_number).toBe(5)
+  })
 })
 
 // ── isRateMismatch ────────────────────────────────────────────────────────────

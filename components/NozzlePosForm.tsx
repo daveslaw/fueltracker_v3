@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { matchNozzlesToPumps, isRateMismatch } from '@/lib/pos-capture'
 import type { NozzlePosOcrResult } from '@/lib/ocr/parse-nozzle-pos'
 import type { PosNozzleLineInput } from '@/app/shift/actions'
@@ -28,12 +29,6 @@ type RateMismatch = {
   pump_id: string
   extracted: number
   configured: number
-  dismissed: boolean
-}
-
-type UnmatchedAssignment = {
-  nozzle_number: number
-  assigned_pump_id: string
 }
 
 type Props = {
@@ -49,6 +44,7 @@ type Props = {
     lines: PosNozzleLineInput[]
   ) => Promise<{ error: string } | { success: true }>
   uploadPath?: string
+  redirectTo?: string
 }
 
 type OcrPhase =
@@ -68,7 +64,7 @@ async function compressImage(file: File): Promise<Blob> {
 }
 
 function sortedPumps(pumps: PumpWithGrade[]): PumpWithGrade[] {
-  return [...pumps].sort((a, b) => parseInt(a.label, 10) - parseInt(b.label, 10))
+  return [...pumps].sort((a, b) => parseInt(a.label.replace(/\D/g, ''), 10) - parseInt(b.label.replace(/\D/g, ''), 10))
 }
 
 export function NozzlePosForm({
@@ -79,7 +75,9 @@ export function NozzlePosForm({
   existingPhotoUrl,
   onSave,
   uploadPath = `fuel-z-${shiftId}.jpg`,
+  redirectTo,
 }: Props) {
+  const router = useRouter()
   const sorted = sortedPumps(pumps)
   const priceByGrade = new Map(prices.map(p => [p.fuel_grade_id, p.price]))
 
@@ -109,7 +107,6 @@ export function NozzlePosForm({
   const [photoUrl, setPhotoUrl] = useState(existingPhotoUrl)
   const [lines, setLines] = useState<EditableLine[]>(initialLines)
   const [unmatchedNozzles, setUnmatchedNozzles] = useState<number[]>([])
-  const [unmatchedAssignments, setUnmatchedAssignments] = useState<UnmatchedAssignment[]>([])
   const [rateMismatches, setRateMismatches] = useState<RateMismatch[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(existingLines.length > 0)
@@ -158,7 +155,6 @@ export function NozzlePosForm({
         )
 
         setUnmatchedNozzles(unmatched.map(u => u.nozzle_number))
-        setUnmatchedAssignments([])
 
         const mismatches: RateMismatch[] = matched
           .filter(m => {
@@ -173,7 +169,6 @@ export function NozzlePosForm({
               pump_id: m.pump.id,
               extracted: m.line.extracted_rate!,
               configured: priceByGrade.get(pump.fuel_grade_id)!,
-              dismissed: false,
             }
           })
         setRateMismatches(mismatches)
@@ -184,43 +179,13 @@ export function NozzlePosForm({
     }
   }
 
-  function assignUnmatched(nozzle_number: number, pump_id: string) {
-    setUnmatchedAssignments(prev => {
-      const filtered = prev.filter(a => a.nozzle_number !== nozzle_number)
-      if (pump_id) return [...filtered, { nozzle_number, assigned_pump_id: pump_id }]
-      return filtered
-    })
-  }
-
-  function dismissUnmatched(nozzle_number: number) {
-    setUnmatchedNozzles(prev => prev.filter(n => n !== nozzle_number))
-    setUnmatchedAssignments(prev => prev.filter(a => a.nozzle_number !== nozzle_number))
-  }
-
-  function dismissRateMismatch(pump_id: string) {
-    setRateMismatches(prev =>
-      prev.map(m => (m.pump_id === pump_id ? { ...m, dismissed: true } : m))
-    )
-  }
-
-  const pendingUnmatched = unmatchedNozzles.filter(
-    n => !unmatchedAssignments.find(a => a.nozzle_number === n)
-  )
-  const canSubmit = pendingUnmatched.length === 0
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
 
-    if (!canSubmit) {
-      setError('Assign or dismiss all unmatched nozzles before submitting.')
-      return
-    }
-
     const ocrResult = ocrPhase.phase === 'done' ? ocrPhase.result : null
     const lineOcrStatus = ocrResult?.status === 'auto' ? 'auto' : 'manual_override'
 
-    // Build lines from the editable grid
     const submittedLines: PosNozzleLineInput[] = lines
       .filter(l => l.litres_sold !== '' || l.revenue_zar !== '')
       .map(l => ({
@@ -230,25 +195,6 @@ export function NozzlePosForm({
         ocr_status: l.ocr_status === 'auto' ? 'auto' : lineOcrStatus,
       }))
 
-    // Add manually-assigned unmatched nozzles
-    if (ocrResult?.lines) {
-      for (const assignment of unmatchedAssignments) {
-        const nozzleLine = ocrResult.lines.find(
-          l => l.nozzle_number === assignment.nozzle_number
-        )
-        if (!nozzleLine) continue
-        const existing = submittedLines.find(l => l.pump_id === assignment.assigned_pump_id)
-        if (!existing) {
-          submittedLines.push({
-            pump_id: assignment.assigned_pump_id,
-            litres_sold: nozzleLine.litres_sold ?? 0,
-            revenue_zar: nozzleLine.revenue_zar ?? 0,
-            ocr_status: 'manual_override',
-          })
-        }
-      }
-    }
-
     if (!submittedLines.length) {
       setError('Enter at least one pump line')
       return
@@ -257,13 +203,13 @@ export function NozzlePosForm({
     startTransition(async () => {
       const result = await onSave(shiftId, photoUrl, null, submittedLines)
       if ('error' in result) setError(result.error)
+      else if (redirectTo) router.push(redirectTo)
       else setSaved(true)
     })
   }
 
   const ocrDone = ocrPhase.phase === 'done'
   const ocrStatus = ocrDone ? (ocrPhase as { phase: 'done'; result: NozzlePosOcrResult }).result.status : null
-  const activeMismatches = rateMismatches.filter(m => !m.dismissed)
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -288,60 +234,14 @@ export function NozzlePosForm({
         {!ocrDone && <p className="text-xs text-gray-400">Photo optional — enter values manually if preferred.</p>}
       </div>
 
-      {/* Rate mismatch warnings */}
-      {activeMismatches.length > 0 && (
-        <div className="rounded border border-yellow-300 bg-yellow-50 p-3 space-y-2">
-          <p className="text-xs font-medium text-yellow-800">Rate mismatch detected</p>
-          {activeMismatches.map(m => {
-            const pump = pumps.find(p => p.id === m.pump_id)
-            return (
-              <div key={m.pump_id} className="flex items-center justify-between gap-2 text-xs text-yellow-700">
-                <span>
-                  Pump {pump?.label}: extracted R{m.extracted.toFixed(2)}, configured R{m.configured.toFixed(2)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => dismissRateMismatch(m.pump_id)}
-                  className="text-yellow-600 underline shrink-0"
-                >
-                  Dismiss
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Unmatched nozzles warning */}
-      {unmatchedNozzles.length > 0 && (
-        <div className="rounded border border-red-300 bg-red-50 p-3 space-y-3">
-          <p className="text-xs font-medium text-red-800">Unmatched nozzles — assign each to a pump or dismiss</p>
-          {unmatchedNozzles.map(nozzle => {
-            const assignment = unmatchedAssignments.find(a => a.nozzle_number === nozzle)
-            return (
-              <div key={nozzle} className="flex items-center gap-2 text-xs">
-                <span className="text-red-700 shrink-0">Nozzle {nozzle}:</span>
-                <select
-                  value={assignment?.assigned_pump_id ?? ''}
-                  onChange={e => assignUnmatched(nozzle, e.target.value)}
-                  className="flex-1 rounded border px-2 py-1 text-xs bg-white"
-                >
-                  <option value="">— assign to pump —</option>
-                  {sorted.map(p => (
-                    <option key={p.id} value={p.id}>Pump {p.label}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => dismissUnmatched(nozzle)}
-                  className="text-red-600 underline shrink-0"
-                >
-                  Dismiss
-                </button>
-              </div>
-            )
-          })}
-        </div>
+      {/* OCR summary */}
+      {ocrDone && (unmatchedNozzles.length > 0 || rateMismatches.length > 0) && (
+        <p className="text-xs text-yellow-700">
+          {[
+            unmatchedNozzles.length > 0 && `${unmatchedNozzles.length} nozzle${unmatchedNozzles.length > 1 ? 's' : ''} unmatched (ignored)`,
+            rateMismatches.length > 0 && `rate mismatch on pump${rateMismatches.length > 1 ? 's' : ''} ${rateMismatches.map(m => pumps.find(p => p.id === m.pump_id)?.label).join(', ')} — review values below`,
+          ].filter(Boolean).join(' · ')}
+        </p>
       )}
 
       {/* Pump lines */}
@@ -376,7 +276,7 @@ export function NozzlePosForm({
 
       <button
         type="submit"
-        disabled={isPending || ocrPhase.phase === 'uploading' || !canSubmit}
+        disabled={isPending || ocrPhase.phase === 'uploading'}
         className="w-full rounded bg-black py-2 text-sm font-medium text-white disabled:opacity-50"
       >
         {isPending ? 'Saving…' : saved ? 'Update Z-report' : 'Save Z-report'}

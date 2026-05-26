@@ -44,14 +44,14 @@ describe('buildCashierSteps', () => {
     expect(steps[0].status).toBe('upcoming')
   })
 
-  it('stock-pos step reflects progress.stockPos', () => {
+  it('stock-pos step is always complete (navigable) regardless of progress', () => {
     expect(buildCashierSteps('s', 'fuel-pos', cashierAllDone)[1].status).toBe('complete')
-    expect(buildCashierSteps('s', 'fuel-pos', cashierNothingDone)[1].status).toBe('upcoming')
+    expect(buildCashierSteps('s', 'fuel-pos', cashierNothingDone)[1].status).toBe('complete')
   })
 
-  it('stock-count step reflects progress.stockCount', () => {
+  it('stock-count step is always complete (navigable) regardless of progress', () => {
     expect(buildCashierSteps('s', 'fuel-pos', cashierAllDone)[2].status).toBe('complete')
-    expect(buildCashierSteps('s', 'fuel-pos', cashierNothingDone)[2].status).toBe('upcoming')
+    expect(buildCashierSteps('s', 'fuel-pos', cashierNothingDone)[2].status).toBe('complete')
   })
 
   it('summary step is always complete', () => {

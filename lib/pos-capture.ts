@@ -21,7 +21,7 @@ export function matchNozzlesToPumps(
   nozzleLines: NozzlePosLine[],
   pumps: PumpMeta[],
 ): MatchResult {
-  const pumpByNozzle = new Map(pumps.map(p => [parseInt(p.label, 10), p]))
+  const pumpByNozzle = new Map(pumps.map(p => [parseInt(p.label.replace(/\D/g, ''), 10), p]))
   const matched: MatchResult['matched'] = []
   const unmatched: NozzlePosLine[] = []
 

@@ -39,7 +39,7 @@ export default async function CashierFuelPosPage({ params }: Props) {
     .eq('station_id', stationId)
 
   const pumps = (pumpsRaw ?? []).sort((a, b) =>
-    parseInt(a.label as string, 10) - parseInt(b.label as string, 10)
+    parseInt((a.label as string).replace(/\D/g, ''), 10) - parseInt((b.label as string).replace(/\D/g, ''), 10)
   ).map(p => ({
     id: p.id,
     label: p.label as string,
