@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { signInWithPassword, signInWithMagicLink, resetPassword } from './actions'
+import { signInWithPassword, resetPassword } from './actions'
 import { createClient } from '@/lib/supabase/client'
 
-type AuthMode = 'password' | 'magic-link' | 'forgot-password'
+type AuthMode = 'password' | 'forgot-password'
 
 export default function LoginPage() {
   const searchParams = useSearchParams()
@@ -47,8 +47,6 @@ export default function LoginPage() {
     const result =
       mode === 'password'
         ? await signInWithPassword(formData)
-        : mode === 'magic-link'
-        ? await signInWithMagicLink(formData)
         : await resetPassword(formData)
 
     setPending(false)
@@ -130,32 +128,6 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Mode selector — pill toggle (hidden in forgot-password mode) */}
-        {mode !== 'forgot-password' && (
-          <div
-            className="flex gap-1 mb-6 rounded-lg p-1"
-            style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid #2A3656',
-            }}
-          >
-            {(['password', 'magic-link'] as AuthMode[]).map(m => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className="flex-1 rounded py-1.5 text-xs font-semibold transition-all duration-150"
-                style={
-                  mode === m
-                    ? { background: '#F59F00', color: '#0B0F1A' }
-                    : { color: '#7B8EA8' }
-                }
-              >
-                {m === 'password' ? 'Password' : 'Magic link'}
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -241,11 +213,7 @@ export default function LoginPage() {
           >
             {pending
               ? mode === 'forgot-password' ? 'Sending…' : 'Signing in…'
-              : mode === 'password'
-              ? 'Sign in'
-              : mode === 'magic-link'
-              ? 'Send magic link'
-              : 'Send reset link'}
+              : mode === 'password' ? 'Sign in' : 'Send reset link'}
           </button>
 
           {/* Forgot password link — only in password mode, before confirmation */}

@@ -132,19 +132,25 @@ A shift can be split mid-way (e.g. supervisor handover). `canSplitShift` guards 
 ### Fuel Reconciliation (runs on supervisor shift submit)
 
 - **Formula 1 — Tank Inventory (per tank):** `Expected Closing Dip = Opening Dip + Deliveries − Meter Delta`. `variance_litres = actual − expected` (negative = loss)
-- **Formula 2 — Pump vs POS (per grade):** `variance_litres = pos_litres_sold − meter_delta`. `variance_zar = pos_revenue_zar − (meter_delta × price_per_litre)` (negative = shortfall)
+- **Formula 2 — Pump vs POS (per pump):** `variance_litres = pos_litres_sold − meter_delta_litres`. `variance_zar = pos_revenue_zar − (meter_delta_litres × sell_price_per_litre)` (negative = shortfall). Grade is denormalised from pump → tank.
 - Sign convention: negative = loss/shortfall throughout
 - Re-runs on `createOverride` or post-close delivery
-- `createOverride` mutates the source table then inserts into `ocr_overrides` (audit trail). Supports `reading_type`: `'pump'`, `'dip'`, `'pos_line'`
+- `createOverride` mutates the source table then inserts into `ocr_overrides` (audit trail). Supports `reading_type`: `'pump'`, `'dip'`, `'pos_line'`, `'dry_stock_line'`, `'stock_reading'`
 - Opening baseline: prior closed shift → `shift_baselines` table fallback
+
+### Cashier Workflow
+
+- Steps: Fuel POS → Stock POS → Stock Count → Summary
+- Only the Fuel POS step is required for submission (`canCashierSubmit` checks `progress.fuelPos` only). Stock POS and Stock Count are optional — cashiers can skip them and submit. Both steps remain navigable in the step indicator at all times.
+- After saving the Fuel POS Z-report the cashier is automatically redirected to the Stock POS step.
 
 ### Dry Stock Reconciliation (runs on cashier shift submit)
 
-`variance = actual_closing − (opening + deliveries − pos_units_sold)`. Opening baseline: prior cashier shift → `stock_baselines` fallback.
+`variance = actual_closing − (opening + deliveries − pos_units_sold)`. Opening baseline: prior cashier shift → `stock_baselines` fallback. Runs even if stock steps were skipped; produces no lines if no data was captured.
 
 ## Database
 
-See `docs/DATA_MODEL.md` for the full schema. Key tables: `shifts`, `pump_readings`, `dip_readings`, `pos_submissions`, `pos_submission_lines`, `reconciliations`, `reconciliation_tank_lines`, `reconciliation_grade_lines`, `deliveries`, `fuel_prices`, `products`, `stock_readings`, `reconciliation_stock_lines`, `shift_baselines`, `stock_baselines`.
+See `docs/DATA_MODEL.md` for the full schema. Key tables: `shifts`, `pump_readings`, `dip_readings`, `pos_submissions`, `pos_submission_lines`, `reconciliations`, `reconciliation_tank_lines`, `reconciliation_pump_lines`, `deliveries`, `fuel_prices`, `products`, `stock_readings`, `reconciliation_stock_lines`, `shift_baselines`, `stock_baselines`.
 
 RLS policies scope all data to `station_id` via `user_profiles`. Use `lib/supabase/admin.ts` (service role) only server-side when RLS must be bypassed.
 

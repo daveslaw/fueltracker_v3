@@ -163,6 +163,7 @@ One row per shift. Supports splitting for price changes via `part` and `shift_ty
 | `flag_comment` | text | Nullable; required when `is_flagged = true` |
 | `submitted_at` | timestamptz | Nullable; set when supervisor closes |
 | `cashier_submitted_at` | timestamptz | Nullable; set when cashier submits their side |
+| `has_manual_entry` | boolean | Default false; set true when any reading is saved with non-auto OCR status; write-once, never reset |
 | `created_at` | timestamptz | |
 
 **Unique constraint:** `(station_id, shift_date, period, part)`
@@ -237,19 +238,19 @@ One per shift. Holds the fuel Z-report photo and raw OCR output.
 **RLS:** Cashiers and supervisors can manage submissions for their station. Owners can read all.
 
 #### `pos_submission_lines`
-One row per fuel grade confirmed by the cashier or supervisor.
+One row per pump confirmed by the cashier or supervisor. Grade is derived via pump → tank → `fuel_grade_id`.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid PK | |
 | `pos_submission_id` | uuid → pos_submissions | Cascades on delete |
-| `fuel_grade_id` | text → fuel_grades | |
+| `pump_id` | uuid → pumps | Which pump dispensed this fuel |
 | `litres_sold` | numeric(10,2) | Must be ≥ 0 |
 | `revenue_zar` | numeric(12,2) | Must be ≥ 0 |
 | `ocr_status` | text | `'auto'` \| `'manual_override'` \| `'unreadable'` |
 | `created_at` | timestamptz | |
 
-**Unique constraint:** `(pos_submission_id, fuel_grade_id)`
+**Unique constraint:** `(pos_submission_id, pump_id)`
 
 **RLS:** Same pattern as `pos_submissions`.
 
@@ -376,29 +377,30 @@ Formula 1 result per tank.
 | `opening_dip` | numeric(10,2) | From prior closed shift or baseline |
 | `deliveries_received` | numeric(10,2) | Sum of deliveries to this tank during the shift |
 | `meter_delta` | numeric(10,2) | Sum of pump meter deltas for this tank's grade |
-| `expected_closing_dip` | numeric(10,2) | `opening_dip + deliveries_received − pos_litres_sold` |
+| `expected_closing_dip` | numeric(10,2) | `opening_dip + deliveries_received − meter_delta` |
 | `actual_closing_dip` | numeric(10,2) | Measured dip reading |
 | `variance_litres` | numeric(10,2) | `actual − expected`; negative = loss |
 
 **Unique constraint:** `(reconciliation_id, tank_id)`
 
-#### `reconciliation_grade_lines`
-Formula 2 result per fuel grade.
+#### `reconciliation_pump_lines`
+Formula 2 result per pump. Grade is denormalised from pump → tank.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid PK | |
 | `reconciliation_id` | uuid → reconciliations | Cascades on delete |
-| `fuel_grade_id` | text → fuel_grades | |
-| `meter_delta` | numeric(10,2) | Sum of `(close − open)` meter readings across all pumps for this grade |
-| `pos_litres_sold` | numeric(10,2) | From `pos_submission_lines` |
-| `variance_litres` | numeric(10,2) | `meter_delta − pos_litres_sold` |
+| `pump_id` | uuid → pumps | |
+| `fuel_grade_id` | text → fuel_grades | Denormalised from pump → tank |
+| `meter_delta_litres` | numeric(10,2) | `closing_reading − opening_reading` for this pump |
+| `pos_litres_sold` | numeric(10,2) | From `pos_submission_lines` for this pump |
+| `variance_litres` | numeric(10,2) | `pos_litres_sold − meter_delta_litres`; negative = unrecorded dispensing |
 | `sell_price_per_litre` | numeric(8,4) | Price at shift start |
-| `expected_revenue_zar` | numeric(14,2) | `meter_delta × sell_price_per_litre` |
-| `pos_revenue_zar` | numeric(14,2) | Revenue from POS Z-report |
-| `variance_zar` | numeric(14,2) | `expected_revenue_zar − pos_revenue_zar` |
+| `expected_revenue_zar` | numeric(14,2) | `meter_delta_litres × sell_price_per_litre` |
+| `pos_revenue_zar` | numeric(14,2) | Revenue from POS Z-report for this pump |
+| `variance_zar` | numeric(14,2) | `pos_revenue_zar − expected_revenue_zar`; negative = shortfall |
 
-**Unique constraint:** `(reconciliation_id, fuel_grade_id)`
+**Unique constraint:** `(reconciliation_id, pump_id)`
 
 #### `reconciliation_stock_lines`
 Dry stock variance per product per shift.
@@ -430,9 +432,10 @@ Dry stock variance per product per shift.
 |---|---|---|
 | `id` | uuid PK | |
 | `shift_id` | uuid → shifts | Cascades on delete |
-| `reading_id` | uuid | FK to `pump_readings.id` or `pos_submission_lines.id` |
-| `reading_type` | text | `'pump'` \| `'dip'` \| `'pos_line'` |
+| `reading_id` | uuid | FK to the overridden row in its source table |
+| `reading_type` | text | `'pump'` \| `'dip'` \| `'pos_line'` \| `'dry_stock_line'` \| `'stock_reading'` |
 | `field_name` | text | Nullable; for `pos_line` overrides: `'litres_sold'` or `'revenue_zar'` |
+| `pump_id` | uuid → pumps | Nullable; set for `pos_line` overrides to identify the pump |
 | `original_value` | numeric(14,2) | Value before override |
 | `override_value` | numeric(14,2) | Corrected value |
 | `reason` | text | Required |
@@ -505,7 +508,7 @@ stations
   │    ├─ stock_deliveries (product_id → products)
   │    ├─ reconciliations
   │    │    ├─ reconciliation_tank_lines (tank_id → tanks)
-  │    │    ├─ reconciliation_grade_lines (fuel_grade_id → fuel_grades)
+  │    │    ├─ reconciliation_pump_lines (pump_id → pumps; fuel_grade_id denormalised)
   │    │    └─ reconciliation_stock_lines (product_id → products)
   │    └─ ocr_overrides (overridden_by → user_profiles)
   ├─ deliveries (tank_id → tanks, recorded_by → user_profiles)
@@ -536,13 +539,13 @@ fuel_prices (station_id → stations, fuel_grade_id → fuel_grades, set_by → 
 | `pos_submissions` | Full CRUD own station | Full CRUD own station | Read all |
 | `pos_submission_lines` | Full CRUD own station | Full CRUD own station | Read all |
 | `dry_stock_pos_submissions` | Insert/Update own station | Read own station | Read all |
-| `pos_dry_stock_lines` | Insert own station | Read own station | Read all |
-| `stock_readings` | Full CRUD own station | Read own station | Read all |
+| `pos_dry_stock_lines` | Insert own station | Read own station | Read all + Update |
+| `stock_readings` | Full CRUD own station | Read own station | Read all + Update |
 | `stock_deliveries` | Insert/Delete own station | Read own station | Read all |
 | `deliveries` | — | Full CRUD own station | Full CRUD all |
 | `reconciliations` | — | Read own station | Read all |
 | `reconciliation_tank_lines` | — | Read own station | Read all |
-| `reconciliation_grade_lines` | — | Read own station | Read all |
+| `reconciliation_pump_lines` | — | Read own station | Read all |
 | `reconciliation_stock_lines` | — | Read own station | Read all |
 | `ocr_overrides` | — | Insert + read own station | Insert + read all |
 | `shift_baselines` | — | Read own station | Full CRUD |
