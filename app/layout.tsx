@@ -9,6 +9,7 @@ import { ThemeProvider } from '@/components/ThemeProvider'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { SentryUserContext } from '@/components/SentryUserContext'
 import { createClient } from '@/lib/supabase/server'
+import * as Sentry from '@sentry/nextjs'
 import './globals.css'
 
 const heading = Barlow_Condensed({
@@ -43,10 +44,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     const { data: profile } = await supabase
       .from('user_profiles')
       .select('role, station_id')
-      .eq('id', user.id)
+      .eq('user_id', user.id)
       .single()
     if (profile) {
       sentryUser = { id: user.id, role: profile.role, stationId: profile.station_id }
+      Sentry.setUser({ id: user.id, role: profile.role, stationId: profile.station_id ?? undefined })
     }
   }
 

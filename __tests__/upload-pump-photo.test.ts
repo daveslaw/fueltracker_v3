@@ -7,11 +7,29 @@ vi.mock('@/lib/ocr', () => ({ recogniser: {} }))
 
 import { createClient } from '@/lib/supabase/server'
 
-const mockFile = { arrayBuffer: async () => new ArrayBuffer(4) }
+const mockFile = new File([new ArrayBuffer(4)], 'photo.jpg', { type: 'image/jpeg' })
 
-function mockSupabase(user: object | null = { id: 'u1' }) {
+function makeChain(data: unknown) {
+  const chain: Record<string, unknown> = {}
+  const terminal = () => Promise.resolve({ data, error: null })
+  ;['select', 'eq', 'neq', 'order', 'limit'].forEach(m => { chain[m] = () => chain })
+  chain['single'] = terminal
+  chain['maybeSingle'] = terminal
+  return chain
+}
+
+function mockSupabase(
+  user: object | null = { id: 'u1' },
+  options: { shiftData?: object | null } = {},
+) {
+  const { shiftData = { id: 'shift-1' } } = options
   vi.mocked(createClient).mockResolvedValue({
     auth: { getUser: async () => ({ data: { user } }) },
+    from: (table: string) => {
+      if (table === 'user_profiles') return makeChain({ station_id: 'station-1' })
+      if (table === 'shifts') return makeChain(shiftData)
+      return makeChain(null)
+    },
     storage: {
       from: () => ({
         upload: async () => ({ error: null }),
@@ -73,5 +91,19 @@ describe('pump-photo upload route', () => {
     const handler = makeHandler(fake)
     const res = await handler(makeRequest() as any)
     expect(res.status).toBe(401)
+  })
+
+  it('disallowed file type → 400', async () => {
+    const handler = makeHandler(fake)
+    const badFile = new File(['data'], 'doc.pdf', { type: 'application/pdf' })
+    const res = await handler(makeRequest({ file: badFile }) as any)
+    expect(res.status).toBe(400)
+  })
+
+  it('wrong-station shiftId → 403', async () => {
+    mockSupabase({ id: 'u1' }, { shiftData: null })
+    const handler = makeHandler(fake)
+    const res = await handler(makeRequest() as any)
+    expect(res.status).toBe(403)
   })
 })

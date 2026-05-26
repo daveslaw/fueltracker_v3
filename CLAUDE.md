@@ -96,6 +96,7 @@ lib/
   tank-trends.ts              # Tank trend calculations
   user-management.ts          # User CRUD utilities
   middleware-utils.ts         # Role-based routing helpers (used by middleware.ts)
+  upload-validation.ts        # validateUpload(file) — MIME allowlist + 5 MB size cap, used by all upload routes
   csv-export.ts
   idb-queue.ts|offline-queue.ts
 
@@ -176,6 +177,7 @@ RLS policies scope all data to `station_id` via `user_profiles`. Use `lib/supaba
 - `lib/validity-window.ts` — `selectActiveAt`, `hasChangeInWindow`, `hasRangeOverlap`
 - `lib/pricing.ts` — `selectActivePriceAt`, `hasPriceChangeDuringWindow`, `hasPriceRangeOverlap`
 - `lib/workflow-steps.ts` — `buildShiftCloseSteps`, `buildCashierSteps`
+- `lib/upload-validation.ts` — `validateUpload` (MIME allowlist + 5 MB cap)
 
 ## Testing
 

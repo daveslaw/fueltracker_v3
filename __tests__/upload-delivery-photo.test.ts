@@ -7,16 +7,32 @@ import { createClient } from '@/lib/supabase/server'
 
 const mockFile = new File(['data'], 'slip.jpg', { type: 'image/jpeg' })
 
+function makeChain(data: unknown) {
+  const chain: Record<string, unknown> = {}
+  const terminal = () => Promise.resolve({ data, error: null })
+  ;['select', 'eq', 'neq', 'order', 'limit'].forEach(m => { chain[m] = () => chain })
+  chain['single'] = terminal
+  chain['maybeSingle'] = terminal
+  return chain
+}
+
 function mockSupabase(
   user: object | null = { id: 'u1' },
   uploadError: { message: string } | null = null,
+  options: { shiftData?: object | null } = {},
 ) {
+  const { shiftData = { id: 'shift-1' } } = options
   const fromSpy = vi.fn().mockReturnValue({
     upload: vi.fn().mockResolvedValue({ error: uploadError }),
     getPublicUrl: vi.fn().mockReturnValue({ data: { publicUrl: 'https://example.com/delivery.jpg' } }),
   })
   vi.mocked(createClient).mockResolvedValue({
     auth: { getUser: async () => ({ data: { user } }) },
+    from: (table: string) => {
+      if (table === 'user_profiles') return makeChain({ station_id: 'station-1' })
+      if (table === 'shifts') return makeChain(shiftData)
+      return makeChain(null)
+    },
     storage: { from: fromSpy },
   } as any)
   return { fromSpy }
@@ -83,5 +99,17 @@ describe('delivery-photo upload route', () => {
     const body = await res.json()
     expect(res.status).toBe(500)
     expect(body.error).toBe('Bucket not found')
+  })
+
+  it('disallowed file type → 400', async () => {
+    const badFile = new File(['data'], 'doc.pdf', { type: 'application/pdf' })
+    const res = await POST(makeRequest({ file: badFile }) as any)
+    expect(res.status).toBe(400)
+  })
+
+  it('wrong-station shiftId → 403', async () => {
+    mockSupabase({ id: 'u1' }, null, { shiftData: null })
+    const res = await POST(makeRequest() as any)
+    expect(res.status).toBe(403)
   })
 })
