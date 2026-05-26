@@ -1,3 +1,5 @@
+import { selectActiveAt, hasChangeInWindow, hasRangeOverlap } from './validity-window'
+
 export interface PriceRow {
   station_id:           string
   fuel_grade_id:        string
@@ -17,14 +19,7 @@ export function selectActivePriceAt(
   prices: PriceRow[],
   asOf: string,
 ): { sell_price_per_litre: number; cost_per_litre: number } | null {
-  const asOfMs = new Date(asOf).getTime()
-
-  const match = prices.find(p => {
-    const fromMs = new Date(p.valid_from).getTime()
-    const toMs   = p.valid_to ? new Date(p.valid_to).getTime() : null
-    return fromMs <= asOfMs && (toMs === null || toMs > asOfMs)
-  })
-
+  const match = selectActiveAt(prices, asOf)
   return match
     ? { sell_price_per_litre: match.sell_price_per_litre, cost_per_litre: match.cost_per_litre }
     : null
@@ -39,12 +34,7 @@ export function hasPriceChangeDuringWindow(
   startedAt: string,
   submittedAt: string,
 ): boolean {
-  const startMs  = new Date(startedAt).getTime()
-  const submitMs = new Date(submittedAt).getTime()
-  return prices.some(p => {
-    const fromMs = new Date(p.valid_from).getTime()
-    return fromMs > startMs && fromMs < submitMs
-  })
+  return hasChangeInWindow(prices, startedAt, submittedAt)
 }
 
 /**
@@ -57,17 +47,5 @@ export function hasPriceRangeOverlap(
   existing: Pick<PriceRow, 'valid_from' | 'valid_to'>[],
   newRow:   Pick<PriceRow, 'valid_from' | 'valid_to'>,
 ): boolean {
-  const newFromMs = new Date(newRow.valid_from).getTime()
-  const newToMs   = newRow.valid_to ? new Date(newRow.valid_to).getTime() : null
-
-  return existing.some(e => {
-    const eFromMs = new Date(e.valid_from).getTime()
-    const eToMs   = e.valid_to ? new Date(e.valid_to).getTime() : null
-
-    // Existing ends at or before new starts → no overlap
-    if (eToMs !== null && eToMs <= newFromMs) return false
-    // New ends at or before existing starts → no overlap
-    if (newToMs !== null && newToMs <= eFromMs) return false
-    return true
-  })
+  return hasRangeOverlap(existing, newRow)
 }

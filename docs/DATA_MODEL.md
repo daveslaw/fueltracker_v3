@@ -521,6 +521,19 @@ fuel_prices (station_id → stations, fuel_grade_id → fuel_grades, set_by → 
 
 ---
 
+## Postgres Functions
+
+### `persist_reconciliation(p_shift_id uuid, p_tank_lines jsonb, p_pump_lines jsonb) → void`
+
+Atomically writes a full reconciliation result in a single transaction:
+1. Upserts the `reconciliations` header row (keyed on `shift_id`)
+2. Replaces all `reconciliation_tank_lines` for that reconciliation
+3. Replaces all `reconciliation_pump_lines` for that reconciliation
+
+Called by `createSupabaseWriter` in `lib/reconciliation-runner.ts` via `db.rpc('persist_reconciliation', ...)`. Defined with `SECURITY DEFINER`; `EXECUTE` granted to `service_role` only.
+
+---
+
 ## RLS Summary
 
 | Table | Cashier | Supervisor | Owner |

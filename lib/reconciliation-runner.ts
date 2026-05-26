@@ -323,34 +323,12 @@ export function createSupabaseRepository(db: SupabaseClient): ShiftDataRepositor
 export function createSupabaseWriter(db: SupabaseClient): ReconciliationWriter {
   return {
     async persist(shiftId, result) {
-      // Upsert reconciliation header
-      const { data: rec, error: recErr } = await db
-        .from('reconciliations')
-        .upsert({
-          shift_id:   shiftId,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'shift_id' })
-        .select('id')
-        .single()
-      if (recErr) return { error: recErr.message }
-
-      // TODO: wrap these three writes in a Postgres RPC for atomicity (#19)
-
-      // Replace tank lines
-      await db.from('reconciliation_tank_lines').delete().eq('reconciliation_id', rec.id)
-      const { error: tankErr } = await db.from('reconciliation_tank_lines').insert(
-        result.tankLines.map(l => ({ reconciliation_id: rec.id, ...l }))
-      )
-      if (tankErr) return { error: tankErr.message }
-
-      // Replace pump lines
-      await db.from('reconciliation_pump_lines').delete().eq('reconciliation_id', rec.id)
-      const { error: pumpErr } = await db.from('reconciliation_pump_lines').insert(
-        result.pumpLines.map(l => ({ reconciliation_id: rec.id, ...l }))
-      )
-      if (pumpErr) return { error: pumpErr.message }
-
-      return {}
+      const { error } = await db.rpc('persist_reconciliation', {
+        p_shift_id:   shiftId,
+        p_tank_lines: result.tankLines,
+        p_pump_lines: result.pumpLines,
+      })
+      return error ? { error: error.message } : {}
     },
   }
 }

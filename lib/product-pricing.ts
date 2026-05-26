@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { selectActiveAt } from './validity-window'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -23,14 +24,7 @@ export function selectActiveProductPriceAt(
   rows: ProductPriceRow[],
   at: string,
 ): ProductPriceResult | null {
-  const asOfMs = new Date(at).getTime()
-
-  const match = rows.find(r => {
-    const fromMs = new Date(r.valid_from).getTime()
-    const toMs   = r.valid_to ? new Date(r.valid_to).getTime() : null
-    return fromMs <= asOfMs && (toMs === null || toMs > asOfMs)
-  })
-
+  const match = selectActiveAt(rows, at)
   return match ? { cost_price: match.cost_price, sell_price: match.sell_price } : null
 }
 

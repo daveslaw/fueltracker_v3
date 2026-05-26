@@ -77,7 +77,8 @@ lib/
   reconciliation-runner.ts    # Orchestrates reconciliation on submit
   deliveries.ts               # Fuel delivery CRUD + getShiftPeriod + validateDeliveryInput
   delivery-report.ts          # getDeliveryReport — paginated list with totals + station subtotals
-  pricing.ts                  # selectActivePriceAt, hasPriceChangeDuringWindow, hasPriceRangeOverlap
+  validity-window.ts          # selectActiveAt<T>, hasChangeInWindow, hasRangeOverlap — generic validity-window logic
+  pricing.ts                  # selectActivePriceAt, hasPriceChangeDuringWindow, hasPriceRangeOverlap (delegate to validity-window)
   owner-reports.ts            # buildStationDayStatus, countPendingShiftsPerStation,
                               #   buildFinancialLines, buildDailyFuelReport, isReportPartial
   aggregate-reports.ts        # Cross-station aggregation
@@ -137,6 +138,7 @@ A shift can be split mid-way (e.g. supervisor handover). `canSplitShift` guards 
 - Re-runs on `createOverride` or post-close delivery
 - `createOverride` mutates the source table then inserts into `ocr_overrides` (audit trail). Supports `reading_type`: `'pump'`, `'dip'`, `'pos_line'`, `'dry_stock_line'`, `'stock_reading'`
 - Opening baseline: prior closed shift → `shift_baselines` table fallback
+- Persistence is atomic via the `persist_reconciliation(shift_id, tank_lines, pump_lines)` Postgres RPC — all three writes (header upsert + tank lines + pump lines) succeed or fail together
 
 ### Cashier Workflow
 
@@ -171,7 +173,8 @@ RLS policies scope all data to `station_id` via `user_profiles`. Use `lib/supaba
 - `lib/owner-reports.ts` — `buildStationDayStatus`, `countPendingShiftsPerStation`, `buildFinancialLines`, `isReportPartial`
 - `lib/fuel-control-report.ts` — `buildFuelControlRows`, `buildDaySubtotals`
 - `lib/reconciliation.ts` — core fuel variance formulas
-- `lib/pricing.ts` — `selectActivePriceAt`
+- `lib/validity-window.ts` — `selectActiveAt`, `hasChangeInWindow`, `hasRangeOverlap`
+- `lib/pricing.ts` — `selectActivePriceAt`, `hasPriceChangeDuringWindow`, `hasPriceRangeOverlap`
 - `lib/workflow-steps.ts` — `buildShiftCloseSteps`, `buildCashierSteps`
 
 ## Testing
