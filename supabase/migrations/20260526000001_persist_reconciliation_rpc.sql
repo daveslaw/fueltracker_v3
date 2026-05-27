@@ -53,4 +53,4 @@ $$;
 
 grant execute on function public.persist_reconciliation(uuid, jsonb, jsonb)
   to service_role;
--- 
+ 
