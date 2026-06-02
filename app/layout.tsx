@@ -8,6 +8,7 @@ import { FailedSyncBanner } from '@/components/FailedSyncBanner'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { SentryUserContext } from '@/components/SentryUserContext'
+import { FeedbackProvider } from '@/components/FeedbackProvider'
 import { createClient } from '@/lib/supabase/server'
 import * as Sentry from '@sentry/nextjs'
 import './globals.css'
@@ -61,20 +62,22 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <ThemeProvider>
           <ToastProvider>
             <OfflineQueueProvider>
-              <ServiceWorkerRegistrar />
-              {sentryUser && (
-                <SentryUserContext
-                  userId={sentryUser.id}
-                  role={sentryUser.role}
-                  stationId={sentryUser.stationId}
-                />
-              )}
-              <div className="fixed top-3 right-3 z-40 flex items-center gap-2">
-                <ThemeToggle />
-                <PendingBadge />
-              </div>
-              <FailedSyncBanner />
-              {children}
+              <FeedbackProvider>
+                <ServiceWorkerRegistrar />
+                {sentryUser && (
+                  <SentryUserContext
+                    userId={sentryUser.id}
+                    role={sentryUser.role}
+                    stationId={sentryUser.stationId}
+                  />
+                )}
+                <div className="fixed top-3 right-3 z-40 flex items-center gap-2">
+                  <ThemeToggle />
+                  <PendingBadge />
+                </div>
+                <FailedSyncBanner />
+                {children}
+              </FeedbackProvider>
             </OfflineQueueProvider>
           </ToastProvider>
         </ThemeProvider>
