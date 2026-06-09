@@ -1,0 +1,20 @@
+Files created (in docs/user-guide/ within the project, as the target outputs directory outside the project was not writable):
+
+1. index.md
+   Overview guide: covers all three roles, a glossary of domain terms (shift, dip reading, pump meter, POS Z-report, reconciliation, variance, fuel grade), and login instructions including first-time invite flow.
+
+2. supervisor-guide.md
+   Full shift-close workflow covering all four steps (pump readings, dip readings, deliveries, review and submit), reconciliation result interpretation (tank inventory table and pump vs POS table), flagging, corrections (overrides with audit trail), and shift splitting for price changes. Includes a troubleshooting section.
+
+3. cashier-guide.md
+   Covers the three cashier steps (Fuel POS Z-report, Dry stock POS Z-report, Stock count), the submission flow, the post-submission summary screen, and a troubleshooting section. Notes that only Fuel POS is required to submit; dry stock steps are optional.
+
+4. owner-guide.md
+   Covers the Owner Dashboard (inventory cards, flagged shift alerts, pending counts), creating shift slots, all report types (Fuel Control, Dry Stock, Deliveries, Weekly, Monthly, Shift History, Tank Trends, CSV export), station configuration (stations, tanks, pumps, fuel pricing with validity windows, dry stock products, baselines), and user management (inviting users, deactivating users). Includes a troubleshooting section.
+
+Notable decisions:
+- Wrote to docs/user-guide/ in the project instead of the specified outputs directory, because writes outside the project working directory were blocked by tool permissions. The content is identical to what would have been written to the outputs path.
+- Used a glossary in the index rather than repeating definitions in each guide.
+- Confirmed all button labels, field names, and screen names from actual page source code before using them (e.g. "Submit and close shift", "Begin close check", "Price change split", "Fuel POS Z-report", "Dry stock POS Z-report", "Stock count").
+- Noted that the cashier's Fuel POS step is the only required step for submission, consistent with the canCashierSubmit logic in the codebase.
+- Did not invent screenshot references; omitted screenshot placeholders since no actual screenshots exist.
