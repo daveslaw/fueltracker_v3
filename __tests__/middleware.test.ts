@@ -31,6 +31,40 @@ describe('resolveRedirect', () => {
     })
   })
 
+  describe('tablet smart routing from /', () => {
+    it('tracer bullet: cashier with active shift is redirected to fuel-pos for that shift', () => {
+      expect(
+        resolveRedirect({ role: 'cashier', is_active: true }, '/', { id: 'shift-abc' })
+      ).toBe('/cashier/shift-abc/fuel-pos')
+    })
+
+    it('cashier with no active shift falls back to /cashier', () => {
+      expect(resolveRedirect({ role: 'cashier', is_active: true }, '/', null)).toBe('/cashier')
+    })
+
+    it('supervisor with active shift is redirected to close/summary for that shift', () => {
+      expect(
+        resolveRedirect({ role: 'supervisor', is_active: true }, '/', { id: 'shift-xyz' })
+      ).toBe('/shift/shift-xyz/close/summary')
+    })
+
+    it('supervisor with no active shift falls back to /shift', () => {
+      expect(resolveRedirect({ role: 'supervisor', is_active: true }, '/', null)).toBe('/shift')
+    })
+
+    it('owner with active shift still goes to /dashboard — owners are unaffected', () => {
+      expect(
+        resolveRedirect({ role: 'owner', is_active: true }, '/', { id: 'shift-xyz' })
+      ).toBe('/dashboard')
+    })
+
+    it('active shift is ignored for non-root paths', () => {
+      expect(
+        resolveRedirect({ role: 'cashier', is_active: true }, '/cashier', { id: 'shift-abc' })
+      ).toBeNull()
+    })
+  })
+
   describe('role home redirects from /', () => {
     it('redirects active supervisor from / to /shift', () => {
       expect(resolveRedirect({ role: 'supervisor', is_active: true }, '/')).toBe('/shift')
@@ -64,6 +98,24 @@ describe('resolveRedirect', () => {
 
     it('redirects inactive cashier to /login', () => {
       expect(resolveRedirect({ role: 'cashier', is_active: false }, '/cashier')).toBe('/login')
+    })
+  })
+
+  describe('/setup — owner-only', () => {
+    it('allows owner on /setup', () => {
+      expect(resolveRedirect({ role: 'owner', is_active: true }, '/setup')).toBeNull()
+    })
+
+    it('redirects supervisor away from /setup to /shift', () => {
+      expect(resolveRedirect({ role: 'supervisor', is_active: true }, '/setup')).toBe('/shift')
+    })
+
+    it('redirects cashier away from /setup to /cashier', () => {
+      expect(resolveRedirect({ role: 'cashier', is_active: true }, '/setup')).toBe('/cashier')
+    })
+
+    it('unauthenticated user visiting /setup redirects to /login', () => {
+      expect(resolveRedirect(null, '/setup')).toBe('/login')
     })
   })
 })

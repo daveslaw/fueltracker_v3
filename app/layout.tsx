@@ -8,6 +8,7 @@ import { FailedSyncBanner } from '@/components/FailedSyncBanner'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { SentryUserContext } from '@/components/SentryUserContext'
+import { IdleTimeoutGuard } from '@/components/IdleTimeoutGuard'
 import { createClient } from '@/lib/supabase/server'
 import * as Sentry from '@sentry/nextjs'
 import './globals.css'
@@ -73,6 +74,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <ThemeToggle />
                 <PendingBadge />
               </div>
+              <IdleTimeoutGuard />
               <FailedSyncBanner />
               {children}
             </OfflineQueueProvider>

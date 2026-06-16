@@ -8,7 +8,9 @@ export function validateInvite(input: {
   email: string
   role: string
   station_id: string
+  full_name: string
 }): string | null {
+  if (!input.full_name || !input.full_name.trim()) return 'A full name is required'
   if (!input.email.trim()) return 'A valid email is required'
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim())) return 'A valid email is required'
   if (!(INVITABLE_ROLES as readonly string[]).includes(input.role))
@@ -36,6 +38,21 @@ export function resolveCallbackRedirect(code: string | null, exchangeFailed: boo
 export function validatePasswordInput(password: string, confirm: string): string | null {
   if (!password || password.length < 8) return 'Password must be at least 8 characters.'
   if (password !== confirm) return 'Passwords do not match.'
+  return null
+}
+
+// ── validateFullName ─────────────────────────────────────────────────────────
+
+export function validateFullName(name: string): string | null {
+  if (!name || !name.trim()) return 'A full name is required'
+  return null
+}
+
+// ── validatePin ──────────────────────────────────────────────────────────────
+
+export function validatePin(pin: string): string | null {
+  if (!pin || pin.length !== 4) return 'PIN must be exactly 4 digits'
+  if (!/^\d{4}$/.test(pin)) return 'PIN must contain only digits'
   return null
 }
 

@@ -26,6 +26,11 @@ export function InviteForm({ stations }: { stations: Station[] }) {
   return (
     <form onSubmit={handleSubmit} className="flex flex-wrap gap-3 items-end">
       <div>
+        <label className="block text-sm font-medium mb-1">Full name</label>
+        <input name="full_name" type="text" required placeholder="Maria Sithole"
+          className="rounded border px-3 py-2 text-sm w-44" />
+      </div>
+      <div>
         <label className="block text-sm font-medium mb-1">Email</label>
         <input name="email" type="email" required placeholder="user@example.com"
           className="rounded border px-3 py-2 text-sm w-56" />

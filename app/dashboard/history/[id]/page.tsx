@@ -42,7 +42,8 @@ export default async function ShiftAuditPage({ params }: Props) {
       id, period, shift_date, status, submitted_at, is_flagged, flag_comment,
       station_id, shift_type, part,
       stations ( name ),
-      user_profiles!supervisor_id ( email )
+      supervisor:user_profiles!supervisor_id ( full_name, email ),
+      cashier:user_profiles!cashier_id ( full_name )
     `)
     .eq('id', shiftId)
     .single()
@@ -135,7 +136,10 @@ export default async function ShiftAuditPage({ params }: Props) {
         <div>
           <h1 className="text-xl font-semibold mt-1">{shiftLabel}</h1>
           <p className="text-sm text-muted-foreground">
-            {ss.stations?.name} · {ss.user_profiles?.email ?? '—'}
+            {ss.stations?.name} · {ss.supervisor?.full_name ?? ss.supervisor?.email ?? '—'}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Cashier: {ss.cashier?.full_name ?? '—'}
           </p>
           {shift.submitted_at && (
             <p className="text-xs text-muted-foreground">

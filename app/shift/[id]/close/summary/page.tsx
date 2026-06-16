@@ -9,6 +9,7 @@ import { canFlag, canOverride } from '@/lib/supervisor-review'
 import { submitShift, flagShift, unflagShift, createOverride } from '../../../actions'
 import { getShiftDeliveries } from '@/lib/deliveries'
 import { AddDeliveryForm } from '../deliveries/AddDeliveryForm'
+import { HandoffPrompt } from '@/components/HandoffPrompt'
 import Link from 'next/link'
 
 type Props = { params: Promise<{ id: string }> }
@@ -483,6 +484,11 @@ export default async function CloseSummaryPage({ params }: Props) {
         className="block w-full text-center rounded border py-2.5 text-sm font-medium">
         Back to shifts
       </Link>
+
+      <HandoffPrompt
+        message="Shift complete. Sign out when done."
+        ctaLabel="Sign out"
+      />
     </main>
   )
 }

@@ -6,6 +6,7 @@ import { buildShiftCloseSteps } from '@/lib/workflow-steps'
 import { StepIndicator } from '@/components/StepIndicator'
 import { deleteDelivery } from '../../../actions'
 import { AddDeliveryForm } from './AddDeliveryForm'
+import { HandoffPrompt } from '@/components/HandoffPrompt'
 import Link from 'next/link'
 
 type Props = { params: Promise<{ id: string }> }
@@ -126,6 +127,11 @@ export default async function CloseDeliveriesPage({ params }: Props) {
           Review &amp; submit
         </Link>
       </div>
+
+      <HandoffPrompt
+        message="Pass device to cashier."
+        ctaLabel="Hand off to cashier"
+      />
     </main>
   )
 }

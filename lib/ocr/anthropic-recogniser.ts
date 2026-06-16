@@ -7,8 +7,20 @@ import { parseMeterText } from './parse-meter'
 import { parseNozzlePosText } from './parse-nozzle-pos'
 import { parseDryStockOcrResponse } from './dry-stock-ocr'
 
-const METER_PROMPT =
-  'This is a photo of a fuel pump dispenser. List every number you can read in the image, one per line, digits only (no units, no labels). If you cannot read any numbers at all, return UNREADABLE.'
+const METER_PROMPT = [
+  'This is a photo of a South African fuel pump dispenser.',
+  'Your task is to read the mechanical odometer-style roller drum — the totalizer — which shows the cumulative litres dispensed through this nozzle since installation.',
+  'The totalizer is a row of 5 to 7 digit wheels (like a car odometer) mounted behind a small clear window on the pump face. It is NOT the price-per-litre sticker, NOT the pump number label, and NOT any transaction amount display.',
+  'Ignore all numbers except the totalizer drum.',
+  'If every digit on the roller is fully settled, respond with exactly:',
+  'READING: <number>',
+  'If one or more digits appear to be mid-roll (partially between two positions), respond with exactly:',
+  'READING: <number> UNCERTAIN',
+  'where <number> is your best reading of the partially-rolled digits.',
+  'If the roller drum is obscured, too dark, or genuinely impossible to read, respond with exactly:',
+  'UNREADABLE',
+  'Output only one of those three forms. No explanation, no units, no extra text.',
+].join('\n')
 
 const POS_PROMPT = [
   'This is a fuel POS Z-report from a South African petrol station.',

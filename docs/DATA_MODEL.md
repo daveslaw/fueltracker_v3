@@ -25,8 +25,12 @@ Extends `auth.users` with application-level role and station assignment.
 | `user_id` | uuid → auth.users | Unique; cascades on delete |
 | `role` | text | `'cashier'` \| `'supervisor'` \| `'owner'` |
 | `email` | text | Nullable; denormalised from auth.users for display |
+| `full_name` | text | Display name shown in the User Picker; backfilled from email prefix for existing rows |
 | `station_id` | uuid → stations | Nullable; which station this user belongs to |
 | `is_active` | boolean | Default true; set false to deactivate |
+| `pin_hash` | text | Nullable; bcrypt hash of the user's 4-digit tablet PIN — null until owner sets one |
+| `pin_attempts` | smallint | Default 0; consecutive failed PIN entries; reset to 0 on success or owner reset |
+| `pin_locked` | boolean | Default false; set true after 10 failed attempts; only owner can clear |
 | `created_at` | timestamptz | |
 
 **RLS:** Users read their own row. Owners read all rows.
@@ -163,6 +167,7 @@ One row per shift. Supports splitting for price changes via `part` and `shift_ty
 | `flag_comment` | text | Nullable; required when `is_flagged = true` |
 | `submitted_at` | timestamptz | Nullable; set when supervisor closes |
 | `cashier_submitted_at` | timestamptz | Nullable; set when cashier submits their side |
+| `cashier_id` | uuid → user_profiles | Nullable; set when cashier submits — the individual cashier who handled this shift |
 | `has_manual_entry` | boolean | Default false; set true when any reading is saved with non-auto OCR status; write-once, never reset |
 | `created_at` | timestamptz | |
 

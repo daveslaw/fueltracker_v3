@@ -2,6 +2,9 @@
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { makePinSignIn } from '@/lib/pin-sign-in'
+import type { PinSignInResult } from '@/lib/pin-sign-in'
 
 export async function signInWithPassword(formData: FormData) {
   const supabase = await createClient()
@@ -49,4 +52,9 @@ export async function signOut() {
   const supabase = await createClient()
   await supabase.auth.signOut()
   redirect('/login')
+}
+
+export async function pinSignIn(userId: string, pin: string): Promise<PinSignInResult> {
+  const supabase = createAdminClient()
+  return makePinSignIn(supabase)(userId, pin)
 }

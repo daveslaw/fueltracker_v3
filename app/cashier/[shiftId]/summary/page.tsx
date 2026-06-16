@@ -4,6 +4,7 @@ import Link                          from 'next/link'
 import { getCashierSubmissionState } from '@/lib/cashier-submission'
 import { buildCashierSteps }         from '@/lib/workflow-steps'
 import { StepIndicator }             from '@/components/StepIndicator'
+import { HandoffPrompt }             from '@/components/HandoffPrompt'
 
 type Props = { params: Promise<{ shiftId: string }> }
 
@@ -126,6 +127,11 @@ export default async function CashierSummaryPage({ params }: Props) {
       >
         Back
       </Link>
+
+      <HandoffPrompt
+        message="Pass device back to supervisor."
+        ctaLabel="Hand off to supervisor"
+      />
     </main>
   )
 }

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { signInWithPassword, resetPassword } from './actions'
 import { createClient } from '@/lib/supabase/client'
+import { getStationId } from '@/lib/station-device'
+import { UserPicker } from '@/components/UserPicker'
 
 type AuthMode = 'password' | 'forgot-password'
 
@@ -18,6 +20,12 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [stationId, setStationId] = useState<string | null | undefined>(undefined)
+
+  // Detect station binding — undefined = still checking, null = no binding
+  useEffect(() => {
+    setStationId(getStationId())
+  }, [])
 
   // Handle implicit-flow invite tokens delivered as URL hash fragments.
   // Supabase admin inviteUserByEmail uses implicit flow (not PKCE), so the
@@ -54,12 +62,9 @@ export default function LoginPage() {
     if (result && 'message' in result) setMessage(result.message)
   }
 
-  return (
-    <main
-      className="relative flex min-h-screen items-center justify-center p-4 overflow-hidden"
-      style={{ background: '#0B0F1A' }}
-    >
-      {/* Canopy glow — ambient light from above */}
+  const background = (
+    <>
+      {/* Canopy glow */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
@@ -67,8 +72,7 @@ export default function LoginPage() {
             'radial-gradient(ellipse 80% 45% at 50% -5%, rgba(245,159,0,0.09) 0%, transparent 65%)',
         }}
       />
-
-      {/* Subtle grid — operations panel texture */}
+      {/* Grid texture */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
@@ -78,12 +82,74 @@ export default function LoginPage() {
           backgroundSize: '48px 48px',
         }}
       />
+    </>
+  )
+
+  // Show nothing while we detect the station binding
+  if (stationId === undefined) {
+    return (
+      <main
+        className="relative flex min-h-screen items-center justify-center p-4 overflow-hidden"
+        style={{ background: '#0B0F1A' }}
+      >
+        {background}
+      </main>
+    )
+  }
+
+  // Station binding present → User Picker
+  if (stationId) {
+    return (
+      <main
+        className="relative flex min-h-screen items-center justify-center p-4 overflow-hidden"
+        style={{ background: '#0B0F1A' }}
+      >
+        {background}
+        <div className="relative z-10 w-full max-w-sm">
+          <div className="mb-8">
+            <div className="flex items-center gap-2.5 mb-4">
+              <div
+                style={{
+                  width: 10,
+                  height: 10,
+                  background: '#F59F00',
+                  borderRadius: 2,
+                  transform: 'rotate(45deg)',
+                  flexShrink: 0,
+                }}
+              />
+              <span
+                className="text-xs font-semibold tracking-[0.22em] uppercase"
+                style={{ color: '#F59F00' }}
+              >
+                FuelTracker
+              </span>
+            </div>
+            <h1
+              className="text-3xl font-bold leading-none tracking-wide"
+              style={{ color: '#E8EDF4' }}
+            >
+              Who&apos;s working?
+            </h1>
+          </div>
+          <UserPicker stationId={stationId} />
+        </div>
+      </main>
+    )
+  }
+
+  // No station binding → standard password login
+  return (
+    <main
+      className="relative flex min-h-screen items-center justify-center p-4 overflow-hidden"
+      style={{ background: '#0B0F1A' }}
+    >
+      {background}
 
       <div className="relative z-10 w-full max-w-sm">
         {/* Brand mark */}
         <div className="mb-10">
           <div className="flex items-center gap-2.5 mb-4">
-            {/* Rotated diamond — fuel rhombus */}
             <div
               style={{
                 width: 10,
@@ -127,7 +193,6 @@ export default function LoginPage() {
             {inviteExpiredError}
           </div>
         )}
-
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -216,7 +281,6 @@ export default function LoginPage() {
               : mode === 'password' ? 'Sign in' : 'Send reset link'}
           </button>
 
-          {/* Forgot password link — only in password mode, before confirmation */}
           {mode === 'password' && !message && (
             <button
               type="button"
@@ -228,7 +292,6 @@ export default function LoginPage() {
             </button>
           )}
 
-          {/* Back to sign in — shown after reset confirmation or in forgot-password mode */}
           {mode === 'forgot-password' && (
             <button
               type="button"

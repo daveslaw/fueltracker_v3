@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { validateInvite, getUserStatus, buildInviteCallbackUrl, resolveCallbackRedirect, validatePasswordInput } from '@/lib/user-management'
+import { validateInvite, getUserStatus, buildInviteCallbackUrl, resolveCallbackRedirect, validatePasswordInput, validateFullName, validatePin } from '@/lib/user-management'
 
 // ── validateInvite ───────────────────────────────────────────────────────────
 
 describe('validateInvite', () => {
-  const validSupervisor = { email: 'bob@example.com', role: 'supervisor', station_id: 'some-uuid' }
+  const validSupervisor = { email: 'bob@example.com', role: 'supervisor', station_id: 'some-uuid', full_name: 'Bob Smith' }
 
   it('tracer bullet: valid supervisor invite returns null', () => {
     expect(validateInvite(validSupervisor)).toBeNull()
@@ -40,6 +40,14 @@ describe('validateInvite', () => {
 
   it('missing station_id for supervisor returns error', () => {
     expect(validateInvite({ ...validSupervisor, station_id: '' })).toMatch(/station/)
+  })
+
+  it('missing full_name returns error', () => {
+    expect(validateInvite({ ...validSupervisor, full_name: '' })).toMatch(/name/)
+  })
+
+  it('whitespace-only full_name returns error', () => {
+    expect(validateInvite({ ...validSupervisor, full_name: '   ' })).toMatch(/name/)
   })
 })
 
@@ -96,6 +104,46 @@ describe('validatePasswordInput', () => {
 
   it('empty password returns error', () => {
     expect(validatePasswordInput('', '')).toMatch(/8/)
+  })
+})
+
+// ── validateFullName ─────────────────────────────────────────────────────────
+
+describe('validateFullName', () => {
+  it('tracer bullet: valid name returns null', () => {
+    expect(validateFullName('Maria Sithole')).toBeNull()
+  })
+
+  it('empty string returns error', () => {
+    expect(validateFullName('')).toMatch(/name/)
+  })
+
+  it('whitespace-only string returns error', () => {
+    expect(validateFullName('   ')).toMatch(/name/)
+  })
+})
+
+// ── validatePin ──────────────────────────────────────────────────────────────
+
+describe('validatePin', () => {
+  it('tracer bullet: valid 4-digit numeric PIN returns null', () => {
+    expect(validatePin('1234')).toBeNull()
+  })
+
+  it('non-numeric input returns error', () => {
+    expect(validatePin('12ab')).toMatch(/digit/)
+  })
+
+  it('fewer than 4 digits returns error', () => {
+    expect(validatePin('123')).toMatch(/4/)
+  })
+
+  it('more than 4 digits returns error', () => {
+    expect(validatePin('12345')).toMatch(/4/)
+  })
+
+  it('empty string returns error', () => {
+    expect(validatePin('')).toMatch(/4/)
   })
 })
 

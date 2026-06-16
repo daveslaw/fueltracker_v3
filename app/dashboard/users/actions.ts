@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertOwner } from '@/lib/auth-assert'
-import { validateInvite, INVITABLE_ROLES, buildInviteCallbackUrl } from '@/lib/user-management'
+import { validateInvite, validatePin, INVITABLE_ROLES, buildInviteCallbackUrl } from '@/lib/user-management'
+import { hashPin } from '@/lib/pin-auth'
 
 type ActionResult = { error: string } | { success: true }
 
@@ -16,8 +17,9 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
   const email = (formData.get('email') as string) ?? ''
   const role = (formData.get('role') as string) ?? ''
   const station_id = (formData.get('station_id') as string) ?? ''
+  const full_name = (formData.get('full_name') as string) ?? ''
 
-  const error = validateInvite({ email, role, station_id })
+  const error = validateInvite({ email, role, station_id, full_name })
   if (error) return { error }
 
   const admin = createAdminClient()
@@ -33,6 +35,7 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
     station_id,
     is_active: true,
     email: email.trim(),
+    full_name: full_name.trim(),
   })
   if (profileError) return { error: profileError.message }
 
@@ -59,6 +62,49 @@ export async function updateUserProfile(
   const { error } = await admin
     .from('user_profiles')
     .update({ role, station_id })
+    .eq('id', profileId)
+  if (error) return { error: error.message }
+
+  revalidatePath('/dashboard/users')
+  return { success: true }
+}
+
+// ── Set PIN ──────────────────────────────────────────────────────────────────
+
+export async function setUserPin(
+  profileId: string,
+  formData: FormData
+): Promise<ActionResult> {
+  await assertOwner(await createClient())
+
+  const pin = (formData.get('pin') as string) ?? ''
+  const confirm = (formData.get('pin_confirm') as string) ?? ''
+
+  const pinError = validatePin(pin)
+  if (pinError) return { error: pinError }
+  if (pin !== confirm) return { error: 'PINs do not match' }
+
+  const pin_hash = await hashPin(pin)
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('user_profiles')
+    .update({ pin_hash, pin_attempts: 0, pin_locked: false })
+    .eq('id', profileId)
+  if (error) return { error: error.message }
+
+  revalidatePath('/dashboard/users')
+  return { success: true }
+}
+
+// ── Unlock PIN ───────────────────────────────────────────────────────────────
+
+export async function unlockUserPin(profileId: string): Promise<ActionResult> {
+  await assertOwner(await createClient())
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('user_profiles')
+    .update({ pin_locked: false, pin_attempts: 0 })
     .eq('id', profileId)
   if (error) return { error: error.message }
 

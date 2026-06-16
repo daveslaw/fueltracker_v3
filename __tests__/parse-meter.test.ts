@@ -37,4 +37,16 @@ describe('parseMeterText', () => {
     const result = parseMeterText('1000\n54321\n2000')
     expect(result.value).toBe(54321)
   })
+
+  it('READING: <n> → confident auto result', () => {
+    expect(parseMeterText('READING: 45231')).toEqual({ value: 45231, confidence: 0.95, status: 'auto' })
+  })
+
+  it('READING: <n> UNCERTAIN → needs_review with reduced confidence', () => {
+    expect(parseMeterText('READING: 45231 UNCERTAIN')).toEqual({ value: 45231, confidence: 0.5, status: 'needs_review' })
+  })
+
+  it('READING: <n.d> → decimal totalizer, confident auto result', () => {
+    expect(parseMeterText('READING: 45231.4')).toEqual({ value: 45231.4, confidence: 0.95, status: 'auto' })
+  })
 })

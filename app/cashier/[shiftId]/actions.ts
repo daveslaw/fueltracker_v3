@@ -165,7 +165,7 @@ export async function submitCashierShift(shiftId: string): Promise<ActionResult>
 
   const { data: profile } = await supabase
     .from('user_profiles')
-    .select('station_id')
+    .select('id, station_id')
     .eq('user_id', user.id)
     .single()
   if (!profile) return { error: 'Profile not found' }
@@ -182,7 +182,7 @@ export async function submitCashierShift(shiftId: string): Promise<ActionResult>
 
   const { error: stampErr } = await supabase
     .from('shifts')
-    .update({ cashier_submitted_at: new Date().toISOString() })
+    .update({ cashier_submitted_at: new Date().toISOString(), cashier_id: profile.id })
     .eq('id', shiftId)
   if (stampErr) return { error: stampErr.message }
 

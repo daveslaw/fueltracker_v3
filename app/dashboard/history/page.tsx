@@ -45,7 +45,8 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
     .select(`
       id, shift_date, period, status, submitted_at, has_manual_entry,
       stations ( name ),
-      user_profiles!supervisor_id ( email )
+      supervisor:user_profiles!supervisor_id ( full_name, email ),
+      cashier:user_profiles!cashier_id ( full_name )
     `)
     .gte('shift_date', fromDate)
     .lte('shift_date', toDate)
@@ -151,6 +152,7 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
               <th className="text-left px-3 py-2">Station</th>
               <th className="text-left px-3 py-2">Period</th>
               <th className="text-left px-3 py-2">Supervisor</th>
+              <th className="text-left px-3 py-2">Cashier</th>
               <th className="text-left px-3 py-2">Submitted</th>
               <th className="text-left px-3 py-2">Status</th>
               <th className="text-right px-3 py-2">Tank var (L)</th>
@@ -160,12 +162,13 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
           </thead>
           <tbody className="divide-y">
             {(shifts ?? []).length === 0 && (
-              <tr><td colSpan={9} className="px-3 py-4 text-muted-foreground text-center">No shifts found.</td></tr>
+              <tr><td colSpan={10} className="px-3 py-4 text-muted-foreground text-center">No shifts found.</td></tr>
             )}
             {(shifts ?? []).map(s => {
               const vs = varianceSummary(s.id)
               const ss = s as any
-              const supervisorName = ss.user_profiles?.email ?? '—'
+              const supervisorName = ss.supervisor?.full_name ?? ss.supervisor?.email ?? '—'
+              const cashierName = ss.cashier?.full_name ?? '—'
               const submittedAt = s.submitted_at ? (() => { const d = new Date(s.submitted_at); return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) })() : '—'
               return (
                 <tr key={s.id} className="hover:bg-muted/30">
@@ -173,6 +176,7 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
                   <td className="px-3 py-2">{ss.stations?.name ?? '—'}</td>
                   <td className="px-3 py-2 capitalize">{s.period}</td>
                   <td className="px-3 py-2">{supervisorName}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{cashierName}</td>
                   <td className="px-3 py-2 text-muted-foreground">{submittedAt}</td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5">
