@@ -22,13 +22,6 @@ export default async function CloseSummaryPage({ params }: Props) {
   const { id: shiftId } = await params
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('role')
-    .eq('user_id', user!.id)
-    .single()
-
   const { data: shift } = await supabase
     .from('shifts')
     .select('id, station_id, period, shift_date, status, is_flagged, flag_comment, cashier_submitted_at')
@@ -36,7 +29,6 @@ export default async function CloseSummaryPage({ params }: Props) {
     .single()
   if (!shift) notFound()
   if (!['pending', 'closed'].includes(shift.status)) redirect('/shift')
-  if (shift.status === 'closed' && profile?.role === 'supervisor') redirect('/shift')
 
   // ── Batch A: everything keyed on shiftId or station_id ───────────────────
   const [
