@@ -61,6 +61,16 @@ export default async function UsersPage() {
           </table>
         </div>
       </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-medium">Station tablet setup</h2>
+        <p className="text-sm text-gray-500">
+          Open this link on a tablet&apos;s browser to bind it to a station for PIN login.
+        </p>
+        <Link href="/setup" className="text-sm font-medium text-amber-600 hover:underline">
+          Go to device setup →
+        </Link>
+      </section>
     </main>
   )
 }

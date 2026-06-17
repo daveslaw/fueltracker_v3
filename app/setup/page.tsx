@@ -24,6 +24,10 @@ export default async function SetupPage() {
             Assign this tablet to a station. Staff will see a PIN login for that station.
           </p>
         </div>
+        <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+          This will bind the device you&apos;re using right now to the selected station.
+          Make sure you&apos;re on the tablet&apos;s browser, not your own phone or laptop.
+        </p>
         <SetupForm stations={stations ?? []} onAssign={assignStation} />
       </div>
     </main>
