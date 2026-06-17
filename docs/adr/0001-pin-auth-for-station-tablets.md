@@ -19,7 +19,9 @@ Station tablets use a PIN-based authentication layer on top of Supabase Auth:
 
   > **Correction (2026-06-17):** this ADR originally specified `supabase.auth.admin.createSession(userId)` for this step. That method does not exist on the Supabase JS SDK (`GoTrueAdminApi` has no `createSession`) — calling it threw on every PIN sign-in. The `generateLink`+`verifyOtp` sequence above is the corrected mechanism; the decision to keep the PIN separate from the Supabase password is unchanged.
 - Email/password login remains fully intact for owners and for non-tablet access.
-- After each workflow boundary, a full-screen **Handoff** prompt signs out the current user and returns to the picker, making role transitions unavoidable.
+- After each workflow boundary, a **Handoff** prompt signs out the current user and returns to the picker, making role transitions unavoidable.
+
+  > **Correction (2026-06-17):** the full-screen handoff originally rendered automatically on page load, which blocked the page's own content (deliveries entry, reconciliation review, the cashier's just-submitted summary) before the user could use it. It is now two-stage: an inline trigger button the user clicks when actually done, then the full-screen confirm-or-cancel prompt. The "device always ends up signed out at each boundary" guarantee this ADR describes is unchanged — only the timing of when the prompt appears.
 - A 10-minute idle timeout is a secondary safety net.
 
 ## Alternatives considered

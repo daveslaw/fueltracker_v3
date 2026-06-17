@@ -13,6 +13,7 @@ type Props = {
 export function HandoffPrompt({ message, ctaLabel }: Props) {
   const router = useRouter()
   const [isTablet, setIsTablet] = useState<boolean | null>(null)
+  const [armed, setArmed] = useState(false)
   const [pending, setPending] = useState(false)
 
   useEffect(() => {
@@ -29,6 +30,22 @@ export function HandoffPrompt({ message, ctaLabel }: Props) {
     router.push('/login')
   }
 
+  // Stage 1: inline trigger — lets the page's own content stay usable until
+  // the user explicitly signals they're done.
+  if (!armed) {
+    return (
+      <button
+        onClick={() => setArmed(true)}
+        className="w-full rounded-lg border py-3 text-sm font-semibold"
+        style={{ borderColor: '#F59F00', color: '#B8770A' }}
+      >
+        {ctaLabel}
+      </button>
+    )
+  }
+
+  // Stage 2: full-screen, unavoidable confirmation — the only way out is to
+  // actually sign out, or cancel back to stage 1.
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 p-8"
@@ -69,6 +86,16 @@ export function HandoffPrompt({ message, ctaLabel }: Props) {
       >
         {pending ? 'Signing out…' : ctaLabel}
       </button>
+
+      {!pending && (
+        <button
+          onClick={() => setArmed(false)}
+          className="text-sm underline"
+          style={{ color: '#8A93A6' }}
+        >
+          Cancel
+        </button>
+      )}
     </div>
   )
 }

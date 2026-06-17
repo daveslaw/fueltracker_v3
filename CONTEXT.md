@@ -17,12 +17,16 @@ The explicit transition between a supervisor and cashier (or back) on the statio
 - After the supervisor captures all pumps + dips and reaches the deliveries page → "Pass to cashier" (shown on the deliveries page, allowing the supervisor to record any deliveries before handing off)
 - After the cashier submits → "Pass back to supervisor"
 
-The handoff prompt is full-screen and unavoidable. It signs out the current user and returns to the User Picker.
+The handoff prompt is two-stage, not an automatic takeover:
+1. **Inline trigger** — a plain button rendered in the page's own content (e.g. "Hand off to cashier"). The page stays fully usable until this is clicked; nothing forces the transition before the user is actually done with that page (recording deliveries, reviewing reconciliation, reading their submitted summary, flagging/overriding a closed shift).
+2. **Full-screen confirmation** — clicking the trigger shows the unavoidable full-screen prompt. From here the only actions are: confirm (signs out immediately, returns to the User Picker) or Cancel (returns to stage 1, no sign-out).
+
+> **Correction (2026-06-17):** the prompt originally rendered the full-screen stage automatically as soon as the page loaded on a tablet, with no inline trigger. This blocked the page's own content (deliveries entry, reconciliation review, reading the just-submitted summary) before the user had a chance to use it — on the deliveries page and cashier summary page in particular, the overlay covered everything from the first render. The two-stage design above is the fix; the requirement that the device always end up signed out at each boundary is unchanged.
 
 There are three handoff points in a complete shift cycle:
 1. Supervisor → Cashier: on the deliveries page, after pumps + dips are complete
 2. Cashier → Supervisor: on the cashier summary page, after cashier submits
-3. Supervisor → idle: on the shift close/summary page, after the supervisor submits the shift ("Shift complete. Sign out when done.")
+3. Supervisor → idle: on the shift close/summary page, once the supervisor is done reviewing a closed shift ("Shift complete. Sign out when done.")
 
 When the supervisor signs back in after a cashier handoff, the app auto-redirects to the in-progress shift's close/summary page (status `pending`, cashier already submitted) rather than the generic `/shift` landing. This avoids the supervisor needing to navigate manually to a shift they were already mid-way through.
 
