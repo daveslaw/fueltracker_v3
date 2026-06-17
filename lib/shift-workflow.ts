@@ -50,12 +50,12 @@ export async function runShiftCloseWith(
   if (!cashierSubmitted)
     return { error: 'Shift cannot be submitted: cashier must submit their shift first.' }
 
-  if (!canSubmit(shift.status, true, true))
+  if (!canSubmit(shift.status, true))
     return { error: 'Shift cannot be submitted in its current state.' }
 
   const progress = getCloseProgress(pumpIds, closedPumpIds, tankIds, closedTankIds, true, true)
   if (!progress.isComplete)
-    return { error: 'All close readings, cashier submission, and dry stock count are required before submitting.' }
+    return { error: 'All close readings and cashier submission are required before submitting.' }
 
   const submittedAt = new Date().toISOString()
 

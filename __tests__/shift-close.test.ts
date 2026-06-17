@@ -23,8 +23,8 @@ describe('getCloseProgress', () => {
     expect(p.pos).toBe(false)
   })
 
-  it('all close readings done + cashier POS + dry stock complete → complete', () => {
-    const p = getCloseProgress(pumps, ['p1', 'p2', 'p3'], tanks, ['t1', 't2'], true, true)
+  it('all close readings done + cashier POS, dry stock skipped → still complete', () => {
+    const p = getCloseProgress(pumps, ['p1', 'p2', 'p3'], tanks, ['t1', 't2'], true, false)
     expect(p.isReadyForPos).toBe(true)
     expect(p.pos).toBe(true)
     expect(p.isComplete).toBe(true)
@@ -42,7 +42,7 @@ describe('getCloseProgress', () => {
   })
 
   it('POS submitted but close readings incomplete → not complete', () => {
-    const p = getCloseProgress(pumps, ['p1'], tanks, ['t1', 't2'], true, false)
+    const p = getCloseProgress(pumps, ['p1'], tanks, ['t1', 't2'], true, true)
     expect(p.isComplete).toBe(false)
   })
 
@@ -81,12 +81,11 @@ describe('resolveCloseStatus', () => {
 // ── canSubmit ─────────────────────────────────────────────────────────────────
 
 describe('canSubmit', () => {
-  it('allows submit from pending with cashier POS and dry stock complete', () => expect(canSubmit('pending', true, true)).toBe(true))
-  it('blocks submit from closed',                                          () => expect(canSubmit('closed', true, true)).toBe(false))
-  it('blocks submit from draft',                                           () => expect(canSubmit('draft', true, true)).toBe(false))
-  it('blocks submit from submitted',                                       () => expect(canSubmit('submitted', true, true)).toBe(false))
-  it('blocks submit when cashier POS incomplete',                          () => expect(canSubmit('pending', false, true)).toBe(false))
-  it('blocks submit when dry stock incomplete',                            () => expect(canSubmit('pending', true, false)).toBe(false))
+  it('allows submit from pending with cashier POS complete', () => expect(canSubmit('pending', true)).toBe(true))
+  it('blocks submit from closed',                            () => expect(canSubmit('closed', true)).toBe(false))
+  it('blocks submit from draft',                              () => expect(canSubmit('draft', true)).toBe(false))
+  it('blocks submit from submitted',                          () => expect(canSubmit('submitted', true)).toBe(false))
+  it('blocks submit when cashier POS incomplete',             () => expect(canSubmit('pending', false)).toBe(false))
 })
 
 // ── getCloseProgress — cashier POS track ─────────────────────────────────────
@@ -101,10 +100,10 @@ describe('getCloseProgress — cashier POS track', () => {
     expect(p.isComplete).toBe(false)
   })
 
-  it('isComplete false when supervisor readings done and cashier POS submitted but dry stock missing', () => {
+  it('isComplete true when supervisor readings done and cashier POS submitted, even if dry stock missing', () => {
     const p = getCloseProgress(pumps, ['p1', 'p2'], tanks, ['t1'], true, false)
     expect(p.cashierPos).toBe(true)
-    expect(p.isComplete).toBe(false)
+    expect(p.isComplete).toBe(true)
   })
 
   it('isComplete false when supervisor readings incomplete even if cashier tracks done', () => {
@@ -113,26 +112,21 @@ describe('getCloseProgress — cashier POS track', () => {
   })
 })
 
-// ── getCloseProgress — dry stock track ───────────────────────────────────────
+// ── getCloseProgress — dry stock track (informational only, optional) ───────
 
 describe('getCloseProgress — dry stock track', () => {
   const pumps = ['p1', 'p2']
   const tanks = ['t1']
 
-  it('tracer bullet: dryStock false when dry stock not complete', () => {
+  it('dryStock reflects completion but does not gate isComplete', () => {
     const p = getCloseProgress(pumps, ['p1', 'p2'], tanks, ['t1'], true, false)
     expect(p.dryStock).toBe(false)
-    expect(p.isComplete).toBe(false)
-  })
-
-  it('isComplete true when supervisor readings, cashier POS, and dry stock all complete', () => {
-    const p = getCloseProgress(pumps, ['p1', 'p2'], tanks, ['t1'], true, true)
-    expect(p.dryStock).toBe(true)
     expect(p.isComplete).toBe(true)
   })
 
-  it('isComplete false when cashier POS done but dry stock incomplete', () => {
-    const p = getCloseProgress(pumps, ['p1', 'p2'], tanks, ['t1'], true, false)
-    expect(p.isComplete).toBe(false)
+  it('isComplete true when supervisor readings and cashier POS complete, dry stock also done', () => {
+    const p = getCloseProgress(pumps, ['p1', 'p2'], tanks, ['t1'], true, true)
+    expect(p.dryStock).toBe(true)
+    expect(p.isComplete).toBe(true)
   })
 })

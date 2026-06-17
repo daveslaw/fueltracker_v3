@@ -3,6 +3,7 @@ import { notFound }     from 'next/navigation'
 import { getCashierProgress, canCashierSubmit } from '@/lib/cashier-progress'
 import { buildCashierSteps } from '@/lib/workflow-steps'
 import { StepIndicator }     from '@/components/StepIndicator'
+import Link                  from 'next/link'
 import { submitCashierShift } from './actions'
 
 function CheckItem({ label, done }: { label: string; done: boolean }) {
@@ -141,9 +142,14 @@ export default async function CashierHubPage({
       </section>
 
       {shift.cashier_submitted_at ? (
-        <p className="text-sm text-green-700 font-medium text-center">
-          Submitted {new Date(shift.cashier_submitted_at).toLocaleString('en-ZA')}
-        </p>
+        <div className="text-center space-y-2">
+          <p className="text-sm text-green-700 font-medium">
+            Submitted {new Date(shift.cashier_submitted_at).toLocaleString('en-ZA')}
+          </p>
+          <Link href={`/cashier/${shiftId}/summary`} className="text-sm underline">
+            View full summary
+          </Link>
+        </div>
       ) : (
         <form action={async (formData: FormData) => {
           'use server'

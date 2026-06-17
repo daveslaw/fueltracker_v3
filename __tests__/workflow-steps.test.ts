@@ -62,7 +62,7 @@ describe('buildCashierSteps', () => {
   it('hrefs include the shiftId', () => {
     const steps = buildCashierSteps('abc-123', 'fuel-pos', cashierNothingDone)
     expect(steps[0].href).toBe('/cashier/abc-123/fuel-pos')
-    expect(steps[3].href).toBe('/cashier/abc-123/summary')
+    expect(steps[3].href).toBe('/cashier/abc-123')
   })
 })
 

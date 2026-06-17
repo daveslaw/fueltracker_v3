@@ -5,9 +5,9 @@ export type CloseProgress = {
   tanks: { done: number; total: number }
   pos: boolean
   cashierPos: boolean     // cashier POS track: Z-report submitted by cashier
-  dryStock: boolean       // cashier dry stock track: closing count submitted
+  dryStock: boolean       // cashier dry stock track: closing count submitted (informational — optional, doesn't gate isComplete)
   isReadyForPos: boolean  // all close pump + dip readings complete
-  isComplete: boolean     // isReadyForPos + cashierPos + dryStock
+  isComplete: boolean     // isReadyForPos + cashierPos
 }
 
 // ── getCloseProgress ──────────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ export function getCloseProgress(
   const tanksDone = tankIds.filter((id) => completedCloseTankIds.includes(id)).length
 
   const isReadyForPos = pumpsDone === pumpIds.length && tanksDone === tankIds.length
-  const isComplete = isReadyForPos && hasCashierPosSubmission && hasDryStockComplete
+  const isComplete = isReadyForPos && hasCashierPosSubmission
 
   return {
     pumps: { done: pumpsDone, total: pumpIds.length },
@@ -56,7 +56,8 @@ const SUBMITTABLE_FROM = new Set<ShiftStatus>(['pending'])
 /**
  * Guards the submit transition.
  * Shift must be in 'pending' and the cashier POS track must be complete.
+ * Dry stock (stock POS / stock count) is optional and does not gate submission.
  */
-export function canSubmit(status: ShiftStatus, cashierPosComplete: boolean, dryStockComplete: boolean): boolean {
-  return SUBMITTABLE_FROM.has(status) && cashierPosComplete && dryStockComplete
+export function canSubmit(status: ShiftStatus, cashierPosComplete: boolean): boolean {
+  return SUBMITTABLE_FROM.has(status) && cashierPosComplete
 }
