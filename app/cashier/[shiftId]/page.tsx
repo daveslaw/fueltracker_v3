@@ -6,23 +6,31 @@ import { StepIndicator }     from '@/components/StepIndicator'
 import Link                  from 'next/link'
 import { submitCashierShift } from './actions'
 
-function CheckItem({ label, done }: { label: string; done: boolean }) {
+function SectionRow({ label, done, href }: { label: string; done: boolean; href: string }) {
   return (
-    <li className="flex items-center gap-3 px-4 py-3.5 border-b last:border-0">
-      <span
-        aria-hidden
-        className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-bold
-          ${done ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-300 text-transparent'}`}
-      >
-        &#10003;
-      </span>
-      <span className={done ? 'text-gray-900' : 'text-gray-400'}>{label}</span>
-      <span className="ml-auto text-xs font-medium">
-        {done
-          ? <span className="text-green-700">Complete</span>
-          : <span className="text-gray-400">Pending</span>}
-      </span>
-    </li>
+    <a
+      href={href}
+      className="flex items-center justify-between rounded-lg border p-4 hover:bg-gray-50"
+    >
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs font-bold
+            ${done ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-300 text-transparent'}`}
+        >
+          &#10003;
+        </span>
+        <span className="font-medium">{label}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium">
+          {done
+            ? <span className="text-green-700">Complete</span>
+            : <span className="text-gray-400">Pending</span>}
+        </span>
+        <span className="text-xs text-gray-400">&rsaquo;</span>
+      </div>
+    </a>
   )
 }
 
@@ -105,39 +113,12 @@ export default async function CashierHubPage({
         <p className="text-sm text-gray-500">{shift.shift_date}</p>
       </div>
 
-      <section>
-        <h2 className="text-sm font-medium text-gray-500 mb-1">Progress</h2>
-        <ul className="rounded-lg border divide-y">
-          <CheckItem label="Fuel POS Z-report" done={progress.fuelPos} />
-          <CheckItem label="Dry stock POS Z-report" done={progress.stockPos} />
-          <CheckItem label="Stock count" done={progress.stockCount} />
-        </ul>
-      </section>
-
       <section className="space-y-2">
         <h2 className="text-sm font-medium text-gray-500">Sections</h2>
         <nav className="space-y-2">
-          <a
-            href={`/cashier/${shiftId}/fuel-pos`}
-            className="flex items-center justify-between rounded-lg border p-4 hover:bg-gray-50"
-          >
-            <span className="font-medium">Fuel POS Z-report</span>
-            <span className="text-xs text-gray-400">&rsaquo;</span>
-          </a>
-          <a
-            href={`/cashier/${shiftId}/stock-pos`}
-            className="flex items-center justify-between rounded-lg border p-4 hover:bg-gray-50"
-          >
-            <span className="font-medium">Dry stock POS Z-report</span>
-            <span className="text-xs text-gray-400">&rsaquo;</span>
-          </a>
-          <a
-            href={`/cashier/${shiftId}/stock-count`}
-            className="flex items-center justify-between rounded-lg border p-4 hover:bg-gray-50"
-          >
-            <span className="font-medium">Stock count</span>
-            <span className="text-xs text-gray-400">&rsaquo;</span>
-          </a>
+          <SectionRow label="Fuel POS Z-report" done={progress.fuelPos} href={`/cashier/${shiftId}/fuel-pos`} />
+          <SectionRow label="Dry stock POS Z-report" done={progress.stockPos} href={`/cashier/${shiftId}/stock-pos`} />
+          <SectionRow label="Stock count" done={progress.stockCount} href={`/cashier/${shiftId}/stock-count`} />
         </nav>
       </section>
 

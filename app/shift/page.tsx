@@ -2,8 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getShiftPeriod } from '@/lib/deliveries'
-import { computeShiftLabel } from '@/lib/shift-open'
-import type { ShiftPeriod, ShiftPart } from '@/lib/shift-open'
+import { computeShiftLabel, canStartShift } from '@/lib/shift-open'
+import type { ShiftPeriod, ShiftPart, ShiftRow } from '@/lib/shift-open'
 
 export default async function ShiftHomePage() {
   const supabase = await createClient()
@@ -35,6 +35,19 @@ export default async function ShiftHomePage() {
   const pendingShifts = (todayShifts ?? []).filter(s => s.status === 'pending')
   const closedShifts  = (todayShifts ?? []).filter(s => s.status === 'closed')
 
+  const canCreateCurrentPeriod = canStartShift(
+    (todayShifts ?? []).map(s => ({
+      station_id: profile?.station_id ?? '',
+      period: s.period as ShiftPeriod,
+      shift_date: today,
+      status: s.status as ShiftRow['status'],
+      part: s.part as ShiftRow['part'],
+    })),
+    profile?.station_id ?? '',
+    currentPeriod,
+    today,
+  )
+
   return (
     <main className="p-6 max-w-lg mx-auto space-y-6">
       <h1 className="text-2xl font-semibold">Shifts</h1>
@@ -43,9 +56,13 @@ export default async function ShiftHomePage() {
         {today} — {computeShiftLabel(currentPeriod, 0)} period
       </p>
 
-      {todayShifts?.length === 0 && (
+      {canCreateCurrentPeriod && (
         <div className="rounded-lg border border-dashed p-8 text-center space-y-3">
-          <p className="text-sm text-gray-500">No shifts for today yet.</p>
+          <p className="text-sm text-gray-500">
+            {todayShifts?.length === 0
+              ? 'No shifts for today yet.'
+              : `${computeShiftLabel(currentPeriod, 0)} shift not started yet.`}
+          </p>
           <Link
             href="/shift/new"
             className="inline-block rounded bg-black px-4 py-2 text-sm font-medium text-white"
