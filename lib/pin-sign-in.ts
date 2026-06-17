@@ -52,17 +52,43 @@ export function makePinSignIn(supabase: SupabaseClient | any) {
       .update({ pin_attempts: 0 })
       .eq('id', userId)
 
-    const { data: sessionData, error: sessionError } =
-      await supabase.auth.admin.createSession({ user_id: userId })
+    const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId)
+    const email = userData?.user?.email
 
-    if (sessionError || !sessionData?.session) {
+    if (userError || !email) {
+      return {
+        ok: false,
+        locked: false,
+        attemptsRemaining: 0,
+        error: 'Account not fully set up — contact an owner',
+      }
+    }
+
+    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+    })
+    const tokenHash = linkData?.properties?.hashed_token
+
+    if (linkError || !tokenHash) {
+      console.error('[pin-sign-in] generateLink failed:', linkError)
+      return { ok: false, locked: false, attemptsRemaining: 0, error: 'Failed to create session' }
+    }
+
+    const { data: otpData, error: otpError } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: 'magiclink',
+    })
+
+    if (otpError || !otpData?.session) {
+      console.error('[pin-sign-in] verifyOtp failed:', otpError)
       return { ok: false, locked: false, attemptsRemaining: 0, error: 'Failed to create session' }
     }
 
     return {
       ok: true,
-      accessToken: sessionData.session.access_token,
-      refreshToken: sessionData.session.refresh_token,
+      accessToken: otpData.session.access_token,
+      refreshToken: otpData.session.refresh_token,
     }
   }
 }

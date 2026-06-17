@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { makePinSignIn } from '@/lib/pin-sign-in'
 import { hashPin } from '@/lib/pin-auth'
 
@@ -10,11 +10,13 @@ type ProfileRow = {
 
 type MockOptions = {
   profile: ProfileRow | null
+  email?: string | null
   sessionTokens?: { access_token: string; refresh_token: string }
 }
 
-function makeSupabase({ profile, sessionTokens }: MockOptions) {
+function makeSupabase({ profile, email, sessionTokens }: MockOptions) {
   const updates: Record<string, unknown>[] = []
+  const generateLinkCalls: Record<string, unknown>[] = []
 
   function makeChain() {
     const chain: Record<string, unknown> = {}
@@ -37,13 +39,24 @@ function makeSupabase({ profile, sessionTokens }: MockOptions) {
     from: () => makeChain(),
     auth: {
       admin: {
-        createSession: async () =>
-          sessionTokens
-            ? { data: { session: sessionTokens }, error: null }
-            : { data: null, error: { message: 'session creation failed' } },
+        getUserById: async () =>
+          email
+            ? { data: { user: { email } }, error: null }
+            : { data: { user: null }, error: { message: 'user not found' } },
+        generateLink: async (params: Record<string, unknown>) => {
+          generateLinkCalls.push(params)
+          return sessionTokens
+            ? { data: { properties: { hashed_token: 'token-hash' } }, error: null }
+            : { data: null, error: { message: 'generateLink failed' } }
+        },
       },
+      verifyOtp: async () =>
+        sessionTokens
+          ? { data: { session: sessionTokens }, error: null }
+          : { data: { session: null }, error: { message: 'verifyOtp failed' } },
     },
     _updates: updates,
+    _generateLinkCalls: generateLinkCalls,
   } as any
 }
 
@@ -57,6 +70,7 @@ describe('makePinSignIn', () => {
   it('tracer bullet: correct PIN returns ok with access and refresh tokens', async () => {
     const supabase = makeSupabase({
       profile: { pin_hash: correctHash, pin_attempts: 0, pin_locked: false },
+      email: 'user1@example.com',
       sessionTokens: { access_token: 'acc', refresh_token: 'ref' },
     })
     const signIn = makePinSignIn(supabase)
@@ -68,9 +82,62 @@ describe('makePinSignIn', () => {
     }
   })
 
+  it('uses the email from getUserById, not a stale user_profiles.email', async () => {
+    const supabase = makeSupabase({
+      profile: { pin_hash: correctHash, pin_attempts: 0, pin_locked: false },
+      email: 'canonical@example.com',
+      sessionTokens: { access_token: 'acc', refresh_token: 'ref' },
+    })
+    const signIn = makePinSignIn(supabase)
+    await signIn('user-1', '1234')
+    expect(supabase._generateLinkCalls[0]).toMatchObject({ email: 'canonical@example.com' })
+  })
+
+  it('no resolvable email returns a setup error without calling generateLink', async () => {
+    const supabase = makeSupabase({
+      profile: { pin_hash: correctHash, pin_attempts: 0, pin_locked: false },
+    })
+    const signIn = makePinSignIn(supabase)
+    const result = await signIn('user-1', '1234')
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toBe('Account not fully set up — contact an owner')
+    }
+    expect(supabase._generateLinkCalls).toHaveLength(0)
+  })
+
+  it('session-minting failure returns a generic failure error', async () => {
+    const supabase = makeSupabase({
+      profile: { pin_hash: correctHash, pin_attempts: 0, pin_locked: false },
+      email: 'user1@example.com',
+    })
+    const signIn = makePinSignIn(supabase)
+    const result = await signIn('user-1', '1234')
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toBe('Failed to create session')
+    }
+  })
+
+  it('logs session-minting failures with a [pin-sign-in] prefix', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const supabase = makeSupabase({
+      profile: { pin_hash: correctHash, pin_attempts: 0, pin_locked: false },
+      email: 'user1@example.com',
+    })
+    const signIn = makePinSignIn(supabase)
+    await signIn('user-1', '1234')
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[pin-sign-in]'),
+      expect.anything()
+    )
+    consoleErrorSpy.mockRestore()
+  })
+
   it('correct PIN resets pin_attempts to 0', async () => {
     const supabase = makeSupabase({
       profile: { pin_hash: correctHash, pin_attempts: 3, pin_locked: false },
+      email: 'user1@example.com',
       sessionTokens: { access_token: 'acc', refresh_token: 'ref' },
     })
     const signIn = makePinSignIn(supabase)

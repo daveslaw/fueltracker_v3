@@ -10,7 +10,7 @@ The one-time configuration stored in `localStorage` that tells the app which sta
 The screen shown on a station tablet when no one is authenticated. Lists all active supervisors and cashiers at that station who have a PIN set. Owners never appear in the picker. Replaces the standard email/password login page for the tablet workflow.
 
 ## PIN
-A 4-digit numeric credential used exclusively on station tablets. Stored as a bcrypt hash in `user_profiles.pin_hash`. Verified server-side; a Supabase session is created via the admin `createSession` API — the PIN is never used as a Supabase password. Owner-managed: owners set PINs for their staff in `/dashboard/users`. Users without a PIN do not appear in the User Picker.
+A 4-digit numeric credential used exclusively on station tablets. Stored as a bcrypt hash in `user_profiles.pin_hash`. Verified server-side; a Supabase session is then minted via `admin.getUserById` → `admin.generateLink` → `verifyOtp` — the PIN is never used as a Supabase password. Owner-managed: owners set PINs for their staff in `/dashboard/users`. Users without a PIN do not appear in the User Picker.
 
 ## Handoff
 The explicit transition between a supervisor and cashier (or back) on the station tablet. Triggered automatically by the app at workflow boundaries:

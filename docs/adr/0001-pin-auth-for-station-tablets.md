@@ -15,7 +15,9 @@ Station tablets use a PIN-based authentication layer on top of Supabase Auth:
 
 - A **User Picker** screen replaces `/login` on station tablets. It lists all active staff at that station who have a PIN set, fetched from a public API route (`/api/station-users?stationId=X`).
 - Each user has a 4-digit PIN stored as a bcrypt hash in `user_profiles.pin_hash`. The PIN is set by the owner in `/dashboard/users`.
-- On PIN entry, a server action verifies the hash and calls `supabase.auth.admin.createSession(userId)` to issue a real Supabase session. The PIN is never used as the Supabase password.
+- On PIN entry, a server action verifies the hash, then mints a real Supabase session via `auth.admin.getUserById` (canonical email) → `auth.admin.generateLink({ type: 'magiclink', email })` → `auth.verifyOtp({ token_hash, type: 'magiclink' })`. No email is ever sent — the link is never delivered, only its token is used server-side. The PIN is never used as the Supabase password.
+
+  > **Correction (2026-06-17):** this ADR originally specified `supabase.auth.admin.createSession(userId)` for this step. That method does not exist on the Supabase JS SDK (`GoTrueAdminApi` has no `createSession`) — calling it threw on every PIN sign-in. The `generateLink`+`verifyOtp` sequence above is the corrected mechanism; the decision to keep the PIN separate from the Supabase password is unchanged.
 - Email/password login remains fully intact for owners and for non-tablet access.
 - After each workflow boundary, a full-screen **Handoff** prompt signs out the current user and returns to the picker, making role transitions unavoidable.
 - A 10-minute idle timeout is a secondary safety net.
@@ -26,7 +28,7 @@ Station tablets use a PIN-based authentication layer on top of Supabase Auth:
 
 **Shared station account per role:** One cashier account per station. Rejected because individual cashier accountability was an explicit requirement — the owner needs to know which cashier handled each shift.
 
-**Device-registered kiosk account:** A long-lived kiosk session on the device that proxies requests for authenticated users. Rejected as significantly more complex than `admin.createSession`, with no clear advantage for this use case.
+**Device-registered kiosk account:** A long-lived kiosk session on the device that proxies requests for authenticated users. Rejected as significantly more complex than minting a session directly via the admin API, with no clear advantage for this use case.
 
 ## Consequences
 - `user_profiles` gains: `full_name text not null`, `pin_hash text`, `pin_attempts smallint default 0`, `pin_locked boolean default false`.
