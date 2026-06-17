@@ -14,7 +14,7 @@ export function makePinSignIn(supabase: SupabaseClient | any) {
   ): Promise<PinSignInResult> {
     const { data: profile, error } = await supabase
       .from('user_profiles')
-      .select('pin_hash, pin_attempts, pin_locked')
+      .select('pin_hash, pin_attempts, pin_locked, user_id')
       .eq('id', userId)
       .single()
 
@@ -52,7 +52,9 @@ export function makePinSignIn(supabase: SupabaseClient | any) {
       .update({ pin_attempts: 0 })
       .eq('id', userId)
 
-    const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId)
+    const { data: userData, error: userError } = await supabase.auth.admin.getUserById(
+      profile.user_id
+    )
     const email = userData?.user?.email
 
     if (userError || !email) {

@@ -6,6 +6,7 @@ type ProfileRow = {
   pin_hash: string | null
   pin_attempts: number
   pin_locked: boolean
+  user_id?: string
 }
 
 type MockOptions = {
@@ -17,6 +18,7 @@ type MockOptions = {
 function makeSupabase({ profile, email, sessionTokens }: MockOptions) {
   const updates: Record<string, unknown>[] = []
   const generateLinkCalls: Record<string, unknown>[] = []
+  const getUserByIdCalls: string[] = []
 
   function makeChain() {
     const chain: Record<string, unknown> = {}
@@ -39,10 +41,12 @@ function makeSupabase({ profile, email, sessionTokens }: MockOptions) {
     from: () => makeChain(),
     auth: {
       admin: {
-        getUserById: async () =>
-          email
+        getUserById: async (id: string) => {
+          getUserByIdCalls.push(id)
+          return email
             ? { data: { user: { email } }, error: null }
-            : { data: { user: null }, error: { message: 'user not found' } },
+            : { data: { user: null }, error: { message: 'user not found' } }
+        },
         generateLink: async (params: Record<string, unknown>) => {
           generateLinkCalls.push(params)
           return sessionTokens
@@ -57,6 +61,7 @@ function makeSupabase({ profile, email, sessionTokens }: MockOptions) {
     },
     _updates: updates,
     _generateLinkCalls: generateLinkCalls,
+    _getUserByIdCalls: getUserByIdCalls,
   } as any
 }
 
@@ -80,6 +85,22 @@ describe('makePinSignIn', () => {
       expect(result.accessToken).toBe('acc')
       expect(result.refreshToken).toBe('ref')
     }
+  })
+
+  it('looks up the auth user via profile.user_id, not the user_profiles row id passed in', async () => {
+    const supabase = makeSupabase({
+      profile: {
+        pin_hash: correctHash,
+        pin_attempts: 0,
+        pin_locked: false,
+        user_id: 'auth-user-99',
+      },
+      email: 'user1@example.com',
+      sessionTokens: { access_token: 'acc', refresh_token: 'ref' },
+    })
+    const signIn = makePinSignIn(supabase)
+    await signIn('profile-id-1', '1234')
+    expect(supabase._getUserByIdCalls[0]).toBe('auth-user-99')
   })
 
   it('uses the email from getUserById, not a stale user_profiles.email', async () => {
