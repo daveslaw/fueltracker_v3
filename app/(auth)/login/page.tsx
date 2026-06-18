@@ -137,7 +137,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => setShowPasswordForm(true)}
-            className="mt-6 w-full text-center text-xs"
+            className="mt-6 w-full text-center text-xs cursor-pointer"
             style={{ color: '#56698A' }}
           >
             Owner login
@@ -316,7 +316,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setShowPasswordForm(false)}
-              className="w-full text-center text-xs"
+              className="w-full text-center text-xs cursor-pointer"
               style={{ color: '#56698A' }}
             >
               Back to staff picker

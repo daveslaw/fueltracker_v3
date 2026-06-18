@@ -88,7 +88,7 @@ export function UserPicker({ stationId }: Props) {
           <button
             key={u.id}
             onClick={() => setSelectedUser(u)}
-            className="flex flex-col items-center gap-1 rounded-xl p-4 bg-white/10 hover:bg-white/20 active:bg-white/30 transition-colors"
+            className="flex flex-col items-center gap-1 rounded-xl p-4 bg-white/10 hover:bg-white/20 active:bg-white/30 transition-colors cursor-pointer"
           >
             <span className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-semibold text-lg">
               {u.full_name.charAt(0).toUpperCase()}
