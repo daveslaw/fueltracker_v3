@@ -39,3 +39,5 @@ Station tablets use a PIN-based authentication layer on top of Supabase Auth:
 - The `/setup` page (owner-authenticated) writes `station_id` to `localStorage` and signs the owner out.
 - Users without a PIN are excluded from the User Picker. The standard `/login` page remains accessible at its URL as a permanent escape hatch.
 - PIN lockout: after 10 failed attempts, `pin_locked = true`. Only the owner can reset it.
+
+> **Correction (2026-06-18):** "remains accessible at its URL" was never actually true once a device is bound — `/login` always rendered the User Picker with no path back to the password form, so an owner had no way to authenticate (and therefore no way to reach `/setup` to rebind the device) on their own tablet. Fixed with a visible "Owner login" link on the User Picker that toggles to the password form, and a matching "Back to staff picker" link on the password form. No change to routing or rebind logic — `/dashboard/users` already links to `/setup`, and `SetupForm` already overwrites the `localStorage` station binding; both were simply unreachable.

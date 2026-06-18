@@ -7,7 +7,7 @@ A single physical device (tablet) permanently assigned to one station. All super
 The one-time configuration stored in `localStorage` that tells the app which station this tablet belongs to (`station_id`). Set by an owner via the `/setup` page. Survives browser restarts indefinitely. If browser data is cleared, the owner repeats setup.
 
 ## User Picker
-The screen shown on a station tablet when no one is authenticated. Lists all active supervisors and cashiers at that station who have a PIN set. Owners never appear in the picker. Replaces the standard email/password login page for the tablet workflow.
+The screen shown on a station tablet when no one is authenticated. Lists all active supervisors and cashiers at that station who have a PIN set. Owners never appear in the picker. Replaces the standard email/password login page for the tablet workflow, but a visible "Owner login" link toggles to the password form so an owner can sign in on their own device — e.g. to reach `/setup` and rebind it to a different station. The password form has a matching "Back to staff picker" link.
 
 ## PIN
 A 4-digit numeric credential used exclusively on station tablets. Stored as a bcrypt hash in `user_profiles.pin_hash`. Verified server-side; a Supabase session is then minted via `admin.getUserById` → `admin.generateLink` → `verifyOtp` — the PIN is never used as a Supabase password. Owner-managed: owners set PINs for their staff in `/dashboard/users`. Users without a PIN do not appear in the User Picker.

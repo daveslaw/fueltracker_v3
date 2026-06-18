@@ -21,6 +21,7 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [stationId, setStationId] = useState<string | null | undefined>(undefined)
+  const [showPasswordForm, setShowPasswordForm] = useState(false)
 
   // Detect station binding — undefined = still checking, null = no binding
   useEffect(() => {
@@ -97,8 +98,8 @@ export default function LoginPage() {
     )
   }
 
-  // Station binding present → User Picker
-  if (stationId) {
+  // Station binding present → User Picker (or owner password form, toggled)
+  if (stationId && !showPasswordForm) {
     return (
       <main
         className="relative flex min-h-screen items-center justify-center p-4 overflow-hidden"
@@ -133,6 +134,14 @@ export default function LoginPage() {
             </h1>
           </div>
           <UserPicker stationId={stationId} />
+          <button
+            type="button"
+            onClick={() => setShowPasswordForm(true)}
+            className="mt-6 w-full text-center text-xs"
+            style={{ color: '#56698A' }}
+          >
+            Owner login
+          </button>
         </div>
       </main>
     )
@@ -300,6 +309,17 @@ export default function LoginPage() {
               style={{ color: '#56698A' }}
             >
               Back to sign in
+            </button>
+          )}
+
+          {stationId && (
+            <button
+              type="button"
+              onClick={() => setShowPasswordForm(false)}
+              className="w-full text-center text-xs"
+              style={{ color: '#56698A' }}
+            >
+              Back to staff picker
             </button>
           )}
         </form>
