@@ -1,6 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, unmountComponentAtNode } from 'react-dom'
-import { act } from 'react'
 import { render as tlRender } from '@testing-library/react'
 import { SentryUserContext } from '@/components/SentryUserContext'
 
