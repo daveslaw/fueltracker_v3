@@ -214,3 +214,121 @@ const COMPLETE_STATUSES: Array<ShiftStatus | 'not_started'> = ['submitted', 'app
 export function isReportPartial(status: ShiftStatus | 'not_started'): boolean {
   return !COMPLETE_STATUSES.includes(status)
 }
+
+// ── pickLatestClosedShiftPerStation ────────────────────────────────────────
+
+/**
+ * Given closed shifts across any number of stations, returns the most
+ * recently closed shift id per station — evening beats morning on the same date.
+ * Used by the owner dashboard to find the shift whose closing dip readings
+ * represent current tank inventory.
+ */
+export function pickLatestClosedShiftPerStation(
+  closedShifts: Array<{ id: string; station_id: string; shift_date: string; period: string }>,
+): Record<string, string> {
+  const periodValue: Record<string, number> = { evening: 1, morning: 0 }
+  const sorted = [...closedShifts].sort((a, b) => {
+    if (a.shift_date !== b.shift_date) return b.shift_date.localeCompare(a.shift_date)
+    return (periodValue[b.period] ?? 0) - (periodValue[a.period] ?? 0)
+  })
+
+  const result: Record<string, string> = {}
+  for (const shift of sorted) {
+    if (!result[shift.station_id]) {
+      result[shift.station_id] = shift.id
+    }
+  }
+  return result
+}
+
+// ── buildStationInventoryLines ─────────────────────────────────────────────
+
+export interface InventoryLine {
+  gradeId: string
+  gradeLabel: string
+  litres: number
+  costPerLitre: number
+  valueZar: number
+}
+
+/**
+ * Builds current tank inventory lines per station from each station's latest
+ * closing dip readings, joined against active fuel prices and grade labels.
+ */
+export function buildStationInventoryLines(
+  stations: Array<{ id: string; name: string }>,
+  latestClosedShiftId: Record<string, string>,
+  dipReadings: Array<{
+    shift_id: string
+    litres: number
+    tanks: { fuel_grade_id: string } | Array<{ fuel_grade_id: string }> | null
+  }>,
+  prices: Array<{ station_id: string; fuel_grade_id: string; cost_per_litre: number }>,
+  grades: Array<{ id: string; label: string }>,
+): Record<string, InventoryLine[]> {
+  const gradeLabels: Record<string, string> = Object.fromEntries(grades.map(g => [g.id, g.label]))
+  const result: Record<string, InventoryLine[]> = {}
+
+  for (const station of stations) {
+    const shiftId = latestClosedShiftId[station.id]
+    if (!shiftId) continue
+
+    const gradeMap: Record<string, number> = {}
+    for (const dip of dipReadings.filter(d => d.shift_id === shiftId)) {
+      const tank = Array.isArray(dip.tanks) ? dip.tanks[0] : dip.tanks
+      const gradeId = tank?.fuel_grade_id
+      if (!gradeId) continue
+      gradeMap[gradeId] = (gradeMap[gradeId] ?? 0) + Number(dip.litres)
+    }
+
+    const stationPrices = prices.filter(p => p.station_id === station.id)
+    const inputs: InventorySnapshotInput[] = Object.entries(gradeMap).map(([gradeId, litres]) => ({
+      station_id: station.id,
+      fuel_grade_id: gradeId,
+      closing_dip_litres: litres,
+      cost_per_litre: Number(stationPrices.find(p => p.fuel_grade_id === gradeId)?.cost_per_litre ?? 0),
+    }))
+
+    result[station.id] = buildInventorySnapshot(inputs)
+      .map(row => ({
+        gradeId: row.fuel_grade_id,
+        gradeLabel: gradeLabels[row.fuel_grade_id] ?? row.fuel_grade_id,
+        litres: row.litres,
+        costPerLitre: row.cost_per_litre,
+        valueZar: row.total_value_zar,
+      }))
+      .sort((a, b) => a.gradeId.localeCompare(b.gradeId))
+  }
+
+  return result
+}
+
+// ── buildOwnerDashboardStations ────────────────────────────────────────────
+
+export interface OwnerDashboardStation {
+  id: string
+  name: string
+  pendingCount: number
+  flaggedShifts: Array<{ id: string; period: string; flag_comment: string | null }>
+  inventory: InventoryLine[] | null
+}
+
+/**
+ * Combines today's pending counts, flagged shifts, and inventory snapshots
+ * into the per-station view model rendered on the owner dashboard.
+ */
+export function buildOwnerDashboardStations(
+  stations: Array<{ id: string; name: string }>,
+  todayShifts: Array<{ id: string; station_id: string; period: string; is_flagged: boolean; flag_comment: string | null; status: string }>,
+  inventoryByStation: Record<string, InventoryLine[]>,
+): OwnerDashboardStation[] {
+  const pendingCounts = countPendingShiftsPerStation(todayShifts)
+
+  return stations.map(station => ({
+    id: station.id,
+    name: station.name,
+    pendingCount: pendingCounts[station.id] ?? 0,
+    flaggedShifts: todayShifts.filter(s => s.station_id === station.id && s.is_flagged),
+    inventory: inventoryByStation[station.id] ?? null,
+  }))
+}

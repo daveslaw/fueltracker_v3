@@ -4,6 +4,9 @@ import {
   buildFinancialLines,
   isReportPartial,
   countPendingShiftsPerStation,
+  pickLatestClosedShiftPerStation,
+  buildStationInventoryLines,
+  buildOwnerDashboardStations,
 } from '../lib/owner-reports'
 import type { ShiftStatus } from '../lib/owner-reports'
 
@@ -148,5 +151,157 @@ describe('isReportPartial', () => {
 
   it('returns true when shift has not started', () => {
     expect(isReportPartial('not_started')).toBe(true)
+  })
+})
+
+// ── pickLatestClosedShiftPerStation ───────────────────────────────────────
+
+describe('pickLatestClosedShiftPerStation', () => {
+  it('picks the only closed shift for a station', () => {
+    const result = pickLatestClosedShiftPerStation([
+      { id: 'shift-1', station_id: 'station-1', shift_date: '2026-06-20', period: 'morning' },
+    ])
+    expect(result['station-1']).toBe('shift-1')
+  })
+
+  it('evening beats morning on the same date', () => {
+    const result = pickLatestClosedShiftPerStation([
+      { id: 'morning-shift', station_id: 'station-1', shift_date: '2026-06-20', period: 'morning' },
+      { id: 'evening-shift', station_id: 'station-1', shift_date: '2026-06-20', period: 'evening' },
+    ])
+    expect(result['station-1']).toBe('evening-shift')
+  })
+
+  it('a later date beats an earlier date regardless of period', () => {
+    const result = pickLatestClosedShiftPerStation([
+      { id: 'old-evening', station_id: 'station-1', shift_date: '2026-06-19', period: 'evening' },
+      { id: 'new-morning', station_id: 'station-1', shift_date: '2026-06-20', period: 'morning' },
+    ])
+    expect(result['station-1']).toBe('new-morning')
+  })
+
+  it('tracks stations independently', () => {
+    const result = pickLatestClosedShiftPerStation([
+      { id: 'shift-a', station_id: 'station-1', shift_date: '2026-06-20', period: 'morning' },
+      { id: 'shift-b', station_id: 'station-2', shift_date: '2026-06-19', period: 'evening' },
+    ])
+    expect(result['station-1']).toBe('shift-a')
+    expect(result['station-2']).toBe('shift-b')
+  })
+
+  it('returns an empty object for no closed shifts', () => {
+    expect(pickLatestClosedShiftPerStation([])).toEqual({})
+  })
+})
+
+// ── buildStationInventoryLines ────────────────────────────────────────────
+
+describe('buildStationInventoryLines', () => {
+  const stations = [{ id: 'station-1', name: 'Elegant Amaglug' }]
+  const grades = [{ id: '95', label: 'Petrol 95' }, { id: 'D50', label: 'Diesel 50' }]
+  const prices = [
+    { station_id: 'station-1', fuel_grade_id: '95', cost_per_litre: 14.00 },
+    { station_id: 'station-1', fuel_grade_id: 'D50', cost_per_litre: 16.00 },
+  ]
+
+  it('builds inventory lines from dip readings, joined to grade labels and prices', () => {
+    const result = buildStationInventoryLines(
+      stations,
+      { 'station-1': 'shift-1' },
+      [{ shift_id: 'shift-1', litres: 10000, tanks: { fuel_grade_id: '95' } }],
+      prices,
+      grades,
+    )
+    expect(result['station-1']).toHaveLength(1)
+    expect(result['station-1'][0]).toEqual({
+      gradeId: '95', gradeLabel: 'Petrol 95', litres: 10000, costPerLitre: 14.00, valueZar: 140000,
+    })
+  })
+
+  it('sums litres across multiple tanks of the same grade', () => {
+    const result = buildStationInventoryLines(
+      stations,
+      { 'station-1': 'shift-1' },
+      [
+        { shift_id: 'shift-1', litres: 6000, tanks: { fuel_grade_id: '95' } },
+        { shift_id: 'shift-1', litres: 4000, tanks: { fuel_grade_id: '95' } },
+      ],
+      prices,
+      grades,
+    )
+    expect(result['station-1'][0].litres).toBe(10000)
+  })
+
+  it('ignores dip readings for shifts other than the latest closed one', () => {
+    const result = buildStationInventoryLines(
+      stations,
+      { 'station-1': 'shift-2' },
+      [{ shift_id: 'shift-1', litres: 10000, tanks: { fuel_grade_id: '95' } }],
+      prices,
+      grades,
+    )
+    expect(result['station-1']).toEqual([])
+  })
+
+  it('handles the Supabase nested-select array shape for tanks', () => {
+    const result = buildStationInventoryLines(
+      stations,
+      { 'station-1': 'shift-1' },
+      [{ shift_id: 'shift-1', litres: 10000, tanks: [{ fuel_grade_id: '95' }] }],
+      prices,
+      grades,
+    )
+    expect(result['station-1'][0].gradeId).toBe('95')
+  })
+
+  it('skips stations with no latest closed shift', () => {
+    const result = buildStationInventoryLines(stations, {}, [], prices, grades)
+    expect(result['station-1']).toBeUndefined()
+  })
+
+  it('sorts lines by grade id', () => {
+    const result = buildStationInventoryLines(
+      stations,
+      { 'station-1': 'shift-1' },
+      [
+        { shift_id: 'shift-1', litres: 5000, tanks: { fuel_grade_id: 'D50' } },
+        { shift_id: 'shift-1', litres: 5000, tanks: { fuel_grade_id: '95' } },
+      ],
+      prices,
+      grades,
+    )
+    expect(result['station-1'].map(l => l.gradeId)).toEqual(['95', 'D50'])
+  })
+})
+
+// ── buildOwnerDashboardStations ────────────────────────────────────────────
+
+describe('buildOwnerDashboardStations', () => {
+  const stations = [{ id: 'station-1', name: 'Elegant Amaglug' }]
+
+  it('combines pending count, flagged shifts, and inventory for a station', () => {
+    const todayShifts = [
+      { id: 'shift-1', station_id: 'station-1', period: 'morning', is_flagged: true, flag_comment: 'Tank var', status: 'closed' },
+      { id: 'shift-2', station_id: 'station-1', period: 'evening', is_flagged: false, flag_comment: null, status: 'pending' },
+    ]
+    const inventory = { 'station-1': [{ gradeId: '95', gradeLabel: 'Petrol 95', litres: 1000, costPerLitre: 14, valueZar: 14000 }] }
+
+    const result = buildOwnerDashboardStations(stations, todayShifts, inventory)
+    expect(result).toHaveLength(1)
+    expect(result[0].pendingCount).toBe(1)
+    expect(result[0].flaggedShifts).toHaveLength(1)
+    expect(result[0].flaggedShifts[0].id).toBe('shift-1')
+    expect(result[0].inventory).toEqual(inventory['station-1'])
+  })
+
+  it('returns null inventory for a station with no snapshot', () => {
+    const result = buildOwnerDashboardStations(stations, [], {})
+    expect(result[0].inventory).toBeNull()
+  })
+
+  it('returns zero pending count and no flagged shifts when station has none today', () => {
+    const result = buildOwnerDashboardStations(stations, [], {})
+    expect(result[0].pendingCount).toBe(0)
+    expect(result[0].flaggedShifts).toHaveLength(0)
   })
 })

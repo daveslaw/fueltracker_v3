@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { buildMonthlyReport } from '@/lib/aggregate-reports'
-import type { DayVarianceRow } from '@/lib/aggregate-reports'
+import { buildMonthlyReport, monthToDateRange } from '@/lib/aggregate-reports'
+import type { RawReconciliation } from '@/lib/aggregate-reports'
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 
 interface Props {
@@ -42,9 +42,7 @@ export default async function MonthlyReportPage({ searchParams }: Props) {
   }
   const activeStation = (stations ?? []).find(s => s.id === activeStationId)
 
-  const [y, m] = selectedMonth.split('-').map(Number)
-  const firstDay = `${selectedMonth}-01`
-  const lastDay  = new Date(y, m, 0).toISOString().slice(0, 10)
+  const { startDate: firstDay, endDate: lastDay } = monthToDateRange(selectedMonth)
 
   const { data: shifts } = await supabase
     .from('shifts')
@@ -56,38 +54,11 @@ export default async function MonthlyReportPage({ searchParams }: Props) {
   const shiftIds = (shifts ?? []).map(s => s.id)
   const recsResult = shiftIds.length > 0
     ? await supabase.from('reconciliations')
-        .select('shift_id, reconciliation_tank_lines(variance_litres), reconciliation_grade_lines(variance_litres, variance_zar)')
+        .select('shift_id, reconciliation_tank_lines(variance_litres), reconciliation_pump_lines(variance_litres, variance_zar)')
         .in('shift_id', shiftIds)
-    : { data: [] as any[] }
+    : { data: [] as RawReconciliation[] }
 
-  const recs = recsResult.data ?? []
-
-  const dates = new Set((shifts ?? []).map(s => s.shift_date))
-  const dayRows: DayVarianceRow[] = [...dates].map(date => {
-    const dayShifts = (shifts ?? []).filter(s => s.shift_date === date)
-    const morningShift = dayShifts.find(s => s.period === 'morning')
-    const eveningShift = dayShifts.find(s => s.period === 'evening')
-
-    let tankVar = 0, gradeVar = 0, revenueVar = 0
-    for (const s of dayShifts) {
-      const rec = recs.find((r: any) => r.shift_id === s.id)
-      if (!rec) continue
-      tankVar  += (rec.reconciliation_tank_lines  ?? []).reduce((sum: number, l: any) => sum + l.variance_litres, 0)
-      gradeVar += (rec.reconciliation_grade_lines ?? []).reduce((sum: number, l: any) => sum + l.variance_litres, 0)
-      revenueVar += (rec.reconciliation_grade_lines ?? []).reduce((sum: number, l: any) => sum + (l.variance_zar ?? 0), 0)
-    }
-
-    return {
-      date,
-      morningStatus: (morningShift?.status ?? 'not_started') as any,
-      eveningStatus: (eveningShift?.status ?? 'not_started') as any,
-      tankVarianceLitres: Math.round(tankVar * 100) / 100,
-      gradeVarianceLitres: Math.round(gradeVar * 100) / 100,
-      revenueVarianceZar: Math.round(revenueVar * 100) / 100,
-    }
-  })
-
-  const report = buildMonthlyReport(dayRows, selectedMonth, activeStationId)
+  const report = buildMonthlyReport(shifts ?? [], recsResult.data ?? [], selectedMonth, activeStationId)
 
   return (
     <main className="max-w-4xl mx-auto p-4 space-y-6">

@@ -1,25 +1,16 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { buildWeeklyReport } from '@/lib/aggregate-reports'
-import type { DayVarianceRow } from '@/lib/aggregate-reports'
+import { buildWeeklyReport, getISOWeekString, isoWeekToDateRange } from '@/lib/aggregate-reports'
+import type { RawReconciliation } from '@/lib/aggregate-reports'
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 
 interface Props {
   searchParams: Promise<{ station?: string; week?: string }>
 }
 
-function getISOWeekString(d: Date): string {
-  const thu = new Date(d)
-  thu.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7) + 3)
-  const year = thu.getUTCFullYear()
-  const jan4 = new Date(Date.UTC(year, 0, 4))
-  const week = 1 + Math.round(((thu.getTime() - jan4.getTime()) / 86_400_000 - 3 + ((jan4.getUTCDay() + 6) % 7)) / 7)
-  return `${year}-W${String(week).padStart(2, '0')}`
-}
-
 function currentISOWeek(): string {
-  return getISOWeekString(new Date())
+  return getISOWeekString(new Date().toISOString().slice(0, 10))
 }
 
 function fmtV(n: number, unit: 'L' | 'R') {
@@ -51,21 +42,9 @@ export default async function WeeklyReportPage({ searchParams }: Props) {
   }
   const activeStation = (stations ?? []).find(s => s.id === activeStationId)
 
-  // Parse the ISO week to a date range (Mon–Sun) for querying
-  // ISO week YYYY-Www: first day is Monday
-  const weekMatch = selectedWeek.match(/^(\d{4})-W(\d{2})$/)
-  if (!weekMatch) redirect('/dashboard/reports/weekly')
-
-  const year = parseInt(weekMatch[1])
-  const weekNum = parseInt(weekMatch[2])
-  // Jan 4 is always in week 1
-  const jan4 = new Date(Date.UTC(year, 0, 4))
-  const weekStart = new Date(jan4)
-  weekStart.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() + 6) % 7) + (weekNum - 1) * 7)
-  const weekEnd = new Date(weekStart)
-  weekEnd.setUTCDate(weekStart.getUTCDate() + 6)
-  const startDate = weekStart.toISOString().slice(0, 10)
-  const endDate = weekEnd.toISOString().slice(0, 10)
+  const dateRange = isoWeekToDateRange(selectedWeek)
+  if (!dateRange) redirect('/dashboard/reports/weekly')
+  const { startDate, endDate } = dateRange
 
   // Load shifts + reconciliations for this week
   const { data: shifts } = await supabase
@@ -78,39 +57,11 @@ export default async function WeeklyReportPage({ searchParams }: Props) {
   const shiftIds = (shifts ?? []).map(s => s.id)
   const recsResult = shiftIds.length > 0
     ? await supabase.from('reconciliations')
-        .select('shift_id, reconciliation_tank_lines(variance_litres), reconciliation_grade_lines(variance_litres, variance_zar)')
+        .select('shift_id, reconciliation_tank_lines(variance_litres), reconciliation_pump_lines(variance_litres, variance_zar)')
         .in('shift_id', shiftIds)
-    : { data: [] as any[] }
+    : { data: [] as RawReconciliation[] }
 
-  const recs = recsResult.data ?? []
-
-  // Build DayVarianceRow per date
-  const dates = new Set((shifts ?? []).map(s => s.shift_date))
-  const dayRows: DayVarianceRow[] = [...dates].map(date => {
-    const dayShifts = (shifts ?? []).filter(s => s.shift_date === date)
-    const morningShift = dayShifts.find(s => s.period === 'morning')
-    const eveningShift = dayShifts.find(s => s.period === 'evening')
-
-    let tankVar = 0, gradeVar = 0, revenueVar = 0
-    for (const s of dayShifts) {
-      const rec = recs.find((r: any) => r.shift_id === s.id)
-      if (!rec) continue
-      tankVar += (rec.reconciliation_tank_lines ?? []).reduce((sum: number, l: any) => sum + l.variance_litres, 0)
-      gradeVar += (rec.reconciliation_grade_lines ?? []).reduce((sum: number, l: any) => sum + l.variance_litres, 0)
-      revenueVar += (rec.reconciliation_grade_lines ?? []).reduce((sum: number, l: any) => sum + (l.variance_zar ?? 0), 0)
-    }
-
-    return {
-      date,
-      morningStatus: (morningShift?.status ?? 'not_started') as any,
-      eveningStatus: (eveningShift?.status ?? 'not_started') as any,
-      tankVarianceLitres: Math.round(tankVar * 100) / 100,
-      gradeVarianceLitres: Math.round(gradeVar * 100) / 100,
-      revenueVarianceZar: Math.round(revenueVar * 100) / 100,
-    }
-  })
-
-  const report = buildWeeklyReport(dayRows, selectedWeek, activeStationId)
+  const report = buildWeeklyReport(shifts ?? [], recsResult.data ?? [], selectedWeek, activeStationId)
 
   return (
     <main className="max-w-4xl mx-auto p-4 space-y-6">

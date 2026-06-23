@@ -1,16 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
-import { countPendingShiftsPerStation } from '@/lib/owner-reports'
+import { pickLatestClosedShiftPerStation, buildStationInventoryLines, buildOwnerDashboardStations } from '@/lib/owner-reports'
 import { DashboardPoller } from './_components/DashboardPoller'
 import { createShiftSlot } from './actions'
 import { signOut } from '@/app/(auth)/login/actions'
-
-type InventoryLine = {
-  gradeId: string
-  gradeLabel: string
-  litres: number
-  costPerLitre: number
-  valueZar: number
-}
 
 function formatZAR(amount: number) {
   return new Intl.NumberFormat('en-ZA', {
@@ -57,20 +49,7 @@ export default async function DashboardPage() {
     supabase.from('fuel_grades').select('id, label'),
   ])
 
-  const pendingCounts = countPendingShiftsPerStation(todayShifts ?? [])
-
-  // Pick latest closed shift per station — evening beats morning on same date
-  const periodValue: Record<string, number> = { evening: 1, morning: 0 }
-  const sortedClosed = [...(closedShifts ?? [])].sort((a, b) => {
-    if (a.shift_date !== b.shift_date) return b.shift_date.localeCompare(a.shift_date)
-    return (periodValue[b.period] ?? 0) - (periodValue[a.period] ?? 0)
-  })
-  const latestClosedShiftId: Record<string, string> = {}
-  for (const shift of sortedClosed) {
-    if (!latestClosedShiftId[shift.station_id]) {
-      latestClosedShiftId[shift.station_id] = shift.id
-    }
-  }
+  const latestClosedShiftId = pickLatestClosedShiftPerStation(closedShifts ?? [])
 
   const shiftIds = Object.values(latestClosedShiftId)
   const { data: dipReadings } = shiftIds.length > 0
@@ -81,45 +60,15 @@ export default async function DashboardPage() {
         .eq('type', 'close')
     : { data: [] as Array<{ shift_id: string; litres: number; tanks: { fuel_grade_id: string } | null }> }
 
-  const gradeLabels: Record<string, string> = Object.fromEntries(
-    (fuelGrades ?? []).map(g => [g.id, g.label])
+  const inventoryByStation = buildStationInventoryLines(
+    stations ?? [],
+    latestClosedShiftId,
+    dipReadings ?? [],
+    fuelPrices ?? [],
+    fuelGrades ?? [],
   )
 
-  const inventoryByStation: Record<string, InventoryLine[]> = {}
-  for (const station of stations ?? []) {
-    const shiftId = latestClosedShiftId[station.id]
-    if (!shiftId) continue
-
-    const gradeMap: Record<string, number> = {}
-    for (const dip of (dipReadings ?? []).filter(d => d.shift_id === shiftId)) {
-      const gradeId = (dip.tanks as { fuel_grade_id: string } | null)?.fuel_grade_id
-      if (!gradeId) continue
-      gradeMap[gradeId] = (gradeMap[gradeId] ?? 0) + Number(dip.litres)
-    }
-
-    const stationPrices = (fuelPrices ?? []).filter(p => p.station_id === station.id)
-
-    inventoryByStation[station.id] = Object.entries(gradeMap)
-      .map(([gradeId, litres]) => {
-        const price = stationPrices.find(p => p.fuel_grade_id === gradeId)
-        const costPerLitre = Number(price?.cost_per_litre ?? 0)
-        return {
-          gradeId,
-          gradeLabel: gradeLabels[gradeId] ?? gradeId,
-          litres,
-          costPerLitre,
-          valueZar: litres * costPerLitre,
-        }
-      })
-      .sort((a, b) => a.gradeId.localeCompare(b.gradeId))
-  }
-
-  const stationList = (stations ?? []).map(station => ({
-    ...station,
-    pendingCount: pendingCounts[station.id] ?? 0,
-    flaggedShifts: (todayShifts ?? []).filter(s => s.station_id === station.id && s.is_flagged),
-    inventory: inventoryByStation[station.id] ?? null,
-  }))
+  const stationList = buildOwnerDashboardStations(stations ?? [], todayShifts ?? [], inventoryByStation)
 
   return (
     <main className="max-w-4xl mx-auto p-4 space-y-6">
