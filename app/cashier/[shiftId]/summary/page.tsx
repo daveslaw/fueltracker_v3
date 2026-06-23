@@ -8,6 +8,28 @@ import { HandoffPrompt }             from '@/components/HandoffPrompt'
 
 type Props = { params: Promise<{ shiftId: string }> }
 
+interface GradeLine {
+  fuel_grade_id: string
+  meter_delta: number
+  pos_litres_sold: number
+  variance_litres: number
+  sell_price_per_litre: number
+  expected_revenue_zar: number
+  pos_revenue_zar: number
+  variance_zar: number
+}
+
+interface StockLine {
+  product_id: string
+  opening_count: number
+  deliveries_received: number
+  pos_units_sold: number
+  expected_closing_count: number
+  actual_closing_count: number
+  variance_units: number
+  variance_zar: number
+}
+
 const fmt  = (n: number) => n.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtR = (n: number) => `R ${fmt(n)}`
 
@@ -43,12 +65,12 @@ export default async function CashierSummaryPage({ params }: Props) {
       ? supabase.from('reconciliation_grade_lines')
           .select('fuel_grade_id, meter_delta, pos_litres_sold, variance_litres, sell_price_per_litre, expected_revenue_zar, pos_revenue_zar, variance_zar')
           .eq('reconciliation_id', rec.id)
-      : Promise.resolve({ data: [] as any[] }),
+      : Promise.resolve({ data: [] as GradeLine[] }),
     rec
       ? supabase.from('reconciliation_stock_lines')
           .select('product_id, opening_count, deliveries_received, pos_units_sold, expected_closing_count, actual_closing_count, variance_units, variance_zar')
           .eq('reconciliation_id', rec.id)
-      : Promise.resolve({ data: [] as any[] }),
+      : Promise.resolve({ data: [] as StockLine[] }),
     supabase.from('products').select('id, name').eq('station_id', stationId),
   ])
 

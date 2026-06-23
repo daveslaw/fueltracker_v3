@@ -77,7 +77,7 @@ export async function createDelivery(
     .single()
 
   if (error) {
-    if ((error as any).code === '23505')
+    if (error.code === '23505')
       return { error: 'Delivery note number already recorded for this station' }
     return { error: error.message }
   }

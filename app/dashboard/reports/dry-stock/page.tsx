@@ -143,12 +143,12 @@ export default async function DryStockReportPage({ searchParams }: Props) {
             </thead>
             <tbody className="divide-y">
               {rows.map(row => {
-                const shift = (row.reconciliations as any).shifts
+                const shift = row.reconciliations.shifts
                 return (
                   <tr key={row.id} className="py-2">
                     <td className="py-2 pr-4 text-gray-600">{shift.shift_date}</td>
                     <td className="py-2 pr-4 capitalize text-gray-600">{shift.period}</td>
-                    <td className="py-2 pr-4 font-medium">{(row.products as any)?.name ?? row.product_id}</td>
+                    <td className="py-2 pr-4 font-medium">{row.products?.name ?? row.product_id}</td>
                     <td className="py-2 pr-4 text-right text-gray-600">{fmt(row.opening_count)}</td>
                     <td className="py-2 pr-4 text-right text-gray-600">{fmt(row.deliveries_received)}</td>
                     <td className="py-2 pr-4 text-right text-gray-600">{fmt(row.pos_units_sold)}</td>

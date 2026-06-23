@@ -11,6 +11,8 @@ import {
   ReferenceLine,
 } from 'recharts'
 import type { TankTrendSeries, DeliveryMarker } from '@/lib/tank-trends'
+import type { TooltipContentProps } from 'recharts'
+import type { ValueType, NameType } from 'recharts/types/component/DefaultTooltipContent'
 
 const COLOURS = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed', '#0891b2', '#db2777']
 
@@ -56,18 +58,21 @@ export function TankTrendChart({ series, deliveries }: Props) {
 
   const deliveryDates = new Set(deliveries.map(d => d.date))
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: TooltipContentProps<ValueType, NameType>) => {
     if (!active || !payload?.length) return null
     const dateDeliveries = deliveries.filter(d => d.date === label)
     return (
       <div className="bg-white border rounded shadow-sm p-3 text-xs space-y-1 min-w-[140px]">
         <div className="font-medium">{label}</div>
-        {payload.map((p: any) => (
-          <div key={p.dataKey} style={{ color: p.color }}>
-            {series.find(s => s.tankId === p.dataKey)?.tankLabel ?? p.dataKey}:{' '}
-            {p.value != null ? fmtL(p.value) : '—'}
-          </div>
-        ))}
+        {payload.map((p) => {
+          const tankId = String(p.dataKey)
+          return (
+            <div key={tankId} style={{ color: p.color }}>
+              {series.find(s => s.tankId === tankId)?.tankLabel ?? tankId}:{' '}
+              {p.value != null ? fmtL(Number(p.value)) : '—'}
+            </div>
+          )
+        })}
         {dateDeliveries.length > 0 && (
           <div className="border-t pt-1 mt-1 text-amber-700 font-medium">
             {dateDeliveries.map((d, i) => (
@@ -119,7 +124,7 @@ export function TankTrendChart({ series, deliveries }: Props) {
             tick={{ fontSize: 11 }}
             width={72}
           />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={CustomTooltip} />
 
           {/* Capacity reference lines (dashed, per tank) */}
           {visible.map((s, i) => (

@@ -48,7 +48,7 @@ async function uploadPhoto() {
 beforeEach(() => {
   mockPush.mockClear()
   vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 100, height: 100 }))
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage: vi.fn() } as any)
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D)
   vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((cb) => {
     cb!(new Blob(['img'], { type: 'image/jpeg' }))
   })

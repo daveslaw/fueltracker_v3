@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { makePinSignIn } from '@/lib/pin-sign-in'
 import { hashPin } from '@/lib/pin-auth'
 
@@ -62,7 +63,7 @@ function makeSupabase({ profile, email, sessionTokens }: MockOptions) {
     _updates: updates,
     _generateLinkCalls: generateLinkCalls,
     _getUserByIdCalls: getUserByIdCalls,
-  } as any
+  }
 }
 
 describe('makePinSignIn', () => {
@@ -78,7 +79,7 @@ describe('makePinSignIn', () => {
       email: 'user1@example.com',
       sessionTokens: { access_token: 'acc', refresh_token: 'ref' },
     })
-    const signIn = makePinSignIn(supabase)
+    const signIn = makePinSignIn(supabase as unknown as SupabaseClient)
     const result = await signIn('user-1', '1234')
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -98,7 +99,7 @@ describe('makePinSignIn', () => {
       email: 'user1@example.com',
       sessionTokens: { access_token: 'acc', refresh_token: 'ref' },
     })
-    const signIn = makePinSignIn(supabase)
+    const signIn = makePinSignIn(supabase as unknown as SupabaseClient)
     await signIn('profile-id-1', '1234')
     expect(supabase._getUserByIdCalls[0]).toBe('auth-user-99')
   })
@@ -109,7 +110,7 @@ describe('makePinSignIn', () => {
       email: 'canonical@example.com',
       sessionTokens: { access_token: 'acc', refresh_token: 'ref' },
     })
-    const signIn = makePinSignIn(supabase)
+    const signIn = makePinSignIn(supabase as unknown as SupabaseClient)
     await signIn('user-1', '1234')
     expect(supabase._generateLinkCalls[0]).toMatchObject({ email: 'canonical@example.com' })
   })
@@ -118,7 +119,7 @@ describe('makePinSignIn', () => {
     const supabase = makeSupabase({
       profile: { pin_hash: correctHash, pin_attempts: 0, pin_locked: false },
     })
-    const signIn = makePinSignIn(supabase)
+    const signIn = makePinSignIn(supabase as unknown as SupabaseClient)
     const result = await signIn('user-1', '1234')
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -132,7 +133,7 @@ describe('makePinSignIn', () => {
       profile: { pin_hash: correctHash, pin_attempts: 0, pin_locked: false },
       email: 'user1@example.com',
     })
-    const signIn = makePinSignIn(supabase)
+    const signIn = makePinSignIn(supabase as unknown as SupabaseClient)
     const result = await signIn('user-1', '1234')
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -146,7 +147,7 @@ describe('makePinSignIn', () => {
       profile: { pin_hash: correctHash, pin_attempts: 0, pin_locked: false },
       email: 'user1@example.com',
     })
-    const signIn = makePinSignIn(supabase)
+    const signIn = makePinSignIn(supabase as unknown as SupabaseClient)
     await signIn('user-1', '1234')
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining('[pin-sign-in]'),
@@ -161,7 +162,7 @@ describe('makePinSignIn', () => {
       email: 'user1@example.com',
       sessionTokens: { access_token: 'acc', refresh_token: 'ref' },
     })
-    const signIn = makePinSignIn(supabase)
+    const signIn = makePinSignIn(supabase as unknown as SupabaseClient)
     await signIn('user-1', '1234')
     expect(supabase._updates[0]).toMatchObject({ pin_attempts: 0 })
   })
@@ -170,7 +171,7 @@ describe('makePinSignIn', () => {
     const supabase = makeSupabase({
       profile: { pin_hash: correctHash, pin_attempts: 2, pin_locked: false },
     })
-    const signIn = makePinSignIn(supabase)
+    const signIn = makePinSignIn(supabase as unknown as SupabaseClient)
     const result = await signIn('user-1', '9999')
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -183,7 +184,7 @@ describe('makePinSignIn', () => {
     const supabase = makeSupabase({
       profile: { pin_hash: correctHash, pin_attempts: 9, pin_locked: false },
     })
-    const signIn = makePinSignIn(supabase)
+    const signIn = makePinSignIn(supabase as unknown as SupabaseClient)
     const result = await signIn('user-1', '9999')
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -197,7 +198,7 @@ describe('makePinSignIn', () => {
     const supabase = makeSupabase({
       profile: { pin_hash: correctHash, pin_attempts: 10, pin_locked: true },
     })
-    const signIn = makePinSignIn(supabase)
+    const signIn = makePinSignIn(supabase as unknown as SupabaseClient)
     const result = await signIn('user-1', '1234')
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -207,7 +208,7 @@ describe('makePinSignIn', () => {
 
   it('unknown user returns ok:false with an error', async () => {
     const supabase = makeSupabase({ profile: null })
-    const signIn = makePinSignIn(supabase)
+    const signIn = makePinSignIn(supabase as unknown as SupabaseClient)
     const result = await signIn('unknown-user', '1234')
     expect(result.ok).toBe(false)
   })
@@ -216,7 +217,7 @@ describe('makePinSignIn', () => {
     const supabase = makeSupabase({
       profile: { pin_hash: null, pin_attempts: 0, pin_locked: false },
     })
-    const signIn = makePinSignIn(supabase)
+    const signIn = makePinSignIn(supabase as unknown as SupabaseClient)
     const result = await signIn('user-1', '1234')
     expect(result.ok).toBe(false)
   })

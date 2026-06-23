@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getDeliveryReport } from '@/lib/delivery-report'
+import type { DeliveryDb } from '@/lib/delivery-report'
 import { DeliveriesTable } from './DeliveriesTable'
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 
@@ -33,7 +34,7 @@ export default async function DeliveriesReportPage({ searchParams }: Props) {
   const supabase = await createClient()
   const { data: stations } = await supabase.from('stations').select('id, name').order('name')
 
-  const report = await getDeliveryReport(supabase as any, {
+  const report = await getDeliveryReport(supabase as unknown as DeliveryDb, {
     stationId: stationFilter,
     fromDate,
     toDate,

@@ -164,23 +164,52 @@ export default async function CloseSummaryPage({ params }: Props) {
   const { data: posSubmission } = await supabase
     .from('pos_submissions').select('id').eq('shift_id', shiftId).maybeSingle()
 
+  interface TankLine {
+    tank_id: string
+    opening_dip: number
+    deliveries_received: number
+    meter_delta: number
+    expected_closing_dip: number
+    actual_closing_dip: number
+    variance_litres: number
+  }
+
+  interface PumpLine {
+    pump_id: string
+    fuel_grade_id: string
+    meter_delta_litres: number
+    pos_litres_sold: number
+    variance_litres: number
+    sell_price_per_litre: number
+    expected_revenue_zar: number
+    pos_revenue_zar: number
+    variance_zar: number
+  }
+
+  interface PosLine {
+    id: string
+    pump_id: string
+    litres_sold: number
+    revenue_zar: number
+  }
+
   const [{ data: tankLines }, { data: pumpLines }, { data: posLines }, { data: overrides }] =
     await Promise.all([
       rec
         ? supabase.from('reconciliation_tank_lines')
             .select('tank_id, opening_dip, deliveries_received, meter_delta, expected_closing_dip, actual_closing_dip, variance_litres')
             .eq('reconciliation_id', rec.id)
-        : Promise.resolve({ data: [] as any[] }),
+        : Promise.resolve({ data: [] as TankLine[] }),
       rec
         ? supabase.from('reconciliation_pump_lines')
             .select('pump_id, fuel_grade_id, meter_delta_litres, pos_litres_sold, variance_litres, sell_price_per_litre, expected_revenue_zar, pos_revenue_zar, variance_zar')
             .eq('reconciliation_id', rec.id)
-        : Promise.resolve({ data: [] as any[] }),
+        : Promise.resolve({ data: [] as PumpLine[] }),
       posSubmission
         ? supabase.from('pos_submission_lines')
             .select('id, pump_id, litres_sold, revenue_zar')
             .eq('pos_submission_id', posSubmission.id)
-        : Promise.resolve({ data: [] as any[] }),
+        : Promise.resolve({ data: [] as PosLine[] }),
       supabase.from('ocr_overrides')
         .select('id, reading_type, field_name, original_value, override_value, reason, created_at, user_profiles(full_name)')
         .eq('shift_id', shiftId)
@@ -203,8 +232,8 @@ export default async function CloseSummaryPage({ params }: Props) {
     await createOverride(shiftId, formData)
   }
 
-  const isFlaggable = canFlag(shift.status as any)
-  const isOverridable = canOverride(shift.status as any)
+  const isFlaggable = canFlag(shift.status)
+  const isOverridable = canOverride(shift.status)
 
   return (
     <main className="max-w-xl mx-auto p-4 space-y-6">
@@ -455,7 +484,7 @@ export default async function CloseSummaryPage({ params }: Props) {
               <div key={o.id} className="px-4 py-3 space-y-0.5">
                 <div className="flex justify-between text-xs text-gray-400">
                   <span className="capitalize">
-                    {o.reading_type} reading{(o as any).field_name ? ` — ${(o as any).field_name}` : ''}
+                    {o.reading_type} reading{o.field_name ? ` — ${o.field_name}` : ''}
                   </span>
                   <span>{(() => { const d = new Date(o.created_at); return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) })()}</span>
                 </div>
@@ -463,8 +492,8 @@ export default async function CloseSummaryPage({ params }: Props) {
                   {o.original_value} → <span className="font-medium">{o.override_value}</span>
                 </div>
                 <div className="text-xs text-gray-500">{o.reason}</div>
-                {(o.user_profiles as any)?.full_name && (
-                  <div className="text-xs text-gray-400">By {(o.user_profiles as any).full_name}</div>
+                {o.user_profiles?.[0]?.full_name && (
+                  <div className="text-xs text-gray-400">By {o.user_profiles[0].full_name}</div>
                 )}
               </div>
             ))}

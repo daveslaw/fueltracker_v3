@@ -64,20 +64,26 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
   if (shiftsError) console.error('[history] shifts query error:', shiftsError.message)
 
   // Load variance summary per shift
+  interface ShiftReconciliation {
+    shift_id: string
+    reconciliation_tank_lines: Array<{ variance_litres: number }>
+    reconciliation_pump_lines: Array<{ variance_zar: number }>
+  }
+
   const shiftIds = (shifts ?? []).map(s => s.id)
   const recsResult = shiftIds.length > 0
     ? await supabase.from('reconciliations')
-        .select('shift_id, reconciliation_tank_lines(variance_litres), reconciliation_grade_lines(variance_zar)')
+        .select('shift_id, reconciliation_tank_lines(variance_litres), reconciliation_pump_lines(variance_zar)')
         .in('shift_id', shiftIds)
-    : { data: [] as any[] }
+    : { data: [] as ShiftReconciliation[] }
 
-  const recMap = new Map((recsResult.data ?? []).map((r: any) => [r.shift_id, r]))
+  const recMap = new Map((recsResult.data ?? []).map(r => [r.shift_id, r]))
 
   function varianceSummary(shiftId: string) {
     const rec = recMap.get(shiftId)
     if (!rec) return null
-    const totalTankVar = (rec.reconciliation_tank_lines ?? []).reduce((s: number, l: any) => s + l.variance_litres, 0)
-    const totalRevenueVar = (rec.reconciliation_grade_lines ?? []).reduce((s: number, l: any) => s + l.variance_zar, 0)
+    const totalTankVar = (rec.reconciliation_tank_lines ?? []).reduce((s, l) => s + l.variance_litres, 0)
+    const totalRevenueVar = (rec.reconciliation_pump_lines ?? []).reduce((s, l) => s + l.variance_zar, 0)
     return { tankVar: Math.round(totalTankVar * 100) / 100, revenueVar: Math.round(totalRevenueVar * 100) / 100 }
   }
 
@@ -166,14 +172,13 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
             )}
             {(shifts ?? []).map(s => {
               const vs = varianceSummary(s.id)
-              const ss = s as any
-              const supervisorName = ss.supervisor?.full_name ?? ss.supervisor?.email ?? '—'
-              const cashierName = ss.cashier?.full_name ?? '—'
+              const supervisorName = s.supervisor?.[0]?.full_name ?? s.supervisor?.[0]?.email ?? '—'
+              const cashierName = s.cashier?.[0]?.full_name ?? '—'
               const submittedAt = s.submitted_at ? (() => { const d = new Date(s.submitted_at); return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) })() : '—'
               return (
                 <tr key={s.id} className="hover:bg-muted/30">
                   <td className="px-3 py-2">{s.shift_date}</td>
-                  <td className="px-3 py-2">{ss.stations?.name ?? '—'}</td>
+                  <td className="px-3 py-2">{s.stations?.[0]?.name ?? '—'}</td>
                   <td className="px-3 py-2 capitalize">{s.period}</td>
                   <td className="px-3 py-2">{supervisorName}</td>
                   <td className="px-3 py-2 text-muted-foreground">{cashierName}</td>
@@ -183,7 +188,7 @@ export default async function ShiftHistoryPage({ searchParams }: Props) {
                       <span className={`text-xs px-2 py-0.5 rounded capitalize ${statusColour(s.status)}`}>
                         {s.status}
                       </span>
-                      {(ss as any).has_manual_entry && (
+                      {s.has_manual_entry && (
                         <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800">Manual</span>
                       )}
                     </div>

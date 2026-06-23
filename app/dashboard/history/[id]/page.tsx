@@ -69,7 +69,7 @@ export default async function ShiftAuditPage({ params }: Props) {
       .select('id, reconciliation_tank_lines(*), reconciliation_pump_lines(pump_id, fuel_grade_id, meter_delta_litres, pos_litres_sold, variance_litres, expected_revenue_zar, pos_revenue_zar, variance_zar)')
       .eq('shift_id', shiftId).maybeSingle(),
     supabase.from('ocr_overrides').select('id, reading_id, reading_type, original_value, override_value, reason, created_at, user_profiles!overridden_by(full_name)').eq('shift_id', shiftId),
-    (shift as any).shift_type === 'price_change'
+    shift.shift_type === 'price_change'
       ? supabase.from('shifts').select('id, part')
           .eq('station_id', shift.station_id)
           .eq('shift_date', shift.shift_date)
@@ -96,8 +96,8 @@ export default async function ShiftAuditPage({ params }: Props) {
   const maintenancePumpIds = new Set((maintenancePumpReadings ?? []).map(r => r.pump_id))
   const pumpsRequiringMaintenance = (pumps ?? []).filter(p => maintenancePumpIds.has(p.id))
 
-  const isFlaggable = canFlag(shift.status as any)
-  const isOverridable = canOverride(shift.status as any)
+  const isFlaggable = canFlag(shift.status)
+  const isOverridable = canOverride(shift.status)
 
   async function handleFlag(formData: FormData) {
     'use server'
@@ -112,7 +112,7 @@ export default async function ShiftAuditPage({ params }: Props) {
     await createOverride(shiftId, formData)
   }
 
-  const ss = shift as any
+  const ss = shift
   const shiftPart  = (ss.part  ?? 0) as ShiftPart
   const shiftType  = (ss.shift_type ?? 'standard') as 'standard' | 'price_change'
   const splitNotice = buildSplitNotice(
@@ -136,10 +136,10 @@ export default async function ShiftAuditPage({ params }: Props) {
         <div>
           <h1 className="text-xl font-semibold mt-1">{shiftLabel}</h1>
           <p className="text-sm text-muted-foreground">
-            {ss.stations?.name} · {ss.supervisor?.full_name ?? ss.supervisor?.email ?? '—'}
+            {ss.stations?.[0]?.name} · {ss.supervisor?.[0]?.full_name ?? ss.supervisor?.[0]?.email ?? '—'}
           </p>
           <p className="text-xs text-muted-foreground">
-            Cashier: {ss.cashier?.full_name ?? '—'}
+            Cashier: {ss.cashier?.[0]?.full_name ?? '—'}
           </p>
           {shift.submitted_at && (
             <p className="text-xs text-muted-foreground">
@@ -299,12 +299,12 @@ export default async function ShiftAuditPage({ params }: Props) {
                   <PhotoModal url={posSubmission.photo_url} label="POS Z-report" triggerClassName="text-primary underline text-xs" />
                 </div>
               )}
-              {posLines.map((line: any) => (
+              {posLines.map((line) => (
                 <div key={line.id} className="px-4 py-3">
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-1.5">
                       <span className={`font-medium ${overriddenIds.has(line.id) ? 'text-amber-600' : ''}`}>
-                        {(pumps ?? []).find((p: any) => p.id === line.pump_id)?.label ?? line.pump_id}{overriddenIds.has(line.id) ? ' (overridden)' : ''}
+                        {(pumps ?? []).find((p) => p.id === line.pump_id)?.label ?? line.pump_id}{overriddenIds.has(line.id) ? ' (overridden)' : ''}
                       </span>
                       {line.ocr_status && line.ocr_status !== 'auto' && (
                         <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800">Manual</span>
@@ -355,7 +355,7 @@ export default async function ShiftAuditPage({ params }: Props) {
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground font-medium">Formula 1 — Tank Inventory</p>
             <div className="border rounded-md divide-y text-sm">
-              {((rec as any).reconciliation_tank_lines ?? []).map((line: any) => (
+              {(rec.reconciliation_tank_lines ?? []).map((line) => (
                 <div key={line.id} className="px-4 py-3">
                   <div className="font-medium mb-1">{tankLabel(line.tank_id)}</div>
                   <div className="grid grid-cols-2 gap-x-4 text-muted-foreground">
@@ -374,7 +374,7 @@ export default async function ShiftAuditPage({ params }: Props) {
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground font-medium">Formula 2 — Pump Meter vs POS</p>
             <HistoryPumpVarianceTable
-              pumpLines={(rec as any).reconciliation_pump_lines ?? []}
+              pumpLines={rec.reconciliation_pump_lines ?? []}
               pumps={pumps ?? []}
             />
           </div>
@@ -420,7 +420,7 @@ export default async function ShiftAuditPage({ params }: Props) {
                 <div className="text-muted-foreground text-xs italic">{o.reason}</div>
                 <div className="text-muted-foreground text-xs">
                   {(() => { const d = new Date(o.created_at); return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) })()}
-                  {(o as any).user_profiles?.full_name && ` · ${(o as any).user_profiles.full_name}`}
+                  {o.user_profiles?.[0]?.full_name && ` · ${o.user_profiles[0].full_name}`}
                 </div>
               </div>
             ))}

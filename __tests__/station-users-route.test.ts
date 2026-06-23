@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { makeHandler } from '@/app/api/station-users/route'
 import { NextRequest } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
-function makeSupabase(rows: object[]) {
+function makeSupabase(rows: object[]): SupabaseClient {
   const chain: Record<string, unknown> = {}
   chain['select'] = () => chain
   chain['eq'] = () => chain
@@ -11,7 +12,7 @@ function makeSupabase(rows: object[]) {
   chain['is'] = () => chain
   chain['then'] = (resolve: (v: unknown) => void) =>
     Promise.resolve({ data: rows, error: null }).then(resolve)
-  return { from: () => chain } as any
+  return { from: () => chain } as unknown as SupabaseClient
 }
 
 function makeReq(params: Record<string, string>) {

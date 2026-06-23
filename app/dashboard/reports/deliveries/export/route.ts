@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getDeliveryReport } from '@/lib/delivery-report'
+import type { DeliveryDb } from '@/lib/delivery-report'
 import { formatDeliveriesCSV, buildCsvFilename } from '@/lib/csv-export'
 
 export async function GET(req: NextRequest) {
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
     if (data?.name) stationName = data.name
   }
 
-  const report = await getDeliveryReport(supabase as any, {
+  const report = await getDeliveryReport(supabase as unknown as DeliveryDb, {
     stationId,
     fromDate,
     toDate,

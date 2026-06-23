@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getShiftPeriod, validateDeliveryInput, createDelivery } from '../lib/deliveries'
 
 describe('getShiftPeriod', () => {
@@ -100,7 +101,7 @@ describe('createDelivery — duplicate note number', () => {
           }),
         }),
       }),
-    } as any
+    } as unknown as SupabaseClient
 
     const result = await createDelivery(db, {
       stationId:          'station-1',

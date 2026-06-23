@@ -28,8 +28,35 @@ export type DeliveryReportParams = {
   pageSize: number
 }
 
+export type RawDeliveryRow = {
+  id: string
+  litres_received: number
+  delivery_note_number: string
+  driver_name: string | null
+  delivery_note_url: string | null
+  delivered_at: string
+  station_id: string
+  stations: { id: string; name: string } | null
+  tanks: { id: string; label: string; fuel_grade_id: string } | null
+  user_profiles: { email: string } | null
+}
+
+interface DeliveryQueryBuilder {
+  eq(column: string, value: string): DeliveryQueryBuilder
+  gte(column: string, value: string): DeliveryQueryBuilder
+  lte(column: string, value: string): DeliveryQueryBuilder
+  order(
+    column: string,
+    opts: { ascending: boolean },
+  ): PromiseLike<{ data: RawDeliveryRow[] | null; error: { message?: string } | null }>
+}
+
+export interface DeliveryDb {
+  from(table: string): { select(query: string): DeliveryQueryBuilder }
+}
+
 export async function getDeliveryReport(
-  db: any,
+  db: DeliveryDb,
   params: DeliveryReportParams,
 ): Promise<DeliveryReportResult> {
   const { stationId, fromDate, toDate, page, pageSize } = params
@@ -55,13 +82,11 @@ export async function getDeliveryReport(
     query = query.eq('station_id', stationId)
   }
 
-  query = query.order('delivered_at', { ascending: false })
-
-  const { data, error } = await query
+  const { data, error } = await query.order('delivered_at', { ascending: false })
 
   if (error) throw new Error(error.message ?? 'Failed to fetch deliveries')
 
-  const all: DeliveryReportRow[] = (data ?? []).map((r: any) => ({
+  const all: DeliveryReportRow[] = (data ?? []).map((r) => ({
     id: r.id,
     deliveredAt: r.delivered_at,
     stationId: r.station_id,

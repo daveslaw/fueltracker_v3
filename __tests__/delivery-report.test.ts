@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { getDeliveryReport } from '../lib/delivery-report'
+import type { DeliveryDb } from '../lib/delivery-report'
 
 // Chainable Supabase mock — every method returns `this`, `order` resolves the promise
-function makeDb(rows: object[], error?: object) {
+function makeDb(rows: object[], error?: object): DeliveryDb {
   const chain: Record<string, unknown> = {}
   const methods = ['select', 'gte', 'lte', 'eq', 'neq', 'is']
   methods.forEach(m => { chain[m] = () => chain })
   chain['order'] = () => Promise.resolve({ data: rows, error: error ?? null })
-  return { from: () => chain } as any
+  return { from: () => chain } as unknown as DeliveryDb
 }
 
 const row = (overrides: Partial<RawRow> = {}): RawRow => ({

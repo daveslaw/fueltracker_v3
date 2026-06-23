@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { NextRequest } from 'next/server'
 import { POST } from '@/app/api/upload/delivery-photo/route'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 
 import { createClient } from '@/lib/supabase/server'
+type FakeSupabaseClient = Awaited<ReturnType<typeof createClient>>
 
 const mockFile = new File(['data'], 'slip.jpg', { type: 'image/jpeg' })
 
@@ -34,7 +36,7 @@ function mockSupabase(
       return makeChain(null)
     },
     storage: { from: fromSpy },
-  } as any)
+  } as unknown as FakeSupabaseClient)
   return { fromSpy }
 }
 
@@ -58,13 +60,13 @@ describe('delivery-photo upload route', () => {
 
   it('uploads to shift-photos bucket, not delivery-photos', async () => {
     const { fromSpy } = mockSupabase()
-    await POST(makeRequest() as any)
+    await POST(makeRequest() as unknown as NextRequest)
     expect(fromSpy).toHaveBeenCalledWith('shift-photos')
     expect(fromSpy).not.toHaveBeenCalledWith('delivery-photos')
   })
 
   it('authenticated upload → returns url', async () => {
-    const res = await POST(makeRequest() as any)
+    const res = await POST(makeRequest() as unknown as NextRequest)
     const body = await res.json()
     expect(res.status).toBe(200)
     expect(body.url).toBe('https://example.com/delivery.jpg')
@@ -72,30 +74,30 @@ describe('delivery-photo upload route', () => {
 
   it('file path scoped under shifts/{shiftId}/deliveries/', async () => {
     const { fromSpy } = mockSupabase()
-    await POST(makeRequest({ shiftId: 'abc-123' }) as any)
+    await POST(makeRequest({ shiftId: 'abc-123' }) as unknown as NextRequest)
     const uploadCall = fromSpy().upload.mock.calls[0]
     expect(uploadCall[0]).toMatch(/^shifts\/abc-123\/deliveries\//)
   })
 
   it('missing file → 400', async () => {
-    const res = await POST(makeRequest({ file: null }) as any)
+    const res = await POST(makeRequest({ file: null }) as unknown as NextRequest)
     expect(res.status).toBe(400)
   })
 
   it('missing shiftId → 400', async () => {
-    const res = await POST(makeRequest({ shiftId: null }) as any)
+    const res = await POST(makeRequest({ shiftId: null }) as unknown as NextRequest)
     expect(res.status).toBe(400)
   })
 
   it('unauthenticated → 401', async () => {
     mockSupabase(null)
-    const res = await POST(makeRequest() as any)
+    const res = await POST(makeRequest() as unknown as NextRequest)
     expect(res.status).toBe(401)
   })
 
   it('storage error → 500 with message', async () => {
     mockSupabase({ id: 'u1' }, { message: 'Bucket not found' })
-    const res = await POST(makeRequest() as any)
+    const res = await POST(makeRequest() as unknown as NextRequest)
     const body = await res.json()
     expect(res.status).toBe(500)
     expect(body.error).toBe('Bucket not found')
@@ -103,13 +105,13 @@ describe('delivery-photo upload route', () => {
 
   it('disallowed file type → 400', async () => {
     const badFile = new File(['data'], 'doc.pdf', { type: 'application/pdf' })
-    const res = await POST(makeRequest({ file: badFile }) as any)
+    const res = await POST(makeRequest({ file: badFile }) as unknown as NextRequest)
     expect(res.status).toBe(400)
   })
 
   it('wrong-station shiftId → 403', async () => {
     mockSupabase({ id: 'u1' }, null, { shiftData: null })
-    const res = await POST(makeRequest() as any)
+    const res = await POST(makeRequest() as unknown as NextRequest)
     expect(res.status).toBe(403)
   })
 })

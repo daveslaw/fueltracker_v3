@@ -7,7 +7,7 @@ export type PinSignInResult =
   | { ok: true; accessToken: string; refreshToken: string }
   | { ok: false; locked: boolean; attemptsRemaining: number; error: string }
 
-export function makePinSignIn(supabase: SupabaseClient | any) {
+export function makePinSignIn(supabase: SupabaseClient) {
   return async function pinSignIn(
     userId: string,
     pin: string

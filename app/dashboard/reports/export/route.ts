@@ -41,25 +41,37 @@ export async function GET(req: NextRequest) {
       .select('id, shift_id')
       .in('shift_id', shiftIds)
 
-    const recIds = (recs ?? []).map((r: any) => r.id as string)
-    const recShiftById = new Map((recs ?? []).map((r: any) => [r.id as string, r.shift_id as string]))
+    interface DailyPumpLineRow {
+      reconciliation_id:    string
+      pump_id:              string
+      fuel_grade_id:        string
+      meter_delta_litres:   number
+      pos_litres_sold:      number
+      pos_revenue_zar:      number
+      expected_revenue_zar: number
+      variance_litres:      number
+      variance_zar:         number
+    }
+
+    const recIds = (recs ?? []).map((r) => r.id as string)
+    const recShiftById = new Map((recs ?? []).map((r) => [r.id as string, r.shift_id as string]))
 
     const { data: pumpLineRows } = recIds.length > 0
       ? await supabase
           .from('reconciliation_pump_lines')
           .select('reconciliation_id, pump_id, fuel_grade_id, meter_delta_litres, pos_litres_sold, pos_revenue_zar, expected_revenue_zar, variance_litres, variance_zar')
           .in('reconciliation_id', recIds)
-      : { data: [] as any[] }
+      : { data: [] as DailyPumpLineRow[] }
 
     const { data: pumps } = await supabase
       .from('pumps').select('id, label').eq('station_id', stationId)
-    const pumpLabel = (id: string) => (pumps ?? []).find((p: any) => p.id === id)?.label ?? id
+    const pumpLabel = (id: string) => (pumps ?? []).find((p) => p.id === id)?.label ?? id
 
     const csvRows: DailyReconciliationPumpRow[] = []
     for (const line of pumpLineRows ?? []) {
       const shiftId = recShiftById.get(line.reconciliation_id as string)
       if (!shiftId) continue
-      const shift = (shifts ?? []).find((s: any) => s.id === shiftId)
+      const shift = (shifts ?? []).find((s) => s.id === shiftId)
       if (!shift) continue
       csvRows.push({
         date,
@@ -110,8 +122,8 @@ export async function GET(req: NextRequest) {
     r.tankVarianceLitres, r.gradeVarianceLitres, r.revenueVarianceZar,
   ])
 
-  if (isMonthly) {
-    const t = (report as any).totals
+  if ('totals' in report) {
+    const t = report.totals
     rows.push(['TOTAL', '', '', t.tankVarianceLitres, t.gradeVarianceLitres, t.revenueVarianceZar])
   }
 

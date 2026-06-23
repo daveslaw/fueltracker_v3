@@ -55,13 +55,15 @@ export default async function TankTrendsPage({ searchParams }: Props) {
   const shiftIds = (shifts ?? []).map(s => s.id)
 
   // Closing dip readings + deliveries in parallel
+  type ClosingDipRow = { tank_id: string; litres: number; shift_id: string }
+
   const [dipResult, { data: deliveriesRaw }] = await Promise.all([
     shiftIds.length > 0
       ? supabase.from('dip_readings')
           .select('tank_id, litres, shift_id')
           .in('shift_id', shiftIds)
           .eq('type', 'close')
-      : Promise.resolve({ data: [] as any[] }),
+      : Promise.resolve({ data: [] as ClosingDipRow[] }),
     supabase.from('deliveries')
       .select('tank_id, litres_received, delivered_at')
       .eq('station_id', activeStationId)
