@@ -341,26 +341,29 @@ export async function runReconciliationWith(
   shiftId:    string,
   repository: ShiftDataRepository,
   writer:     ReconciliationWriter,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; warnings: AssemblyWarning[] }> {
   const bundleOrError = await repository.loadBundle(shiftId)
-  if ('error' in bundleOrError) return bundleOrError
+  if ('error' in bundleOrError) return { ...bundleOrError, warnings: [] }
 
   const { inputs, warnings } = assemblePureInputs(bundleOrError)
-  if (warnings.length > 0) {
-    console.warn('[reconciliation-runner] assembly warnings for shift', shiftId, warnings)
-  }
-
   const result = computeReconciliation(inputs)
-  return writer.persist(shiftId, result)
+  const { error } = await writer.persist(shiftId, result)
+  return { error, warnings }
 }
 
-// ── Public entry point (unchanged signature — all existing callers stay the same) ──
+// ── Public entry point ─────────────────────────────────────────────────────────
 
-export async function runReconciliation(shiftId: string): Promise<{ error?: string }> {
+export async function runReconciliation(shiftId: string): Promise<{ error?: string; warnings: AssemblyWarning[] }> {
   const db = createAdminClient()
-  return runReconciliationWith(
+  const { error, warnings } = await runReconciliationWith(
     shiftId,
     createSupabaseRepository(db),
     createSupabaseWriter(db),
   )
+  if (!error) {
+    await db.from('shifts')
+      .update({ reconciliation_warnings: warnings.length > 0 ? warnings : null })
+      .eq('id', shiftId)
+  }
+  return { error, warnings }
 }

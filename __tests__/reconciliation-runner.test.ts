@@ -297,6 +297,31 @@ describe('runReconciliationWith — multi-pump grade totals', () => {
   })
 })
 
+// ── runReconciliationWith — warning forwarding ────────────────────────────────
+
+describe('runReconciliationWith — warning forwarding', () => {
+  it('tracer bullet: returns empty warnings array on a clean bundle', async () => {
+    const repo: ShiftDataRepository = { loadBundle: async () => makeBundle() }
+    const writer: ReconciliationWriter = { persist: async () => ({}) }
+
+    const result = await runReconciliationWith('shift-1', repo, writer)
+
+    expect(result.warnings).toEqual([])
+  })
+
+  it('returns PRICE_NOT_FOUND warning when bundle has no price rows', async () => {
+    const repo: ShiftDataRepository = {
+      loadBundle: async () => makeBundle({ priceRows: [] }),
+    }
+    const writer: ReconciliationWriter = { persist: async () => ({}) }
+
+    const result = await runReconciliationWith('shift-1', repo, writer)
+
+    expect(result.warnings).toHaveLength(1)
+    expect(result.warnings[0].code).toBe('PRICE_NOT_FOUND')
+  })
+})
+
 // ── runReconciliationWith — orchestration ─────────────────────────────────────
 
 describe('runReconciliationWith', () => {

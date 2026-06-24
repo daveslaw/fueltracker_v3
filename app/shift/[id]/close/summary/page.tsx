@@ -24,7 +24,7 @@ export default async function CloseSummaryPage({ params }: Props) {
 
   const { data: shift } = await supabase
     .from('shifts')
-    .select('id, station_id, period, shift_date, status, is_flagged, flag_comment, cashier_submitted_at')
+    .select('id, station_id, period, shift_date, status, is_flagged, flag_comment, cashier_submitted_at, reconciliation_warnings')
     .eq('id', shiftId)
     .single()
   if (!shift) notFound()
@@ -259,6 +259,19 @@ export default async function CloseSummaryPage({ params }: Props) {
           {station?.name} · {shift.period} · {shift.shift_date}
         </p>
       </div>
+
+      {/* Reconciliation warnings */}
+      {Array.isArray(shift.reconciliation_warnings) && shift.reconciliation_warnings.length > 0 && (
+        <section className="border border-amber-300 bg-amber-50 rounded-md px-4 py-3 space-y-2">
+          <h2 className="text-sm font-semibold text-amber-800">Reconciliation ran with incomplete data</h2>
+          <p className="text-xs text-amber-700">Some figures may be inaccurate. Contact the owner to review.</p>
+          <ul className="text-xs text-amber-700 space-y-1 list-disc list-inside">
+            {(shift.reconciliation_warnings as { code: string; detail: string }[]).map((w, i) => (
+              <li key={i}><span className="font-medium">{w.code}:</span> {w.detail}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Reconciliation */}
       {!rec && (
