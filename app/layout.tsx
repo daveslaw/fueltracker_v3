@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
 }
 
-const themeScript = `(function(){var t=localStorage.getItem('theme');if(!t)t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';if(t==='dark')document.documentElement.classList.add('dark');})()`
+const themeScript = `(function(){var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark');})()`
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()

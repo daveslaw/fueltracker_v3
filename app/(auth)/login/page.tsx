@@ -23,14 +23,11 @@ export default function LoginPage() {
   const [stationId, setStationId] = useState<string | null | undefined>(undefined)
   const [showPasswordForm, setShowPasswordForm] = useState(false)
 
-  // Detect station binding — undefined = still checking, null = no binding
   useEffect(() => {
     setStationId(getStationId())
   }, [])
 
   // Handle implicit-flow invite tokens delivered as URL hash fragments.
-  // Supabase admin inviteUserByEmail uses implicit flow (not PKCE), so the
-  // access_token arrives in the hash rather than as a ?code= param.
   useEffect(() => {
     const hash = window.location.hash
     if (!hash.includes('type=invite')) return
@@ -63,50 +60,18 @@ export default function LoginPage() {
     if (result && 'message' in result) setMessage(result.message)
   }
 
-  const background = (
-    <>
-      {/* Canopy glow */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(ellipse 80% 45% at 50% -5%, rgba(245,159,0,0.09) 0%, transparent 65%)',
-        }}
-      />
-      {/* Grid texture */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(226,232,240,0.03) 1px, transparent 1px), ' +
-            'linear-gradient(90deg, rgba(226,232,240,0.03) 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
-        }}
-      />
-    </>
-  )
-
   // Show nothing while we detect the station binding
   if (stationId === undefined) {
     return (
-      <main
-        className="relative flex min-h-screen items-center justify-center p-4 overflow-hidden"
-        style={{ background: '#0B0F1A' }}
-      >
-        {background}
-      </main>
+      <main className="relative flex min-h-screen items-center justify-center p-4 bg-gray-50" />
     )
   }
 
   // Station binding present → User Picker (or owner password form, toggled)
   if (stationId && !showPasswordForm) {
     return (
-      <main
-        className="relative flex min-h-screen items-center justify-center p-4 overflow-hidden"
-        style={{ background: '#0B0F1A' }}
-      >
-        {background}
-        <div className="relative z-10 w-full max-w-sm">
+      <main className="relative flex min-h-screen items-center justify-center p-4 bg-gray-50">
+        <div className="w-full max-w-sm">
           <div className="mb-8">
             <div className="flex items-center gap-2.5 mb-4">
               <div
@@ -121,15 +86,12 @@ export default function LoginPage() {
               />
               <span
                 className="text-xs font-semibold tracking-[0.22em] uppercase"
-                style={{ color: '#F59F00' }}
+                style={{ color: '#D08700' }}
               >
                 FuelTracker
               </span>
             </div>
-            <h1
-              className="text-3xl font-bold leading-none tracking-wide"
-              style={{ color: '#E8EDF4' }}
-            >
+            <h1 className="text-3xl font-bold leading-none tracking-wide text-gray-900">
               Who&apos;s working?
             </h1>
           </div>
@@ -137,8 +99,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => setShowPasswordForm(true)}
-            className="mt-6 w-full text-center text-xs cursor-pointer"
-            style={{ color: '#56698A' }}
+            className="mt-6 w-full text-center text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
           >
             Owner login
           </button>
@@ -149,13 +110,8 @@ export default function LoginPage() {
 
   // No station binding → standard password login
   return (
-    <main
-      className="relative flex min-h-screen items-center justify-center p-4 overflow-hidden"
-      style={{ background: '#0B0F1A' }}
-    >
-      {background}
-
-      <div className="relative z-10 w-full max-w-sm">
+    <main className="relative flex min-h-screen items-center justify-center p-4 bg-gray-50">
+      <div className="w-full max-w-sm">
         {/* Brand mark */}
         <div className="mb-10">
           <div className="flex items-center gap-2.5 mb-4">
@@ -171,18 +127,18 @@ export default function LoginPage() {
             />
             <span
               className="text-xs font-semibold tracking-[0.22em] uppercase"
-              style={{ color: '#F59F00', letterSpacing: '0.22em' }}
+              style={{ color: '#D08700', letterSpacing: '0.22em' }}
             >
               FuelTracker
             </span>
           </div>
           <h1
-            className="text-[2.6rem] font-bold leading-none tracking-wide"
-            style={{ color: '#E8EDF4', fontFamily: 'var(--font-heading), sans-serif' }}
+            className="text-[2.6rem] font-bold leading-none tracking-wide text-gray-900"
+            style={{ fontFamily: 'var(--font-heading), sans-serif' }}
           >
             {mode === 'forgot-password' ? 'Reset Password' : 'Station Control'}
           </h1>
-          <p className="mt-2 text-sm" style={{ color: '#7B8EA8' }}>
+          <p className="mt-2 text-sm text-gray-500">
             {mode === 'forgot-password'
               ? "Enter your email and we'll send a reset link."
               : 'Sign in to your operator dashboard'}
@@ -191,14 +147,7 @@ export default function LoginPage() {
 
         {/* Invite-expired error banner */}
         {inviteExpiredError && (
-          <div
-            className="rounded-lg px-4 py-2.5 text-sm mb-6"
-            style={{
-              background: 'rgba(244,63,94,0.10)',
-              border: '1px solid rgba(244,63,94,0.25)',
-              color: '#FB7185',
-            }}
-          >
+          <div className="rounded-lg px-4 py-2.5 text-sm mb-6 bg-red-50 border border-red-200 text-red-700">
             {inviteExpiredError}
           </div>
         )}
@@ -208,8 +157,7 @@ export default function LoginPage() {
           <div>
             <label
               htmlFor="email"
-              className="block mb-1.5 text-xs font-semibold uppercase tracking-widest"
-              style={{ color: '#56698A' }}
+              className="block mb-1.5 text-xs font-semibold uppercase tracking-widest text-gray-500"
             >
               Email
             </label>
@@ -219,12 +167,7 @@ export default function LoginPage() {
               type="email"
               required
               autoComplete="email"
-              className="w-full rounded-lg px-4 py-2.5 text-sm transition-colors"
-              style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid #2A3656',
-                color: '#E2E8F0',
-              }}
+              className="w-full rounded-lg px-4 py-2.5 text-sm bg-white border border-gray-300 text-gray-900 focus:outline-none focus:border-amber-400 transition-colors"
             />
           </div>
 
@@ -232,8 +175,7 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="password"
-                className="block mb-1.5 text-xs font-semibold uppercase tracking-widest"
-                style={{ color: '#56698A' }}
+                className="block mb-1.5 text-xs font-semibold uppercase tracking-widest text-gray-500"
               >
                 Password
               </label>
@@ -243,38 +185,19 @@ export default function LoginPage() {
                 type="password"
                 required
                 autoComplete="current-password"
-                className="w-full rounded-lg px-4 py-2.5 text-sm"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid #2A3656',
-                  color: '#E2E8F0',
-                }}
+                className="w-full rounded-lg px-4 py-2.5 text-sm bg-white border border-gray-300 text-gray-900 focus:outline-none focus:border-amber-400 transition-colors"
               />
             </div>
           )}
 
           {error && (
-            <div
-              className="rounded-lg px-4 py-2.5 text-sm"
-              style={{
-                background: 'rgba(244,63,94,0.10)',
-                border: '1px solid rgba(244,63,94,0.25)',
-                color: '#FB7185',
-              }}
-            >
+            <div className="rounded-lg px-4 py-2.5 text-sm bg-red-50 border border-red-200 text-red-700">
               {error}
             </div>
           )}
 
           {message && (
-            <div
-              className="rounded-lg px-4 py-2.5 text-sm"
-              style={{
-                background: 'rgba(16,185,129,0.10)',
-                border: '1px solid rgba(16,185,129,0.25)',
-                color: '#34D399',
-              }}
-            >
+            <div className="rounded-lg px-4 py-2.5 text-sm bg-green-50 border border-green-200 text-green-700">
               {message}
             </div>
           )}
@@ -283,7 +206,7 @@ export default function LoginPage() {
             type="submit"
             disabled={pending}
             className="w-full rounded-lg py-2.5 text-sm font-bold tracking-wide transition-opacity disabled:opacity-50 disabled:cursor-default"
-            style={{ background: '#F59F00', color: '#0B0F1A' }}
+            style={{ background: '#F59F00', color: '#1a1200' }}
           >
             {pending
               ? mode === 'forgot-password' ? 'Sending…' : 'Signing in…'
@@ -294,8 +217,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => { setMode('forgot-password'); setError(null); setMessage(null) }}
-              className="w-full text-center text-xs"
-              style={{ color: '#56698A' }}
+              className="w-full text-center text-xs text-gray-400 hover:text-gray-600"
             >
               Forgot password?
             </button>
@@ -305,8 +227,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => { setMode('password'); setError(null); setMessage(null) }}
-              className="w-full text-center text-xs"
-              style={{ color: '#56698A' }}
+              className="w-full text-center text-xs text-gray-400 hover:text-gray-600"
             >
               Back to sign in
             </button>
@@ -316,8 +237,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setShowPasswordForm(false)}
-              className="w-full text-center text-xs cursor-pointer"
-              style={{ color: '#56698A' }}
+              className="w-full text-center text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
             >
               Back to staff picker
             </button>

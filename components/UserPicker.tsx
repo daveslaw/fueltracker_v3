@@ -88,12 +88,12 @@ export function UserPicker({ stationId }: Props) {
           <button
             key={u.id}
             onClick={() => setSelectedUser(u)}
-            className="flex flex-col items-center gap-1 rounded-xl p-4 bg-white/10 hover:bg-white/20 active:bg-white/30 transition-colors cursor-pointer"
+            className="flex flex-col items-center gap-1 rounded-xl p-4 bg-white border border-gray-200 hover:border-amber-300 hover:bg-amber-50 active:bg-amber-100 transition-colors cursor-pointer shadow-sm"
           >
-            <span className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-semibold text-lg">
+            <span className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 font-semibold text-lg">
               {u.full_name.charAt(0).toUpperCase()}
             </span>
-            <span className="text-sm font-medium text-white text-center leading-tight">
+            <span className="text-sm font-medium text-gray-900 text-center leading-tight">
               {u.full_name}
             </span>
             <span className="text-xs text-gray-400 capitalize">{u.role}</span>
@@ -101,7 +101,7 @@ export function UserPicker({ stationId }: Props) {
         ))}
       </div>
       {users.length === 0 && (
-        <p className="text-center text-sm text-gray-500 py-6">No staff configured for this station.</p>
+        <p className="text-center text-sm text-gray-400 py-6">No staff configured for this station.</p>
       )}
     </div>
   )
