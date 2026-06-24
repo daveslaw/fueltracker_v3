@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { matchNozzlesToPumps, isRateMismatch } from '@/lib/pos-capture'
 import type { NozzlePosOcrResult } from '@/lib/ocr/parse-nozzle-pos'
-import type { PosNozzleLineInput } from '@/app/shift/actions'
+import type { PosNozzleLineInput } from '@/lib/pos-submission'
 
 export type PumpWithGrade = {
   id: string

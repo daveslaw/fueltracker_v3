@@ -7,7 +7,7 @@ import { canCashierSubmit }            from '@/lib/cashier-progress'
 import { getCashierSubmissionState }   from '@/lib/cashier-submission'
 import { runStockReconciliation }      from '@/lib/dry-stock-runner'
 import { savePosLines }                from '@/lib/pos-submission'
-export type { PosNozzleLineInput }     from '@/lib/pos-submission'
+import type { PosNozzleLineInput }     from '@/lib/pos-submission'
 
 type ActionResult = { error: string } | { success: true }
 

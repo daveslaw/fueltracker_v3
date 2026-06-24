@@ -434,7 +434,7 @@ export async function getFuelControlMonth(
     reconciliations:   { shift_id: string }
   }> = []
 
-  const posLinesByShiftGrade = new Map<string, number>()
+  let posLinesByShiftGrade = new Map<string, number>()
 
   if (closedShiftIds.length > 0) {
     const { data: recs } = await db

@@ -12,7 +12,7 @@ import { runShiftClose, runShiftSplit, runShiftOverride } from '@/lib/shift-work
 import type { ShiftOverrideData } from '@/lib/shift-workflow'
 import type { ShiftRow, ShiftPeriod, ShiftStatus } from '@/lib/shift-open'
 import { savePosLines } from '@/lib/pos-submission'
-export type { PosNozzleLineInput } from '@/lib/pos-submission'
+import type { PosNozzleLineInput } from '@/lib/pos-submission'
 
 type ActionResult = { error: string } | { success: true; warning?: string }
 
