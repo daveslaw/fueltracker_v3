@@ -3,7 +3,6 @@ import { createClient } from '@/lib/supabase/server'
 import { getUserStatus } from '@/lib/user-management'
 import { UserRow } from './UserRow'
 import { CreateStationUserForm } from './CreateStationUserForm'
-import { InviteForm } from './InviteForm'
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 import Link from 'next/link'
 
@@ -97,13 +96,6 @@ export default async function UsersPage() {
               </tbody>
             </table>
           </div>
-        </section>
-      )}
-
-      {ownerUsers.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-lg font-medium">Invite owner</h2>
-          <InviteForm stations={stationList} />
         </section>
       )}
 
