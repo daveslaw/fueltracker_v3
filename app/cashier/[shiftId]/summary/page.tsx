@@ -49,7 +49,7 @@ export default async function CashierSummaryPage({ params }: Props) {
   const [state, { data: shift }, { data: station }, { data: rec }, { data: posSubmission }] = await Promise.all([
     getCashierSubmissionState(shiftId),
     supabase.from('shifts')
-      .select('id, period, shift_date')
+      .select('id, period, shift_date, cashier_reconciliation_error')
       .eq('id', shiftId)
       .eq('station_id', stationId)
       .single(),
@@ -91,6 +91,16 @@ export default async function CashierSummaryPage({ params }: Props) {
           Submitted {new Date(state.submittedAt).toLocaleString('en-ZA')}
         </p>
       </div>
+
+      {shift.cashier_reconciliation_error && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="font-medium">Dry stock reconciliation could not complete</p>
+          <p className="mt-1">
+            Your shift was submitted successfully. However, the dry stock variance calculation
+            did not run. Please notify your supervisor so they can investigate.
+          </p>
+        </div>
+      )}
 
       {/* Fuel grade lines */}
       {(gradeLines ?? []).length > 0 && (

@@ -160,6 +160,10 @@ export async function submitCashierShift(shiftId: string): Promise<ActionResult>
   const { error: reconErr } = await runStockReconciliation(shiftId)
   if (reconErr) {
     console.error('[submitCashierShift] dry stock reconciliation failed:', reconErr)
+    await supabase
+      .from('shifts')
+      .update({ cashier_reconciliation_error: reconErr })
+      .eq('id', shiftId)
   }
 
   redirect(`/cashier/${shiftId}/summary`)
