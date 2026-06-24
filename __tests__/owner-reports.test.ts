@@ -7,6 +7,7 @@ import {
   pickLatestClosedShiftPerStation,
   buildStationInventoryLines,
   buildOwnerDashboardStations,
+  buildOwnerDashboardView,
 } from '../lib/owner-reports'
 import type { ShiftStatus } from '../lib/owner-reports'
 
@@ -303,5 +304,45 @@ describe('buildOwnerDashboardStations', () => {
     const result = buildOwnerDashboardStations(stations, [], {})
     expect(result[0].pendingCount).toBe(0)
     expect(result[0].flaggedShifts).toHaveLength(0)
+  })
+})
+
+// ── buildOwnerDashboardView ────────────────────────────────────────────────
+
+describe('buildOwnerDashboardView', () => {
+  const stations = [{ id: 'station-1', name: 'Elegant Amaglug' }]
+  const grades   = [{ id: '95', label: 'Petrol 95' }]
+  const prices   = [{ station_id: 'station-1', fuel_grade_id: '95', cost_per_litre: 14.00 }]
+
+  it('tracer bullet: produces correct station list from raw fixture data', () => {
+    const todayShifts = [
+      { id: 'shift-1', station_id: 'station-1', period: 'morning', is_flagged: false, flag_comment: null, status: 'pending' },
+    ]
+    const latestClosedShiftId = { 'station-1': 'shift-2' }
+    const dipReadings = [{ shift_id: 'shift-2', litres: 10000, tanks: { fuel_grade_id: '95' } }]
+
+    const result = buildOwnerDashboardView(stations, todayShifts, latestClosedShiftId, dipReadings, prices, grades)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].id).toBe('station-1')
+    expect(result[0].pendingCount).toBe(1)
+    expect(result[0].inventory).toHaveLength(1)
+    expect(result[0].inventory![0]).toMatchObject({ gradeId: '95', litres: 10000, valueZar: 140000 })
+  })
+
+  it('station with no closed shift → null inventory', () => {
+    const result = buildOwnerDashboardView(stations, [], {}, [], prices, grades)
+    expect(result[0].inventory).toBeNull()
+  })
+
+  it('empty stations → empty array', () => {
+    const result = buildOwnerDashboardView([], [], {}, [], [], [])
+    expect(result).toEqual([])
+  })
+
+  it('no dip readings → empty inventory lines', () => {
+    const latestClosedShiftId = { 'station-1': 'shift-1' }
+    const result = buildOwnerDashboardView(stations, [], latestClosedShiftId, [], prices, grades)
+    expect(result[0].inventory).toEqual([])
   })
 })

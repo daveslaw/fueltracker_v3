@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { pickLatestClosedShiftPerStation, buildStationInventoryLines, buildOwnerDashboardStations } from '@/lib/owner-reports'
+import { pickLatestClosedShiftPerStation, buildOwnerDashboardView } from '@/lib/owner-reports'
 import { DashboardPoller } from './_components/DashboardPoller'
 import { createShiftSlot } from './actions'
 import { signOut } from '@/app/(auth)/login/actions'
@@ -60,15 +60,14 @@ export default async function DashboardPage() {
         .eq('type', 'close')
     : { data: [] as Array<{ shift_id: string; litres: number; tanks: { fuel_grade_id: string } | null }> }
 
-  const inventoryByStation = buildStationInventoryLines(
+  const stationList = buildOwnerDashboardView(
     stations ?? [],
+    todayShifts ?? [],
     latestClosedShiftId,
     dipReadings ?? [],
     fuelPrices ?? [],
     fuelGrades ?? [],
   )
-
-  const stationList = buildOwnerDashboardStations(stations ?? [], todayShifts ?? [], inventoryByStation)
 
   return (
     <main className="max-w-4xl mx-auto p-4 space-y-6">

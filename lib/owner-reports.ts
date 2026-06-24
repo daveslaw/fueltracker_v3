@@ -317,6 +317,24 @@ export interface OwnerDashboardStation {
  * Combines today's pending counts, flagged shifts, and inventory snapshots
  * into the per-station view model rendered on the owner dashboard.
  */
+type DipReadingInput = Array<{
+  shift_id: string
+  litres: number
+  tanks: { fuel_grade_id: string } | Array<{ fuel_grade_id: string }> | null
+}>
+
+export function buildOwnerDashboardView(
+  stations: Array<{ id: string; name: string }>,
+  todayShifts: Array<{ id: string; station_id: string; period: string; is_flagged: boolean; flag_comment: string | null; status: string }>,
+  latestClosedShiftId: Record<string, string>,
+  dipReadings: DipReadingInput,
+  prices: Array<{ station_id: string; fuel_grade_id: string; cost_per_litre: number }>,
+  grades: Array<{ id: string; label: string }>,
+): OwnerDashboardStation[] {
+  const inventoryByStation = buildStationInventoryLines(stations, latestClosedShiftId, dipReadings, prices, grades)
+  return buildOwnerDashboardStations(stations, todayShifts, inventoryByStation)
+}
+
 export function buildOwnerDashboardStations(
   stations: Array<{ id: string; name: string }>,
   todayShifts: Array<{ id: string; station_id: string; period: string; is_flagged: boolean; flag_comment: string | null; status: string }>,
