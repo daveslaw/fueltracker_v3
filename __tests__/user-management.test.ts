@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateInvite, getUserStatus, buildInviteCallbackUrl, resolveCallbackRedirect, validatePasswordInput, validateFullName, validatePin } from '@/lib/user-management'
+import { validateInvite, getUserStatus, buildInviteCallbackUrl, resolveCallbackRedirect, validatePasswordInput, validateFullName, validatePin, generateUsername, buildSyntheticEmail, validateCreateStationUser } from '@/lib/user-management'
 
 // ── validateInvite ───────────────────────────────────────────────────────────
 
@@ -156,5 +156,86 @@ describe('getUserStatus', () => {
 
   it('inactive user returns "inactive"', () => {
     expect(getUserStatus({ is_active: false })).toBe('inactive')
+  })
+})
+
+// ── generateUsername ─────────────────────────────────────────────────────────
+
+describe('generateUsername', () => {
+  it('tracer bullet: full name with no collisions returns firstname.lastname', () => {
+    expect(generateUsername('Thabo Nkosi', [])).toBe('thabo.nkosi')
+  })
+
+  it('single name with no collisions returns just the name', () => {
+    expect(generateUsername('Thabo', [])).toBe('thabo')
+  })
+
+  it('collision with base username appends suffix 2', () => {
+    expect(generateUsername('Thabo Nkosi', ['thabo.nkosi'])).toBe('thabo.nkosi2')
+  })
+
+  it('collision with base and 2 appends suffix 3', () => {
+    expect(generateUsername('Thabo Nkosi', ['thabo.nkosi', 'thabo.nkosi2'])).toBe('thabo.nkosi3')
+  })
+
+  it('strips non-alpha characters and returns lowercase', () => {
+    expect(generateUsername("O'Brien Connor", [])).toBe('obrien.connor')
+  })
+
+  it('extra whitespace between names is ignored', () => {
+    expect(generateUsername('  Maria  Sithole  ', [])).toBe('maria.sithole')
+  })
+})
+
+// ── buildSyntheticEmail ──────────────────────────────────────────────────────
+
+describe('buildSyntheticEmail', () => {
+  it('tracer bullet: username@fueltracker.internal', () => {
+    expect(buildSyntheticEmail('thabo.nkosi')).toBe('thabo.nkosi@fueltracker.internal')
+  })
+})
+
+// ── validateCreateStationUser ────────────────────────────────────────────────
+
+describe('validateCreateStationUser', () => {
+  const valid = {
+    full_name: 'Thabo Nkosi',
+    role: 'supervisor',
+    station_id: 'some-uuid',
+    pin: '1234',
+    pin_confirm: '1234',
+    username: 'thabo.nkosi',
+  }
+
+  it('tracer bullet: valid input returns null', () => {
+    expect(validateCreateStationUser(valid)).toBeNull()
+  })
+
+  it('missing full_name returns error', () => {
+    expect(validateCreateStationUser({ ...valid, full_name: '' })).toMatch(/name/)
+  })
+
+  it('whitespace-only full_name returns error', () => {
+    expect(validateCreateStationUser({ ...valid, full_name: '   ' })).toMatch(/name/)
+  })
+
+  it('invalid role returns error', () => {
+    expect(validateCreateStationUser({ ...valid, role: 'owner' })).toMatch(/role/)
+  })
+
+  it('missing station_id returns error', () => {
+    expect(validateCreateStationUser({ ...valid, station_id: '' })).toMatch(/station/)
+  })
+
+  it('invalid PIN returns error', () => {
+    expect(validateCreateStationUser({ ...valid, pin: '12x4' })).toMatch(/digit/)
+  })
+
+  it('PIN mismatch returns error', () => {
+    expect(validateCreateStationUser({ ...valid, pin_confirm: '9999' })).toMatch(/match/)
+  })
+
+  it('empty username returns error', () => {
+    expect(validateCreateStationUser({ ...valid, username: '' })).toMatch(/username/)
   })
 })

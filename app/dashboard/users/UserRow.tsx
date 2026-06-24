@@ -16,6 +16,7 @@ type User = {
   is_active: boolean
   pin_hash: string | null
   pin_locked: boolean
+  username?: string | null
 }
 
 const STATUS_BADGE: Record<UserStatus, string> = {
@@ -66,10 +67,9 @@ export function UserRow({ user, stations }: { user: User; stations: Station[] })
       <tr className="border-b">
         <td className="py-2 pr-4">
           <div className="font-medium text-sm">{user.full_name}</div>
-          <div className="font-mono text-xs text-gray-400">{user.email}</div>
+          <div className="font-mono text-xs text-gray-400">{user.username ?? user.email}</div>
         </td>
         <td className="py-2 pr-4 capitalize">{user.role}</td>
-        <td className="py-2 pr-4">{user.station_name}</td>
         <td className="py-2 pr-4">
           <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[user.status]}`}>
             {user.status}
@@ -92,7 +92,7 @@ export function UserRow({ user, stations }: { user: User; stations: Station[] })
           </button>
           <button onClick={() => { setSettingPin(!settingPin); setEditing(false) }}
             className="text-xs text-blue-600 hover:underline">
-            {user.pin_hash ? 'Reset PIN' : 'Set PIN'}
+            Reset PIN
           </button>
           {user.pin_locked && (
             <button onClick={handleUnlock} disabled={pending}

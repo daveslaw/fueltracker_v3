@@ -9,8 +9,11 @@ The one-time configuration stored in `localStorage` that tells the app which sta
 ## User Picker
 The screen shown on a station tablet when no one is authenticated. Lists all active supervisors and cashiers at that station who have a PIN set. Owners never appear in the picker. Replaces the standard email/password login page for the tablet workflow, but a visible "Owner login" link toggles to the password form so an owner can sign in on their own device — e.g. to reach `/setup` and rebind it to a different station. The password form has a matching "Back to staff picker" link.
 
+## Username
+The login identifier for supervisors and cashiers. Auto-generated from full name as `firstname.lastname` (lowercased, dot-separated), e.g. "Thabo Nkosi" → `thabo.nkosi`. Numeric suffix appended on global collision (`thabo.nkosi2`). The owner can edit the generated value before saving. Read-only after creation — a wrong username means deactivating and recreating the account. Globally unique across all stations. Never shown to the user on the tablet (the User Picker shows full names); it is used only for internal identity resolution and synthetic email generation.
+
 ## PIN
-A 4-digit numeric credential used exclusively on station tablets. Stored as a bcrypt hash in `user_profiles.pin_hash`. Verified server-side; a Supabase session is then minted via `admin.getUserById` → `admin.generateLink` → `verifyOtp` — the PIN is never used as a Supabase password. Owner-managed: owners set PINs for their staff in `/dashboard/users`. Users without a PIN do not appear in the User Picker.
+A 4-digit numeric credential used exclusively on station tablets. Stored as a bcrypt hash in `user_profiles.pin_hash`. Verified server-side; a Supabase session is then minted via `admin.getUserById` → `admin.generateLink` → `verifyOtp` — the PIN is never used as a Supabase password. Owner-managed: owners set PINs for their staff in `/dashboard/users`. Required at account creation — a user is never created without a PIN. Owners can reset a PIN at any time via the user table.
 
 ## Handoff
 The explicit transition between a supervisor and cashier (or back) on the station tablet. Triggered automatically by the app at workflow boundaries:

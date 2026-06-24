@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertOwner } from '@/lib/auth-assert'
-import { validateInvite, validatePin, INVITABLE_ROLES, buildInviteCallbackUrl } from '@/lib/user-management'
+import { validateInvite, validatePin, validateCreateStationUser, buildSyntheticEmail, INVITABLE_ROLES, buildInviteCallbackUrl } from '@/lib/user-management'
 import { hashPin } from '@/lib/pin-auth'
 
 type ActionResult = { error: string } | { success: true }
@@ -38,6 +38,59 @@ export async function inviteUser(formData: FormData): Promise<ActionResult> {
     full_name: full_name.trim(),
   })
   if (profileError) return { error: profileError.message }
+
+  revalidatePath('/dashboard/users')
+  return { success: true }
+}
+
+// ── Create station staff (supervisor / cashier) ──────────────────────────────
+
+export async function createStationUser(formData: FormData): Promise<ActionResult> {
+  await assertOwner(await createClient())
+
+  const full_name = (formData.get('full_name') as string) ?? ''
+  const role = (formData.get('role') as string) ?? ''
+  const station_id = (formData.get('station_id') as string) ?? ''
+  const pin = (formData.get('pin') as string) ?? ''
+  const pin_confirm = (formData.get('pin_confirm') as string) ?? ''
+  const username = (formData.get('username') as string) ?? ''
+
+  const error = validateCreateStationUser({ full_name, role, station_id, pin, pin_confirm, username })
+  if (error) return { error }
+
+  const admin = createAdminClient()
+
+  const { data: existing } = await admin
+    .from('user_profiles')
+    .select('id')
+    .eq('username', username.trim())
+    .maybeSingle()
+  if (existing) return { error: 'That username is already taken — please choose another' }
+
+  const email = buildSyntheticEmail(username.trim())
+
+  const { data, error: authError } = await admin.auth.admin.createUser({
+    email,
+    email_confirm: true,
+  })
+  if (authError) return { error: authError.message }
+
+  const pin_hash = await hashPin(pin)
+
+  const { error: profileError } = await admin.from('user_profiles').insert({
+    user_id: data.user.id,
+    role,
+    station_id,
+    is_active: true,
+    email,
+    full_name: full_name.trim(),
+    username: username.trim(),
+    pin_hash,
+  })
+  if (profileError) {
+    await admin.auth.admin.deleteUser(data.user.id)
+    return { error: profileError.message }
+  }
 
   revalidatePath('/dashboard/users')
   return { success: true }
