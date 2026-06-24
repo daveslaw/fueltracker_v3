@@ -6,17 +6,12 @@ import { createClient }   from '@/lib/supabase/server'
 import { canCashierSubmit }            from '@/lib/cashier-progress'
 import { getCashierSubmissionState }   from '@/lib/cashier-submission'
 import { runStockReconciliation }      from '@/lib/dry-stock-runner'
+import { savePosLines }                from '@/lib/pos-submission'
+export type { PosNozzleLineInput }     from '@/lib/pos-submission'
 
 type ActionResult = { error: string } | { success: true }
 
 // ── saveCashierFuelPos ────────────────────────────────────────────────────────
-
-export type PosNozzleLineInput = {
-  pump_id: string
-  litres_sold: number
-  revenue_zar: number
-  ocr_status?: 'auto' | 'manual_override' | 'unreadable'
-}
 
 export async function saveCashierFuelPos(
   shiftId: string,
@@ -25,32 +20,8 @@ export async function saveCashierFuelPos(
   lines: PosNozzleLineInput[]
 ): Promise<ActionResult> {
   const supabase = await createClient()
-
-  if (!lines.length) return { error: 'At least one pump line is required' }
-
-  const { data: submission, error: subErr } = await supabase
-    .from('pos_submissions')
-    .upsert(
-      { shift_id: shiftId, photo_url: photoUrl, raw_ocr: rawOcr },
-      { onConflict: 'shift_id' }
-    )
-    .select('id')
-    .single()
-  if (subErr) return { error: subErr.message }
-
-  await supabase.from('pos_submission_lines').delete().eq('pos_submission_id', submission.id)
-
-  const { error: linesErr } = await supabase.from('pos_submission_lines').insert(
-    lines.map(l => ({
-      pos_submission_id: submission.id,
-      pump_id: l.pump_id,
-      litres_sold: l.litres_sold,
-      revenue_zar: l.revenue_zar,
-      ocr_status: l.ocr_status ?? 'auto',
-    }))
-  )
-  if (linesErr) return { error: linesErr.message }
-
+  const { error } = await savePosLines(supabase, shiftId, photoUrl, rawOcr, lines)
+  if (error) return { error }
   revalidatePath(`/cashier/${shiftId}`)
   return { success: true }
 }

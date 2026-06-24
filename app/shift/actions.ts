@@ -11,6 +11,8 @@ import { assertOwner } from '@/lib/auth-assert'
 import { runShiftClose, runShiftSplit, runShiftOverride } from '@/lib/shift-workflow'
 import type { ShiftOverrideData } from '@/lib/shift-workflow'
 import type { ShiftRow, ShiftPeriod, ShiftStatus } from '@/lib/shift-open'
+import { savePosLines } from '@/lib/pos-submission'
+export type { PosNozzleLineInput } from '@/lib/pos-submission'
 
 type ActionResult = { error: string } | { success: true; warning?: string }
 
@@ -127,13 +129,6 @@ export async function saveCloseDipReading(
 
 // ── savePosSubmission ─────────────────────────────────────────────────────────
 
-export type PosNozzleLineInput = {
-  pump_id: string
-  litres_sold: number
-  revenue_zar: number
-  ocr_status?: 'auto' | 'manual_override' | 'unreadable'
-}
-
 export async function savePosSubmission(
   shiftId: string,
   photoUrl: string | null,
@@ -141,36 +136,8 @@ export async function savePosSubmission(
   lines: PosNozzleLineInput[]
 ): Promise<ActionResult> {
   const supabase = await createClient()
-
-  if (!lines.length) return { error: 'At least one pump line is required' }
-
-  // Upsert the pos_submissions record
-  const { data: submission, error: subErr } = await supabase
-    .from('pos_submissions')
-    .upsert({ shift_id: shiftId, photo_url: photoUrl, raw_ocr: rawOcr },
-      { onConflict: 'shift_id' })
-    .select('id')
-    .single()
-  if (subErr) return { error: subErr.message }
-
-  // Replace all lines
-  await supabase.from('pos_submission_lines').delete().eq('pos_submission_id', submission.id)
-
-  const { error: linesErr } = await supabase.from('pos_submission_lines').insert(
-    lines.map((l) => ({
-      pos_submission_id: submission.id,
-      pump_id: l.pump_id,
-      litres_sold: l.litres_sold,
-      revenue_zar: l.revenue_zar,
-      ocr_status: l.ocr_status ?? 'auto',
-    }))
-  )
-  if (linesErr) return { error: linesErr.message }
-
-  if (lines.some((l) => (l.ocr_status ?? 'auto') !== 'auto')) {
-    await supabase.from('shifts').update({ has_manual_entry: true }).eq('id', shiftId)
-  }
-
+  const { error } = await savePosLines(supabase, shiftId, photoUrl, rawOcr, lines)
+  if (error) return { error }
   revalidatePath(`/shift/${shiftId}/close/pos`)
   return { success: true }
 }
