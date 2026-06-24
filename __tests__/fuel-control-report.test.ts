@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { buildFuelControlRows, buildDaySubtotals, buildFuelControlReportRows, trailingMonths, buildDayEntries, aggregatePumpLinesToGradePos } from '../lib/fuel-control-report'
+import {
+  buildFuelControlRows,
+  buildDaySubtotals,
+  buildFuelControlReportRows,
+  trailingMonths,
+  buildDayEntries,
+  aggregatePumpLinesToGradePos,
+  indexTankLinesByShiftGrade,
+  indexDeliveriesByDatePeriodGrade,
+  assembleFuelControlInputs,
+} from '../lib/fuel-control-report'
 import type { FuelControlRowInput, FuelControlDaySubtotal, FuelControlReportRow } from '../lib/fuel-control-report'
 import type { PriceRow } from '../lib/pricing'
 
@@ -512,6 +522,263 @@ describe('buildDayEntries', () => {
     const entries = buildDayEntries(reportRows, ['95'], subs)
     const group = entries[0].gradeGroups[0]
     expect(group.rows.some(r => r.type === 'price_change_impact')).toBe(true)
+  })
+})
+
+// ── indexTankLinesByShiftGrade ────────────────────────────────────────────────
+
+describe('indexTankLinesByShiftGrade', () => {
+  const tankGrade = new Map([
+    ['tank-95',  '95'],
+    ['tank-d50', 'D50'],
+    ['tank-d50b', 'D50'],
+  ])
+
+  function makeLine(overrides: {
+    tank_id?: string
+    opening_dip?: number
+    actual_closing_dip?: number
+    deliveries_received?: number
+    shift_id?: string
+  } = {}) {
+    return {
+      tank_id:             overrides.tank_id              ?? 'tank-95',
+      opening_dip:         overrides.opening_dip          ?? 20000,
+      actual_closing_dip:  overrides.actual_closing_dip   ?? 18000,
+      deliveries_received: overrides.deliveries_received  ?? 0,
+      reconciliations:     { shift_id: overrides.shift_id ?? 's1' },
+    }
+  }
+
+  it('tracer bullet: single tank line produces one entry', () => {
+    const map = indexTankLinesByShiftGrade([makeLine()], tankGrade)
+    const agg = map.get('s1|95')!
+    expect(agg.opening_dip).toBe(20000)
+    expect(agg.closing_dip).toBe(18000)
+    expect(agg.deliveries).toBe(0)
+  })
+
+  it('two tanks of the same grade in the same shift are summed', () => {
+    // D50 has two tanks — both should be summed into the same key
+    const map = indexTankLinesByShiftGrade([
+      makeLine({ tank_id: 'tank-d50',  shift_id: 's1', opening_dip: 30000, actual_closing_dip: 28000, deliveries_received: 5000 }),
+      makeLine({ tank_id: 'tank-d50b', shift_id: 's1', opening_dip: 25000, actual_closing_dip: 24000, deliveries_received: 2000 }),
+    ], tankGrade)
+    const agg = map.get('s1|D50')!
+    expect(agg.opening_dip).toBe(55000)
+    expect(agg.closing_dip).toBe(52000)
+    expect(agg.deliveries).toBe(7000)
+  })
+
+  it('same tank across different shifts produces separate entries', () => {
+    const map = indexTankLinesByShiftGrade([
+      makeLine({ shift_id: 's1', opening_dip: 20000, actual_closing_dip: 18000 }),
+      makeLine({ shift_id: 's2', opening_dip: 18000, actual_closing_dip: 16500 }),
+    ], tankGrade)
+    expect(map.get('s1|95')!.opening_dip).toBe(20000)
+    expect(map.get('s2|95')!.opening_dip).toBe(18000)
+  })
+
+  it('tank with no grade mapping is skipped', () => {
+    const map = indexTankLinesByShiftGrade([
+      makeLine({ tank_id: 'unknown-tank' }),
+    ], tankGrade)
+    expect(map.size).toBe(0)
+  })
+
+  it('deliveries are summed independently from dips', () => {
+    const map = indexTankLinesByShiftGrade([
+      makeLine({ tank_id: 'tank-d50',  deliveries_received: 10000, opening_dip: 20000, actual_closing_dip: 25000 }),
+      makeLine({ tank_id: 'tank-d50b', deliveries_received: 5000,  opening_dip: 10000, actual_closing_dip: 12000 }),
+    ], tankGrade)
+    expect(map.get('s1|D50')!.deliveries).toBe(15000)
+  })
+})
+
+// ── indexDeliveriesByDatePeriodGrade ─────────────────────────────────────────
+
+describe('indexDeliveriesByDatePeriodGrade', () => {
+  const tankGrade = new Map([
+    ['tank-95',  '95'],
+    ['tank-d50', 'D50'],
+  ])
+
+  function makeDelivery(overrides: {
+    tank_id?:              string
+    delivered_at?:         string
+    litres_received?:      number
+    delivery_note_number?: string | null
+    driver_name?:          string | null
+  } = {}) {
+    return {
+      tank_id:              overrides.tank_id              ?? 'tank-95',
+      delivered_at:         overrides.delivered_at         ?? '2026-05-01T08:00:00Z',
+      litres_received:      overrides.litres_received      ?? 10000,
+      delivery_note_number: overrides.delivery_note_number !== undefined ? overrides.delivery_note_number : 'DN-001',
+      driver_name:          overrides.driver_name          !== undefined ? overrides.driver_name          : 'John Doe',
+    }
+  }
+
+  it('tracer bullet: single delivery produces one entry', () => {
+    const map = indexDeliveriesByDatePeriodGrade([makeDelivery()], tankGrade)
+    const info = map.get('2026-05-01|morning|95')!
+    expect(info.litres).toBe(10000)
+    expect(info.notes).toEqual(['DN-001'])
+    expect(info.drivers).toEqual(['John Doe'])
+  })
+
+  it('two deliveries in the same date+period+grade bucket are summed and names concatenated', () => {
+    const map = indexDeliveriesByDatePeriodGrade([
+      makeDelivery({ litres_received: 10000, delivery_note_number: 'DN-001', driver_name: 'John' }),
+      makeDelivery({ litres_received: 5000,  delivery_note_number: 'DN-002', driver_name: 'Jane' }),
+    ], tankGrade)
+    const info = map.get('2026-05-01|morning|95')!
+    expect(info.litres).toBe(15000)
+    expect(info.notes).toEqual(['DN-001', 'DN-002'])
+    expect(info.drivers).toEqual(['John', 'Jane'])
+  })
+
+  it('deliveries in different periods are kept separate', () => {
+    const map = indexDeliveriesByDatePeriodGrade([
+      makeDelivery({ delivered_at: '2026-05-01T08:00:00Z', litres_received: 10000 }), // morning
+      makeDelivery({ delivered_at: '2026-05-01T20:00:00Z', litres_received: 8000  }), // evening
+    ], tankGrade)
+    expect(map.get('2026-05-01|morning|95')!.litres).toBe(10000)
+    expect(map.get('2026-05-01|evening|95')!.litres).toBe(8000)
+  })
+
+  it('deliveries for different grades are tracked separately', () => {
+    const map = indexDeliveriesByDatePeriodGrade([
+      makeDelivery({ tank_id: 'tank-95',  litres_received: 10000 }),
+      makeDelivery({ tank_id: 'tank-d50', litres_received: 6000  }),
+    ], tankGrade)
+    expect(map.get('2026-05-01|morning|95')!.litres).toBe(10000)
+    expect(map.get('2026-05-01|morning|D50')!.litres).toBe(6000)
+  })
+
+  it('null note number and driver name are omitted from arrays', () => {
+    const map = indexDeliveriesByDatePeriodGrade([
+      makeDelivery({ delivery_note_number: null, driver_name: null }),
+    ], tankGrade)
+    const info = map.get('2026-05-01|morning|95')!
+    expect(info.notes).toEqual([])
+    expect(info.drivers).toEqual([])
+  })
+
+  it('delivery with unknown tank_id is skipped', () => {
+    const map = indexDeliveriesByDatePeriodGrade([
+      makeDelivery({ tank_id: 'unknown-tank' }),
+    ], tankGrade)
+    expect(map.size).toBe(0)
+  })
+})
+
+// ── assembleFuelControlInputs ─────────────────────────────────────────────────
+
+describe('assembleFuelControlInputs', () => {
+  function makeShift(overrides: Partial<{
+    id: string; shift_date: string; period: 'morning' | 'evening'
+    part: number; shift_type: 'standard' | 'price_change'
+    status: string; is_flagged: boolean; started_at: string
+  }> = {}) {
+    return {
+      id:         's1',
+      shift_date: '2026-05-01',
+      period:     'morning' as const,
+      part:       0,
+      shift_type: 'standard' as const,
+      status:     'closed',
+      is_flagged: false,
+      started_at: '2026-05-01T06:00:00Z',
+      ...overrides,
+    }
+  }
+
+  const grades = ['95', 'D50']
+
+  it('tracer bullet: closed shift with rec data produces populated input rows', () => {
+    const recByShiftGrade = new Map([
+      ['s1|95',  { opening_dip: 20000, closing_dip: 18500, deliveries: 0 }],
+      ['s1|D50', { opening_dip: 10000, closing_dip: 9500,  deliveries: 0 }],
+    ])
+    const inputs = assembleFuelControlInputs(
+      [makeShift()], grades, recByShiftGrade, new Map(), new Map(), new Set(),
+    )
+    expect(inputs).toHaveLength(2)
+    const r95 = inputs.find(i => i.fuel_grade_id === '95')!
+    expect(r95.opening_dip).toBe(20000)
+    expect(r95.closing_dip).toBe(18500)
+    expect(r95.status).toBe('closed')
+  })
+
+  it('pending shift produces null dip and pos values', () => {
+    const inputs = assembleFuelControlInputs(
+      [makeShift({ status: 'pending' })], ['95'], new Map(), new Map(), new Map(), new Set(),
+    )
+    expect(inputs[0].opening_dip).toBeNull()
+    expect(inputs[0].closing_dip).toBeNull()
+    expect(inputs[0].pos_litres).toBeNull()
+  })
+
+  it('pending shift with a delivery still shows delivery_litres from the delivery index', () => {
+    const deliveryIndex = new Map([
+      ['2026-05-01|morning|95', { litres: 10000, notes: ['DN-001'], drivers: ['Jo'] }],
+    ])
+    const inputs = assembleFuelControlInputs(
+      [makeShift({ status: 'pending' })], ['95'], new Map(), deliveryIndex, new Map(), new Set(),
+    )
+    expect(inputs[0].deliveries_litres).toBe(10000)
+    expect(inputs[0].delivery_note).toBe('DN-001')
+  })
+
+  it('closed shift with no rec entry has null dips but non-zero deliveries from index', () => {
+    // Shift is closed but reconciliation has no tank line for this grade (e.g. data not yet run)
+    const deliveryIndex = new Map([
+      ['2026-05-01|morning|95', { litres: 5000, notes: [], drivers: [] }],
+    ])
+    const inputs = assembleFuelControlInputs(
+      [makeShift()], ['95'], new Map(), deliveryIndex, new Map(), new Map() as any, new Set(),
+    )
+    expect(inputs[0].opening_dip).toBeNull()
+    expect(inputs[0].deliveries_litres).toBe(5000)
+  })
+
+  it('maintenance flag is set from the provided Set', () => {
+    const maintFlags = new Set(['s1'])
+    const inputs = assembleFuelControlInputs(
+      [makeShift()], ['95'], new Map(), new Map(), new Map(), maintFlags,
+    )
+    expect(inputs[0].has_maintenance_flag).toBe(true)
+  })
+
+  it('maintenance flag is false for shifts not in the Set', () => {
+    const inputs = assembleFuelControlInputs(
+      [makeShift()], ['95'], new Map(), new Map(), new Map(), new Set(),
+    )
+    expect(inputs[0].has_maintenance_flag).toBe(false)
+  })
+
+  it('multiple delivery notes are joined with comma', () => {
+    const deliveryIndex = new Map([
+      ['2026-05-01|morning|95', { litres: 15000, notes: ['DN-001', 'DN-002'], drivers: ['John', 'Jane'] }],
+    ])
+    const inputs = assembleFuelControlInputs(
+      [makeShift({ status: 'pending' })], ['95'], new Map(), deliveryIndex, new Map(), new Set(),
+    )
+    expect(inputs[0].delivery_note).toBe('DN-001, DN-002')
+    expect(inputs[0].driver_name).toBe('John, Jane')
+  })
+
+  it('produces one row per grade per shift', () => {
+    const inputs = assembleFuelControlInputs(
+      [makeShift({ id: 's1' }), makeShift({ id: 's2', period: 'evening' })],
+      ['95', 'D50'],
+      new Map(), new Map(), new Map(), new Set(),
+    )
+    expect(inputs).toHaveLength(4)
+    expect(inputs.map(i => `${i.shift_id}|${i.fuel_grade_id}`)).toEqual([
+      's1|95', 's1|D50', 's2|95', 's2|D50',
+    ])
   })
 })
 

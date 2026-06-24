@@ -218,6 +218,139 @@ export function aggregatePumpLinesToGradePos(
   return map
 }
 
+// ── GradeAgg / DeliveryInfo (exported for tests) ─────────────────────────────
+
+export type GradeAgg     = { opening_dip: number; closing_dip: number; deliveries: number }
+export type DeliveryInfo = { litres: number; notes: string[]; drivers: string[] }
+
+// ── indexTankLinesByShiftGrade ────────────────────────────────────────────────
+// Pure: sums opening_dip, closing_dip, and deliveries_received from reconciliation
+// tank lines, keyed by `shiftId|grade`. Multiple tanks of the same grade are summed.
+
+export function indexTankLinesByShiftGrade(
+  tankLines: Array<{
+    tank_id:             string
+    opening_dip:         number
+    actual_closing_dip:  number
+    deliveries_received: number
+    reconciliations:     { shift_id: string }
+  }>,
+  tankGrade: Map<string, string>,
+): Map<string, GradeAgg> {
+  const map = new Map<string, GradeAgg>()
+  for (const line of tankLines) {
+    const grade = tankGrade.get(line.tank_id)
+    if (!grade) continue
+    const key      = `${line.reconciliations.shift_id}|${grade}`
+    const existing = map.get(key)
+    if (!existing) {
+      map.set(key, {
+        opening_dip: Number(line.opening_dip),
+        closing_dip: Number(line.actual_closing_dip),
+        deliveries:  Number(line.deliveries_received),
+      })
+    } else {
+      existing.opening_dip += Number(line.opening_dip)
+      existing.closing_dip += Number(line.actual_closing_dip)
+      existing.deliveries  += Number(line.deliveries_received)
+    }
+  }
+  return map
+}
+
+// ── indexDeliveriesByDatePeriodGrade ─────────────────────────────────────────
+// Pure: groups deliveries into a map keyed by `date|period|grade`.
+// Multiple deliveries in the same bucket are summed; note numbers and driver
+// names are accumulated into arrays for later joining.
+
+export function indexDeliveriesByDatePeriodGrade(
+  deliveries: Array<{
+    delivered_at:         string
+    delivery_note_number: string | null
+    driver_name:          string | null
+    litres_received:      number
+    tank_id:              string
+  }>,
+  tankGrade: Map<string, string>,
+): Map<string, DeliveryInfo> {
+  const map = new Map<string, DeliveryInfo>()
+  for (const d of deliveries) {
+    const grade = tankGrade.get(d.tank_id)
+    if (!grade) continue
+    const date   = d.delivered_at.slice(0, 10)
+    const period = getShiftPeriod(d.delivered_at)
+    const key    = `${date}|${period}|${grade}`
+    const existing = map.get(key)
+    if (!existing) {
+      map.set(key, {
+        litres:  Number(d.litres_received),
+        notes:   d.delivery_note_number ? [d.delivery_note_number] : [],
+        drivers: d.driver_name          ? [d.driver_name]          : [],
+      })
+    } else {
+      existing.litres += Number(d.litres_received)
+      if (d.delivery_note_number) existing.notes.push(d.delivery_note_number)
+      if (d.driver_name)          existing.drivers.push(d.driver_name)
+    }
+  }
+  return map
+}
+
+// ── assembleFuelControlInputs ─────────────────────────────────────────────────
+// Pure: cross-joins shifts × grades and looks up rec + delivery data from the
+// pre-built indexes to produce one FuelControlRowInput per (shift, grade) pair.
+
+export function assembleFuelControlInputs(
+  shifts: Array<{
+    id:         string
+    shift_date: string
+    period:     'morning' | 'evening'
+    part:       number
+    shift_type: 'standard' | 'price_change'
+    status:     string
+    is_flagged: boolean
+    started_at: string
+  }>,
+  grades:                     string[],
+  recByShiftGrade:            Map<string, GradeAgg>,
+  deliveryIndex:              Map<string, DeliveryInfo>,
+  posLinesByShiftGrade:       Map<string, number>,
+  maintenanceFlaggedShiftIds: Set<string>,
+): FuelControlRowInput[] {
+  const inputs: FuelControlRowInput[] = []
+
+  for (const shift of shifts) {
+    for (const grade of grades) {
+      const isClosed = shift.status === 'closed'
+      const recKey   = `${shift.id}|${grade}`
+      const rec      = recByShiftGrade.get(recKey)
+      const delKey   = `${shift.shift_date}|${shift.period}|${grade}`
+      const del      = deliveryIndex.get(delKey)
+
+      inputs.push({
+        shift_id:             shift.id,
+        shift_date:           shift.shift_date,
+        period:               shift.period,
+        part:                 shift.part ?? 0,
+        shift_type:           shift.shift_type ?? 'standard',
+        status:               shift.status,
+        is_flagged:           shift.is_flagged ?? false,
+        has_maintenance_flag: maintenanceFlaggedShiftIds.has(shift.id),
+        fuel_grade_id:        grade,
+        started_at:           shift.started_at,
+        opening_dip:          isClosed && rec ? rec.opening_dip : null,
+        closing_dip:          isClosed && rec ? rec.closing_dip : null,
+        deliveries_litres:    isClosed && rec ? rec.deliveries  : (del?.litres ?? 0),
+        delivery_note:        del ? del.notes.join(', ')   || null : null,
+        driver_name:          del ? del.drivers.join(', ') || null : null,
+        pos_litres:           isClosed ? (posLinesByShiftGrade.get(recKey) ?? null) : null,
+      })
+    }
+  }
+
+  return inputs
+}
+
 // ── Data fetch (server-only, not unit tested) ─────────────────────────────────
 
 export async function getFuelControlMonth(
@@ -330,92 +463,27 @@ export async function getFuelControlMonth(
         })
       }
 
-      for (const line of pumpLineRows ?? []) {
-        const shiftId = recShiftById.get(line.reconciliation_id as string)
-        if (!shiftId) continue
-        const key = `${shiftId}|${line.fuel_grade_id}`
-        posLinesByShiftGrade.set(key, (posLinesByShiftGrade.get(key) ?? 0) + Number(line.pos_litres_sold))
-      }
+      posLinesByShiftGrade = aggregatePumpLinesToGradePos(
+        (pumpLineRows ?? []).flatMap(line => {
+          const shift_id = recShiftById.get(line.reconciliation_id as string)
+          return shift_id
+            ? [{ shift_id, fuel_grade_id: line.fuel_grade_id as string, pos_litres_sold: Number(line.pos_litres_sold) }]
+            : []
+        }),
+      )
     }
   }
 
-  // index reconciliation tank lines by shift_id + grade
-  type GradeAgg = { opening_dip: number; closing_dip: number; deliveries: number }
-  const recByShiftGrade = new Map<string, GradeAgg>()
-
-  for (const line of recTankLines) {
-    const shiftId = line.reconciliations.shift_id
-    const grade   = tankGrade.get(line.tank_id as string)
-    if (!grade) continue
-    const key = `${shiftId}|${grade}`
-    const existing = recByShiftGrade.get(key)
-    if (!existing) {
-      recByShiftGrade.set(key, {
-        opening_dip:  Number(line.opening_dip),
-        closing_dip:  Number(line.actual_closing_dip),
-        deliveries:   Number(line.deliveries_received),
-      })
-    } else {
-      existing.opening_dip += Number(line.opening_dip)
-      existing.closing_dip += Number(line.actual_closing_dip)
-      existing.deliveries  += Number(line.deliveries_received)
-    }
-  }
-
-  // index deliveries by date + period + grade
-  type DeliveryInfo = { litres: number; notes: string[]; drivers: string[] }
-  const deliveryIndex = new Map<string, DeliveryInfo>()
-
-  for (const d of allDeliveries) {
-    const grade  = tankGrade.get(d.tank_id as string)
-    if (!grade) continue
-    const date   = (d.delivered_at as string).slice(0, 10)
-    const period = getShiftPeriod(d.delivered_at as string)
-    const key    = `${date}|${period}|${grade}`
-    const existing = deliveryIndex.get(key)
-    if (!existing) {
-      deliveryIndex.set(key, {
-        litres:  Number(d.litres_received),
-        notes:   d.delivery_note_number ? [d.delivery_note_number as string] : [],
-        drivers: d.driver_name          ? [d.driver_name as string]          : [],
-      })
-    } else {
-      existing.litres += Number(d.litres_received)
-      if (d.delivery_note_number) existing.notes.push(d.delivery_note_number as string)
-      if (d.driver_name)          existing.drivers.push(d.driver_name as string)
-    }
-  }
-
-  const inputs: FuelControlRowInput[] = []
-
-  for (const shift of allShifts) {
-    for (const grade of grades) {
-      const isClosed = shift.status === 'closed'
-      const recKey   = `${shift.id}|${grade}`
-      const rec      = recByShiftGrade.get(recKey)
-      const delKey   = `${shift.shift_date}|${shift.period}|${grade}`
-      const del      = deliveryIndex.get(delKey)
-
-      inputs.push({
-        shift_id:             shift.id as string,
-        shift_date:           shift.shift_date as string,
-        period:               shift.period as 'morning' | 'evening',
-        part:                 (shift.part as number) ?? 0,
-        shift_type:           (shift.shift_type as 'standard' | 'price_change') ?? 'standard',
-        status:               shift.status as string,
-        is_flagged:           shift.is_flagged as boolean ?? false,
-        has_maintenance_flag: maintenanceFlaggedShiftIds.has(shift.id as string),
-        fuel_grade_id:        grade,
-        started_at:        shift.started_at as string,
-        opening_dip:       isClosed && rec ? rec.opening_dip  : null,
-        closing_dip:       isClosed && rec ? rec.closing_dip  : null,
-        deliveries_litres: isClosed && rec ? rec.deliveries   : (del?.litres ?? 0),
-        delivery_note:     del ? del.notes.join(', ')   || null : null,
-        driver_name:       del ? del.drivers.join(', ') || null : null,
-        pos_litres:        isClosed ? (posLinesByShiftGrade.get(recKey) ?? null) : null,
-      })
-    }
-  }
+  const recByShiftGrade = indexTankLinesByShiftGrade(recTankLines, tankGrade)
+  const deliveryIndex   = indexDeliveriesByDatePeriodGrade(allDeliveries as any, tankGrade)
+  const inputs          = assembleFuelControlInputs(
+    allShifts as any,
+    grades,
+    recByShiftGrade,
+    deliveryIndex,
+    posLinesByShiftGrade,
+    maintenanceFlaggedShiftIds,
+  )
 
   return { inputs, grades, prices: allPriceRows }
 }
