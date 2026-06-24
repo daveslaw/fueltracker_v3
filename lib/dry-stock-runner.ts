@@ -98,13 +98,16 @@ export function createSupabaseStockRepository(db: SupabaseClient): StockDataRepo
         .eq('shift_id', shiftId)
 
       // ── 4. Opening counts: prior shift's closing counts or stock_baselines ─
+      // .lte + .neq so same-day prior periods are included (e.g. morning close as evening baseline)
       const { data: prevShift } = await db
         .from('shifts')
         .select('id')
         .eq('station_id', shift.station_id)
         .eq('status', 'closed')
-        .lt('shift_date', shift.shift_date)
+        .lte('shift_date', shift.shift_date)
+        .neq('id', shiftId)
         .order('shift_date', { ascending: false })
+        .order('period',     { ascending: false })
         .limit(1)
         .maybeSingle()
 

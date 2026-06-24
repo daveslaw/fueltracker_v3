@@ -221,12 +221,14 @@ export function createSupabaseRepository(db: SupabaseClient): ShiftDataRepositor
       // Rolling model: the previous shift's close readings are this shift's open.
       const repositoryWarnings: AssemblyWarning[] = []
 
+      // .lte + .neq so same-day prior periods are included (e.g. morning close as evening baseline)
       const { data: prevShiftCandidates } = await db
         .from('shifts')
         .select('id, shift_date, period, part')
         .eq('station_id', shift.station_id)
         .eq('status', 'closed')
-        .lt('shift_date', shift.shift_date)
+        .lte('shift_date', shift.shift_date)
+        .neq('id', shiftId)
         .order('shift_date', { ascending: false })
         .order('period',     { ascending: false })
         .order('part',       { ascending: false })
